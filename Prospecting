@@ -1,0 +1,185 @@
+--= CONFIG =--
+local defaultCollectTime = 3   -- ค่า default 3 วิ
+local defaultPanShakeTime = 15 -- ค่า default 15 วิ
+--=============
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+-- เก็บพิกัด
+local posA, posB, posC = nil, nil, nil
+
+-- ตัวแปรลูป
+local running = false
+
+-- GUI FRAME
+local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+ScreenGui.Name = "MiningGui"
+
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 320, 0, 260)
+Frame.Position = UDim2.new(1, -350, 1, -300)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BackgroundTransparency = 0.15
+Frame.BorderSizePixel = 0
+
+local UIList = Instance.new("UIListLayout", Frame)
+UIList.Padding = UDim.new(0, 6)
+
+-- ฟังก์ชันสร้างปุ่ม
+local function MakeButton(text, color)
+    local b = Instance.new("TextButton", Frame)
+    b.Size = UDim2.new(1, -10, 0, 32)
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.Text = text
+    b.BorderSizePixel = 0
+    return b
+end
+
+-- ปุ่มน้ำตาล (A + Collect)
+local brown = Color3.fromRGB(180,140,100)
+-- ปุ่มฟ้า (B + PanShake)
+local blue = Color3.fromRGB(90,150,255)
+
+------------------------------------------------------
+-- ปุ่มเก็บพิกัด A / B / C
+------------------------------------------------------
+
+local btnA = MakeButton("ขุดตรงนี้: - , - , -", brown)
+local btnB = MakeButton("ร่อนตรงนี้: - , - , -", blue)
+local btnC = MakeButton("ขายตรงนี้: - , - , -", Color3.fromRGB(255,180,60))
+
+btnA.MouseButton1Click:Connect(function()
+    posA = hrp.Position
+    btnA.Text = ("ขุดตรงนี้: %.1f , %.1f , %.1f"):format(posA.X, posA.Y, posA.Z)
+end)
+
+btnB.MouseButton1Click:Connect(function()
+    posB = hrp.Position
+    btnB.Text = ("ร่อนตรงนี้: %.1f , %.1f , %.1f"):format(posB.X, posB.Y, posB.Z)
+end)
+
+btnC.MouseButton1Click:Connect(function()
+    posC = hrp.Position
+    btnC.Text = ("ขายตรงนี้: %.1f , %.1f , %.1f"):format(posC.X, posC.Y, posC.Z)
+end)
+
+------------------------------------------------------
+-- สไลด์บาร์ Collect
+------------------------------------------------------
+
+local CollectSlider = Instance.new("TextButton", Frame)
+CollectSlider.Size = UDim2.new(1, -10, 0, 32)
+CollectSlider.Text = "เวลา Collect: "..defaultCollectTime.." วิ"
+CollectSlider.BackgroundColor3 = brown
+CollectSlider.BorderSizePixel = 0
+CollectSlider.TextColor3 = Color3.new(1,1,1)
+CollectSlider.Font = Enum.Font.GothamBold
+CollectSlider.TextSize = 16
+
+local collectTime = defaultCollectTime
+
+CollectSlider.MouseWheelForward:Connect(function()
+    collectTime = math.clamp(collectTime + 1, 1, 10)
+    CollectSlider.Text = "เวลา Collect: "..collectTime.." วิ"
+end)
+CollectSlider.MouseWheelBackward:Connect(function()
+    collectTime = math.clamp(collectTime - 1, 1, 10)
+    CollectSlider.Text = "เวลา Collect: "..collectTime.." วิ"
+end)
+
+------------------------------------------------------
+-- สไลด์บาร์ Pan + Shake
+------------------------------------------------------
+
+local PanSlider = Instance.new("TextButton", Frame)
+PanSlider.Size = UDim2.new(1, -10, 0, 32)
+PanSlider.Text = "เวลา Pan+Shake: "..defaultPanShakeTime.." วิ"
+PanSlider.BackgroundColor3 = blue
+PanSlider.BorderSizePixel = 0
+PanSlider.TextColor3 = Color3.new(1,1,1)
+PanSlider.Font = Enum.Font.GothamBold
+PanSlider.TextSize = 16
+
+local panTime = defaultPanShakeTime
+
+PanSlider.MouseWheelForward:Connect(function()
+    panTime = math.clamp(panTime + 1, 1, 20)
+    PanSlider.Text = "เวลา Pan+Shake: "..panTime.." วิ"
+end)
+PanSlider.MouseWheelBackward:Connect(function()
+    panTime = math.clamp(panTime - 1, 1, 20)
+    PanSlider.Text = "เวลา Pan+Shake: "..panTime.." วิ"
+end)
+
+------------------------------------------------------
+-- ปุ่มเริ่มทำงาน
+------------------------------------------------------
+
+local startBtn = MakeButton("เริ่มทำงาน", Color3.fromRGB(100,200,100))
+
+-- ฟังก์ชัน Tween แบบที่คุณใช้ได้
+local function tpTo(pos)
+    for i = 0,1,0.1 do
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(pos), i)
+        task.wait()
+    end
+    hrp.CFrame = CFrame.new(pos)
+end
+
+------------------------------------------------------
+-- ลูปหลัก
+------------------------------------------------------
+
+local function startLoop()
+    while running do
+        
+        ---------------- A = Collect ----------------
+        tpTo(posA)
+        for i = 1, collectTime*10 do
+            local args = {1}
+            char.Worldshaker.Scripts.Collect:InvokeServer(unpack(args))
+            task.wait(0.1)
+        end
+
+        ---------------- B = Pan+Shake ----------------
+        tpTo(posB)
+        for i = 1, panTime*10 do
+            char.Worldshaker.Scripts.Pan:InvokeServer()
+            char.Worldshaker.Scripts.Shake:FireServer()
+            task.wait(0.1)
+        end
+
+        ---------------- C = Sell ----------------
+        tpTo(posC)
+        for i = 1, 10 do
+            game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
+            task.wait(0.1)
+        end
+
+    end
+end
+
+startBtn.MouseButton1Click:Connect(function()
+    if running == false then
+        if not posA or not posB or not posC then
+            startBtn.Text = "พิกัดไม่ครบค้าบ"
+            task.wait(3)
+            startBtn.Text = "เริ่มทำงาน"
+            return
+        end
+
+        running = true
+        startBtn.Text = "เก่งมาค้าบเบบี๋"
+        task.spawn(startLoop)
+
+    else
+        running = false
+        startBtn.Text = "เริ่มทำงาน"
+    end
+end)
