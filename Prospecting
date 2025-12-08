@@ -1,6 +1,7 @@
 --= CONFIG =--
 local defaultCollectTime = 3
 local defaultPanShakeTime = 15
+local defaultMoveSpeed = 1
 --=============
 
 local Players = game:GetService("Players")
@@ -10,35 +11,37 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 
 local posA, posB, posC
 local running = false
+local moveSpeed = defaultMoveSpeed
 
 ------------------------------------------------------
--- GUI FRAME (ขนาดเล็กลง 20%)
+-- GUI FRAME (ลดลงอีก 20%)
 ------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 ScreenGui.Name = "MiningGui"
 
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 256, 0, 208)
-Frame.Position = UDim2.new(1, -300, 1, -240)
+Frame.Size = UDim2.new(0, 205, 0, 165) -- เล็กลง 20% อีกครั้ง
+Frame.Position = UDim2.new(1, -260, 0, 125) 
+-- อยู่ใต้ "Invite Friend Luck" และกว้างกว่า LEVEL ไม่ได้
 Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Frame.BackgroundTransparency = 0.15
 Frame.BorderSizePixel = 0
 
 local UIList = Instance.new("UIListLayout", Frame)
-UIList.Padding = UDim.new(0, 4)
+UIList.Padding = UDim.new(0, 3)
 
 ------------------------------------------------------
--- BUTTON MAKER
+-- BUTTON MAKER (เล็กลง 20% อีกครั้ง)
 ------------------------------------------------------
 
 local function MakeButton(text, color)
     local b = Instance.new("TextButton", Frame)
-    b.Size = UDim2.new(1, -8, 0, 26)
+    b.Size = UDim2.new(1, -6, 0, 21)
     b.BackgroundColor3 = color
     b.TextColor3 = Color3.new(1,1,1)
     b.Font = Enum.Font.GothamBold
-    b.TextSize = 13
+    b.TextSize = 11
     b.Text = text
     b.BorderSizePixel = 0
     return b
@@ -76,14 +79,11 @@ end)
 ------------------------------------------------------
 
 local collectTime = defaultCollectTime
-
 local CollectButton = MakeButton("เวลาขุด: "..collectTime.." วิ", brown)
 
 CollectButton.MouseButton1Click:Connect(function()
     collectTime = collectTime + 1
-    if collectTime > 8 then
-        collectTime = 1
-    end
+    if collectTime > 8 then collectTime = 1 end
     CollectButton.Text = "เวลาขุด: "..collectTime.." วิ"
 end)
 
@@ -92,15 +92,24 @@ end)
 ------------------------------------------------------
 
 local panTime = defaultPanShakeTime
-
 local PanButton = MakeButton("เวลาร่อน: "..panTime.." วิ", blue)
 
 PanButton.MouseButton1Click:Connect(function()
     panTime = panTime + 1
-    if panTime > 25 then
-        panTime = 3
-    end
+    if panTime > 25 then panTime = 3 end
     PanButton.Text = "เวลาร่อน: "..panTime.." วิ"
+end)
+
+------------------------------------------------------
+-- ความเร็วเคลื่อนที่ (1–4)
+------------------------------------------------------
+
+local MoveButton = MakeButton("ความเร็วเคลื่อนที่: "..moveSpeed, Color3.fromRGB(140,200,255))
+
+MoveButton.MouseButton1Click:Connect(function()
+    moveSpeed = moveSpeed + 1
+    if moveSpeed > 4 then moveSpeed = 1 end
+    MoveButton.Text = "ความเร็วเคลื่อนที่: "..moveSpeed
 end)
 
 ------------------------------------------------------
@@ -110,15 +119,20 @@ end)
 local startBtn = MakeButton("เริ่มทำงาน", Color3.fromRGB(100,200,100))
 
 ------------------------------------------------------
--- ระบบ TP Tween แบบ Lerp (ใช้ได้กับ Delta เวียดนาม)
+-- ป้องกันปัญหา Tween ข้ามลำดับ
 ------------------------------------------------------
 
 local function tpTo(pos)
-    for i = 0,1,0.1 do
+    -- ความเร็ว Lerp = อัตราเร็ว * moveSpeed
+    local step = 0.1 * (1 / moveSpeed)
+
+    for i = 0, 1, step do
         hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(pos), i)
         task.wait()
     end
+
     hrp.CFrame = CFrame.new(pos)
+    task.wait(0.05) -- ให้ Delta VN ประมวลผลก่อน (แก้ข้ามจุด)
 end
 
 ------------------------------------------------------
@@ -128,7 +142,7 @@ end
 local function startLoop()
     while running do
 
-        ---------------- A = ขุด ----------------
+        ----------- A = ขุด -----------
         tpTo(posA)
         for i = 1, collectTime * 10 do
             local args = {1}
@@ -136,7 +150,7 @@ local function startLoop()
             task.wait(0.1)
         end
 
-        ---------------- B = ร่อน ----------------
+        ----------- B = ร่อน -----------
         tpTo(posB)
         for i = 1, panTime * 10 do
             char.Worldshaker.Scripts.Pan:InvokeServer()
@@ -144,7 +158,7 @@ local function startLoop()
             task.wait(0.1)
         end
 
-        ---------------- C = ขาย ----------------
+        ----------- C = ขาย -----------
         tpTo(posC)
         for i = 1, 10 do
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
@@ -154,7 +168,7 @@ local function startLoop()
 end
 
 ------------------------------------------------------
--- ปุ่มเริ่ม / หยุด
+-- ปุ่มเริ่ม/หยุดทำงาน
 ------------------------------------------------------
 
 startBtn.MouseButton1Click:Connect(function()
