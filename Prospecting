@@ -140,15 +140,12 @@ local function movementLoop()
     task.spawn(function()
         while running do
             
-            -- ไป A
             tpTo(posA)
             task.wait(collectTime)
 
-            -- ไป B
             tpTo(posB)
             task.wait(panTime)
 
-            -- ไป C
             tpTo(posC)
             task.wait(1)
 
@@ -165,11 +162,11 @@ local function actionLoop()
     task.spawn(function()
         while running do
             -- Collect
-            char.DragonflamePan.Scripts.Collect:InvokeServer(1)
+            char["Dragonflame Pan"].Scripts.Collect:InvokeServer(1)
 
             -- Pan & Shake
-            char.DragonflamePan.Scripts.Pan:InvokeServer()
-            char.DragonflamePan.Scripts.Shake:FireServer()
+            char["Dragonflame Pan"].Scripts.Pan:InvokeServer()
+            char["Dragonflame Pan"].Scripts.Shake:FireServer()
 
             -- SellAll
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
