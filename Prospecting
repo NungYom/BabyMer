@@ -14,7 +14,7 @@ local running = false
 local moveSpeed = defaultMoveSpeed
 
 ------------------------------------------------------
--- GUI FRAME (ลดขนาดอีก 20% + ย้ายตำแหน่ง)
+-- GUI FRAME (เล็กลง20%+ตำแหน่งใหม่)
 ------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
@@ -22,7 +22,7 @@ ScreenGui.Name = "MiningGui"
 
 local Frame = Instance.new("Frame", ScreenGui)
 Frame.Size = UDim2.new(0, 205, 0, 165)
-Frame.Position = UDim2.new(1, -260, 0, 125)  -- อยู่ใต้ Invite Friend Luck
+Frame.Position = UDim2.new(1, -260, 0, 125)
 Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Frame.BackgroundTransparency = 0.15
 Frame.BorderSizePixel = 0
@@ -74,7 +74,7 @@ btnC.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------------
--- เวลาขุด (วน 1–8)
+-- เวลาขุด (1–8)
 ------------------------------------------------------
 
 local collectTime = defaultCollectTime
@@ -87,7 +87,7 @@ CollectButton.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------------
--- เวลาร่อน (วน 3–25)
+-- เวลาร่อน (3–25)
 ------------------------------------------------------
 
 local panTime = defaultPanShakeTime
@@ -117,88 +117,88 @@ end)
 
 local startBtn = MakeButton("เริ่มทำงาน", Color3.fromRGB(100,200,100))
 
-------------------------------------------------------
--- ระบบแก้ Remote ไม่ทำงานใน Delta VN
-------------------------------------------------------
-
-local function FixRoot()
-    task.wait(0.05)
-    hrp.Velocity = Vector3.new(0,0,0)
-    hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-    hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
-    task.wait(0.05)
-end
 
 ------------------------------------------------------
--- Tween แบบ Lerp ที่แก้ข้ามจุด + ใช้ความเร็วเคลื่อนที่
+-- Tween / Lerp ไปยังจุด (ใช้ speed)
 ------------------------------------------------------
 
 local function tpTo(pos)
-    local step = 0.1 * (1 / moveSpeed)
-
+    local step = 0.07 * (1 / moveSpeed)
     for i = 0, 1, step do
         hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(pos), i)
         task.wait()
     end
-
     hrp.CFrame = CFrame.new(pos)
-    FixRoot() -- แก้ Delta VN ไม่รับตำแหน่งใหม่
 end
 
+
 ------------------------------------------------------
--- ลูปทำงานหลัก
+-- 🔥 ลูปที่ 1 : Tween ไป A → B → C → Loop
 ------------------------------------------------------
 
-local function startLoop()
-    while running do
+local function movementLoop()
+    task.spawn(function()
+        while running do
+            
+            -- ไป A
+            tpTo(posA)
+            task.wait(collectTime)
 
-        ----------- A = ขุด -----------
-        tpTo(posA)
-        FixRoot()
+            -- ไป B
+            tpTo(posB)
+            task.wait(panTime)
 
-        for i = 1, collectTime * 10 do
-            char.Worldshaker.Scripts.Collect:InvokeServer(1)
-            task.wait(0.1)
+            -- ไป C
+            tpTo(posC)
+            task.wait(1)
+
         end
+    end)
+end
 
-        ----------- B = ร่อน -----------
-        tpTo(posB)
-        FixRoot()
 
-        for i = 1, panTime * 10 do
+------------------------------------------------------
+-- 🔥 ลูปที่ 2 : รัน Collect / Pan / Shake / SellAll ตลอดเวลา
+------------------------------------------------------
+
+local function actionLoop()
+    task.spawn(function()
+        while running do
+            -- Collect
+            char.Worldshaker.Scripts.Collect:InvokeServer(1)
+
+            -- Pan & Shake
             char.Worldshaker.Scripts.Pan:InvokeServer()
             char.Worldshaker.Scripts.Shake:FireServer()
-            task.wait(0.1)
-        end
 
-        ----------- C = ขาย -----------
-        tpTo(posC)
-        FixRoot()
-
-        for i = 1, 10 do
+            -- SellAll
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
+
             task.wait(0.1)
         end
-    end
+    end)
 end
 
+
 ------------------------------------------------------
--- ปุ่มเริ่ม/หยุดทำงาน
+-- ปุ่มเริ่ม / หยุดลูป
 ------------------------------------------------------
 
 startBtn.MouseButton1Click:Connect(function()
-    if running == false then
+    if not running then
         
         if not posA or not posB or not posC then
             startBtn.Text = "พิกัดไม่ครบค้าบ"
-            task.wait(3)
+            task.wait(2)
             startBtn.Text = "เริ่มทำงาน"
             return
         end
 
         running = true
         startBtn.Text = "เก่งมากคับเบบี๋"
-        task.spawn(startLoop)
+
+        movementLoop()
+        actionLoop()
 
     else
         running = false
