@@ -14,16 +14,15 @@ local running = false
 local moveSpeed = defaultMoveSpeed
 
 ------------------------------------------------------
--- GUI FRAME (ลดลงอีก 20%)
+-- GUI FRAME (ลดขนาดอีก 20% + ย้ายตำแหน่ง)
 ------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 ScreenGui.Name = "MiningGui"
 
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 205, 0, 165) -- เล็กลง 20% อีกครั้ง
-Frame.Position = UDim2.new(1, -260, 0, 125) 
--- อยู่ใต้ "Invite Friend Luck" และกว้างกว่า LEVEL ไม่ได้
+Frame.Size = UDim2.new(0, 205, 0, 165)
+Frame.Position = UDim2.new(1, -260, 0, 125)  -- อยู่ใต้ Invite Friend Luck
 Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Frame.BackgroundTransparency = 0.15
 Frame.BorderSizePixel = 0
@@ -32,7 +31,7 @@ local UIList = Instance.new("UIListLayout", Frame)
 UIList.Padding = UDim.new(0, 3)
 
 ------------------------------------------------------
--- BUTTON MAKER (เล็กลง 20% อีกครั้ง)
+-- BUTTON MAKER
 ------------------------------------------------------
 
 local function MakeButton(text, color)
@@ -119,11 +118,22 @@ end)
 local startBtn = MakeButton("เริ่มทำงาน", Color3.fromRGB(100,200,100))
 
 ------------------------------------------------------
--- ป้องกันปัญหา Tween ข้ามลำดับ
+-- ระบบแก้ Remote ไม่ทำงานใน Delta VN
+------------------------------------------------------
+
+local function FixRoot()
+    task.wait(0.05)
+    hrp.Velocity = Vector3.new(0,0,0)
+    hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+    hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    task.wait(0.05)
+end
+
+------------------------------------------------------
+-- Tween แบบ Lerp ที่แก้ข้ามจุด + ใช้ความเร็วเคลื่อนที่
 ------------------------------------------------------
 
 local function tpTo(pos)
-    -- ความเร็ว Lerp = อัตราเร็ว * moveSpeed
     local step = 0.1 * (1 / moveSpeed)
 
     for i = 0, 1, step do
@@ -132,7 +142,7 @@ local function tpTo(pos)
     end
 
     hrp.CFrame = CFrame.new(pos)
-    task.wait(0.05) -- ให้ Delta VN ประมวลผลก่อน (แก้ข้ามจุด)
+    FixRoot() -- แก้ Delta VN ไม่รับตำแหน่งใหม่
 end
 
 ------------------------------------------------------
@@ -144,14 +154,17 @@ local function startLoop()
 
         ----------- A = ขุด -----------
         tpTo(posA)
+        FixRoot()
+
         for i = 1, collectTime * 10 do
-            local args = {1}
-            char.Worldshaker.Scripts.Collect:InvokeServer(unpack(args))
+            char.Worldshaker.Scripts.Collect:InvokeServer(1)
             task.wait(0.1)
         end
 
         ----------- B = ร่อน -----------
         tpTo(posB)
+        FixRoot()
+
         for i = 1, panTime * 10 do
             char.Worldshaker.Scripts.Pan:InvokeServer()
             char.Worldshaker.Scripts.Shake:FireServer()
@@ -160,6 +173,8 @@ local function startLoop()
 
         ----------- C = ขาย -----------
         tpTo(posC)
+        FixRoot()
+
         for i = 1, 10 do
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
             task.wait(0.1)
