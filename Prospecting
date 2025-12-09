@@ -165,11 +165,11 @@ local function actionLoop()
     task.spawn(function()
         while running do
             -- Collect
-            char.Worldshaker.Scripts.Collect:InvokeServer(1)
+            char.DragonflamePan.Scripts.Collect:InvokeServer(1)
 
             -- Pan & Shake
-            char.Worldshaker.Scripts.Pan:InvokeServer()
-            char.Worldshaker.Scripts.Shake:FireServer()
+            char.DragonflamePan.Scripts.Pan:InvokeServer()
+            char.DragonflamePan.Scripts.Shake:FireServer()
 
             -- SellAll
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
