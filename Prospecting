@@ -74,29 +74,29 @@ btnC.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------------
--- เวลาขุด (1–8)
+-- เวลาขุด (1–10, step = 0.5)
 ------------------------------------------------------
 
 local collectTime = defaultCollectTime
 local CollectButton = MakeButton("เวลาขุด: "..collectTime.." วิ", brown)
 
 CollectButton.MouseButton1Click:Connect(function()
-    collectTime = collectTime + 1
+    collectTime = collectTime + 0.5
     if collectTime > 10 then collectTime = 1 end
-    CollectButton.Text = "เวลาขุด: "..collectTime.." วิ"
+    CollectButton.Text = ("เวลาขุด: %.1f วิ"):format(collectTime)
 end)
 
 ------------------------------------------------------
--- เวลาร่อน (3–25)
+-- เวลาร่อน (1–10, step = 0.5)
 ------------------------------------------------------
 
 local panTime = defaultPanShakeTime
 local PanButton = MakeButton("เวลาร่อน: "..panTime.." วิ", blue)
 
 PanButton.MouseButton1Click:Connect(function()
-    panTime = panTime + 1
+    panTime = panTime + 0.5
     if panTime > 10 then panTime = 1 end
-    PanButton.Text = "เวลาร่อน: "..panTime.." วิ"
+    PanButton.Text = ("เวลาร่อน: %.1f วิ"):format(panTime)
 end)
 
 ------------------------------------------------------
