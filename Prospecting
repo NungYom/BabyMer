@@ -1,6 +1,6 @@
 --= CONFIG =--
-local defaultCollectTime = 1
-local defaultPanShakeTime = 1
+local defaultCollectTime = 2
+local defaultPanShakeTime = 2
 local defaultMoveSpeed = 1
 --=============
 
