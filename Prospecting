@@ -1,6 +1,6 @@
 --= CONFIG =--
-local defaultCollectTime = 3
-local defaultPanShakeTime = 15
+local defaultCollectTime = 1
+local defaultPanShakeTime = 1
 local defaultMoveSpeed = 1
 --=============
 
@@ -82,7 +82,7 @@ local CollectButton = MakeButton("เวลาขุด: "..collectTime.." ว�
 
 CollectButton.MouseButton1Click:Connect(function()
     collectTime = collectTime + 1
-    if collectTime > 8 then collectTime = 1 end
+    if collectTime > 10 then collectTime = 1 end
     CollectButton.Text = "เวลาขุด: "..collectTime.." วิ"
 end)
 
@@ -95,7 +95,7 @@ local PanButton = MakeButton("เวลาร่อน: "..panTime.." วิ", b
 
 PanButton.MouseButton1Click:Connect(function()
     panTime = panTime + 1
-    if panTime > 25 then panTime = 3 end
+    if panTime > 10 then panTime = 1 end
     PanButton.Text = "เวลาร่อน: "..panTime.." วิ"
 end)
 
