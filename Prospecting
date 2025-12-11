@@ -168,9 +168,6 @@ local function actionLoop()
             char["Blightflow Pan"].Scripts.Pan:InvokeServer()
             char["Blightflow Pan"].Scripts.Shake:FireServer()
 
-            -- SellAll
-            game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
-
             task.wait(0.1)
         end
     end)
