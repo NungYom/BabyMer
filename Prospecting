@@ -162,11 +162,11 @@ local function actionLoop()
     task.spawn(function()
         while running do
             -- Collect
-            char["Dragonflame Pan"].Scripts.Collect:InvokeServer(1)
+            char["Blightflow Pan"].Scripts.Collect:InvokeServer(1)
 
             -- Pan & Shake
-            char["Dragonflame Pan"].Scripts.Pan:InvokeServer()
-            char["Dragonflame Pan"].Scripts.Shake:FireServer()
+            char["Blightflow Pan"].Scripts.Pan:InvokeServer()
+            char["Blightflow Pan"].Scripts.Shake:FireServer()
 
             -- SellAll
             game.ReplicatedStorage.Remotes.Shop.SellAll:InvokeServer()
