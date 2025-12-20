@@ -1,0 +1,201 @@
+--= CONFIG =--
+local defaultCollectTime = 0.5
+local defaultPanShakeTime = 0.5
+local defaultMoveSpeed = 1
+--=============
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+local posA, posB, posC
+local running = false
+local moveSpeed = defaultMoveSpeed
+
+------------------------------------------------------
+-- GUI FRAME (เล็กลง20%+ตำแหน่งใหม่)
+------------------------------------------------------
+
+local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+ScreenGui.Name = "MiningGui"
+
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 205, 0, 165)
+Frame.Position = UDim2.new(1, -260, 0, 125)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BackgroundTransparency = 0.15
+Frame.BorderSizePixel = 0
+
+local UIList = Instance.new("UIListLayout", Frame)
+UIList.Padding = UDim.new(0, 3)
+
+------------------------------------------------------
+-- BUTTON MAKER
+------------------------------------------------------
+
+local function MakeButton(text, color)
+    local b = Instance.new("TextButton", Frame)
+    b.Size = UDim2.new(1, -6, 0, 21)
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.Text = text
+    b.BorderSizePixel = 0
+    return b
+end
+
+local brown = Color3.fromRGB(180,140,100)
+local blue = Color3.fromRGB(90,150,255)
+local orange = Color3.fromRGB(255,180,60)
+
+------------------------------------------------------
+-- POSITION BUTTONS
+------------------------------------------------------
+
+local btnA = MakeButton("ขุดตรงนี้: - , - , -", brown)
+local btnB = MakeButton("ร่อนตรงนี้: - , - , -", blue)
+local btnC = MakeButton("ขายตรงนี้: - , - , -", orange)
+
+btnA.MouseButton1Click:Connect(function()
+    posA = hrp.Position
+    btnA.Text = ("ขุดตรงนี้: %.1f , %.1f , %.1f"):format(posA.X, posA.Y, posA.Z)
+end)
+
+btnB.MouseButton1Click:Connect(function()
+    posB = hrp.Position
+    btnB.Text = ("ร่อนตรงนี้: %.1f , %.1f , %.1f"):format(posB.X, posB.Y, posB.Z)
+end)
+
+btnC.MouseButton1Click:Connect(function()
+    posC = hrp.Position
+    btnC.Text = ("ขายตรงนี้: %.1f , %.1f , %.1f"):format(posC.X, posC.Y, posC.Z)
+end)
+
+------------------------------------------------------
+-- เวลาขุด (0.5–10, step = 0.5)
+------------------------------------------------------
+
+local collectTime = defaultCollectTime
+local CollectButton = MakeButton("เวลาขุด: "..collectTime.." วิ", brown)
+
+CollectButton.MouseButton1Click:Connect(function()
+    collectTime = collectTime + 0.5
+    if collectTime > 10 then collectTime = 0.5 end
+    CollectButton.Text = ("เวลาขุด: %.1f วิ"):format(collectTime)
+end)
+
+------------------------------------------------------
+-- เวลาร่อน (0.5–10, step = 0.5)
+------------------------------------------------------
+
+local panTime = defaultPanShakeTime
+local PanButton = MakeButton("เวลาร่อน: "..panTime.." วิ", blue)
+
+PanButton.MouseButton1Click:Connect(function()
+    panTime = panTime + 0.5
+    if panTime > 10 then panTime = 0.5 end
+    PanButton.Text = ("เวลาร่อน: %.1f วิ"):format(panTime)
+end)
+
+------------------------------------------------------
+-- ความเร็วเคลื่อนที่ (1–4)
+------------------------------------------------------
+
+local MoveButton = MakeButton("ความเร็วเคลื่อนที่: "..moveSpeed, Color3.fromRGB(140,200,255))
+
+MoveButton.MouseButton1Click:Connect(function()
+    moveSpeed = moveSpeed + 1
+    if moveSpeed > 4 then moveSpeed = 1 end
+    MoveButton.Text = "ความเร็วเคลื่อนที่: "..moveSpeed
+end)
+
+------------------------------------------------------
+-- ปุ่มเริ่มทำงาน
+------------------------------------------------------
+
+local startBtn = MakeButton("เริ่มทำงาน", Color3.fromRGB(100,200,100))
+
+
+------------------------------------------------------
+-- Tween / Lerp ไปยังจุด (ใช้ speed)
+------------------------------------------------------
+
+local function tpTo(pos)
+    local step = 0.07 * (1 / moveSpeed)
+    for i = 0, 1, step do
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(pos), i)
+        task.wait()
+    end
+    hrp.CFrame = CFrame.new(pos)
+end
+
+
+------------------------------------------------------
+-- 🔥 ลูปที่ 1 : Tween ไป A → B → C → Loop
+------------------------------------------------------
+
+local function movementLoop()
+    task.spawn(function()
+        while running do
+            
+            tpTo(posA)
+            task.wait(collectTime)
+
+            tpTo(posB)
+            task.wait(panTime)
+
+            tpTo(posC)
+            task.wait(1)
+
+        end
+    end)
+end
+
+
+------------------------------------------------------
+-- 🔥 ลูปที่ 2 : รัน Collect / Pan / Shake / SellAll ตลอดเวลา
+------------------------------------------------------
+
+local function actionLoop()
+    task.spawn(function()
+        while running do
+            -- Collect
+            char["Gingerbread Pan"].Scripts.Collect:InvokeServer(1)
+
+            -- Pan & Shake
+            char["Gingerbread Pan"].Scripts.Pan:InvokeServer()
+            char["Gingerbread Pan"].Scripts.Shake:FireServer()
+
+            task.wait(0.1)
+        end
+    end)
+end
+
+
+------------------------------------------------------
+-- ปุ่มเริ่ม / หยุดลูป
+------------------------------------------------------
+
+startBtn.MouseButton1Click:Connect(function()
+    if not running then
+        
+        if not posA or not posB or not posC then
+            startBtn.Text = "พิกัดไม่ครบค้าบ"
+            task.wait(2)
+            startBtn.Text = "เริ่มทำงาน"
+            return
+        end
+
+        running = true
+        startBtn.Text = "เก่งมากคับเบบี๋"
+
+        movementLoop()
+        actionLoop()
+
+    else
+        running = false
+        startBtn.Text = "เริ่มทำงาน"
+    end
+end)
