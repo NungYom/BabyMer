@@ -1,3 +1,8 @@
+------------------------------------------------------
+-- SCRIPT VERSION
+------------------------------------------------------
+local SCRIPT_VERSION = "v1.0"
+
 --= CONFIG =--
 local defaultCollectTime = 0.5
 local defaultPanShakeTime = 0.5
@@ -278,3 +283,16 @@ ESButton.MouseButton1Click:Connect(function()
         ESButton.Text = "Eternium&Spore"
     end
 end)
+
+------------------------------------------------------
+-- VERSION LABEL (BOTTOM)
+------------------------------------------------------
+
+local VersionLabel = Instance.new("TextLabel", Frame)
+VersionLabel.Size = UDim2.new(1, -6, 0, 18)
+VersionLabel.BackgroundTransparency = 1
+VersionLabel.TextColor3 = Color3.fromRGB(180,180,180)
+VersionLabel.Font = Enum.Font.Gotham
+VersionLabel.TextSize = 10
+VersionLabel.TextXAlignment = Enum.TextXAlignment.Right
+VersionLabel.Text = "Mining Script "..SCRIPT_VERSION
