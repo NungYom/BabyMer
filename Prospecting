@@ -1,7 +1,7 @@
 ------------------------------------------------------
 -- SCRIPT VERSION
 ------------------------------------------------------
-local SCRIPT_VERSION = "v1.1"
+local SCRIPT_VERSION = "v1.2"
 
 ------------------------------------------------------
 -- CONFIG
@@ -196,12 +196,32 @@ local function tpTo(pos, speed)
     hrp.CFrame = e
 end
 
+------------------------------------------------------
+-- WAIT + SHAKE (ใช้แทน wait 5 วิเดิม)
+------------------------------------------------------
+
+local function waitWithShake(waitTime)
+    local start = tick()
+    while tick() - start < waitTime do
+        local tool = char:FindFirstChild(currentPanName)
+        if tool and tool:FindFirstChild("Scripts") then
+            local s = tool.Scripts
+            if s:FindFirstChild("Shake") then
+                s.Shake:FireServer()
+            end
+        end
+        task.wait(0.15)
+    end
+end
+
 local function ensureAtB(zone)
     if (hrp.Position - zone.B).Magnitude > 2 then
         tpTo(TRANSFER_POINT,5)
         tpTo(zone.B,5)
     end
-    task.wait(5)
+
+    -- รอ 2 + panTime วินาที พร้อม Shake
+    waitWithShake(2 + panTime)
 end
 
 ------------------------------------------------------
@@ -311,6 +331,7 @@ end)
 ------------------------------------------------------
 -- VERSION LABEL
 ------------------------------------------------------
+
 local VersionLabel = Instance.new("TextLabel", Frame)
 VersionLabel.Size = UDim2.new(1, -6, 0, 18)
 VersionLabel.BackgroundTransparency = 1
