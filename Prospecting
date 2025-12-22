@@ -1,15 +1,21 @@
 ------------------------------------------------------
 -- SCRIPT VERSION
 ------------------------------------------------------
-local SCRIPT_VERSION = "v1.0"
+local SCRIPT_VERSION = "v1.1"
 
---= CONFIG =--
+------------------------------------------------------
+-- CONFIG
+------------------------------------------------------
 local defaultCollectTime = 0.5
 local defaultPanShakeTime = 0.5
 local defaultMoveSpeed = 1
---=============
 
+------------------------------------------------------
+-- SERVICES / PLAYER
+------------------------------------------------------
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
@@ -17,7 +23,6 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 ------------------------------------------------------
 -- STATE
 ------------------------------------------------------
-
 local posA, posB
 local running = false
 local moveSpeed = defaultMoveSpeed
@@ -25,7 +30,6 @@ local moveSpeed = defaultMoveSpeed
 ------------------------------------------------------
 -- PAN CONFIG
 ------------------------------------------------------
-
 local panList = {
     "Blightflow Pan",
     "Gingerbread Pan",
@@ -35,12 +39,13 @@ local panList = {
 local panIndex = 1
 local currentPanName = panList[panIndex]
 
+-- true = ต้อง equip (ปลอดภัย)
+-- false = ไม่บังคับ equip
 local REQUIRE_PAN_EQUIPPED = true
 
 ------------------------------------------------------
 -- ETERNIUM & SPORE CONFIG
 ------------------------------------------------------
-
 local ES_ENABLED = false
 local currentZone = nil
 
@@ -59,9 +64,8 @@ local UNDERGROUND = {
 local TRANSFER_POINT = Vector3.new(-2763, -30, 1390)
 
 ------------------------------------------------------
--- TIME / ZONE
+-- TIME / ZONE HELPERS
 ------------------------------------------------------
-
 local function getCurrentPeriod()
     local m = tonumber(os.date("%M"))
     if m >= 15 and m < 45 then
@@ -78,14 +82,37 @@ local function getClosestZoneToPlayer()
 end
 
 ------------------------------------------------------
+-- MOVEMENT HELPERS
+------------------------------------------------------
+local function tpTo(position, speed)
+    speed = speed or moveSpeed
+    if not position then return end
+
+    local dist = (hrp.Position - position).Magnitude
+    local time = dist / (60 * speed)
+
+    local tween = TweenService:Create(
+        hrp,
+        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        {CFrame = CFrame.new(position)}
+    )
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+local function ensureAtB(zone)
+    if not zone or not zone.B then return end
+    tpTo(zone.B, 5)
+end
+
+------------------------------------------------------
 -- GUI
 ------------------------------------------------------
-
 local ScreenGui = Instance.new("ScreenGui", player.PlayerGui)
 ScreenGui.Name = "MiningGui"
 
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0,205,0,235)
+Frame.Size = UDim2.new(0,205,0,255)
 Frame.Position = UDim2.new(1,-260,0,125)
 Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 Frame.BackgroundTransparency = 0.15
@@ -109,7 +136,6 @@ end
 ------------------------------------------------------
 -- POSITION BUTTONS
 ------------------------------------------------------
-
 local btnA = MakeButton("ขุดตรงนี้: - , - , -", Color3.fromRGB(180,140,100))
 local btnB = MakeButton("ร่อนตรงนี้: - , - , -", Color3.fromRGB(90,150,255))
 
@@ -128,7 +154,6 @@ end)
 ------------------------------------------------------
 -- PAN SELECT
 ------------------------------------------------------
-
 local PanSelectButton = MakeButton("Pan: "..currentPanName, Color3.fromRGB(200,120,200))
 PanSelectButton.MouseButton1Click:Connect(function()
     panIndex = panIndex % #panList + 1
@@ -139,7 +164,6 @@ end)
 ------------------------------------------------------
 -- PAN REQUIRE TOGGLE
 ------------------------------------------------------
-
 local RequirePanButton = MakeButton("ไม่ต้องถือกระทะร่อน : OFF", Color3.fromRGB(160,160,160))
 RequirePanButton.MouseButton1Click:Connect(function()
     REQUIRE_PAN_EQUIPPED = not REQUIRE_PAN_EQUIPPED
@@ -151,12 +175,8 @@ end)
 ------------------------------------------------------
 -- TIME SETTINGS
 ------------------------------------------------------
-
 local collectTime = defaultCollectTime
-local CollectButton = MakeButton(
-    ("เวลาขุด: %.1f วิ"):format(collectTime),
-    Color3.fromRGB(180,140,100)
-)
+local CollectButton = MakeButton(("เวลาขุด: %.1f วิ"):format(collectTime), Color3.fromRGB(180,140,100))
 
 CollectButton.MouseButton1Click:Connect(function()
     collectTime += 0.5
@@ -164,13 +184,8 @@ CollectButton.MouseButton1Click:Connect(function()
     CollectButton.Text = ("เวลาขุด: %.1f วิ"):format(collectTime)
 end)
 
-------------------------------------------------------
-
 local panTime = defaultPanShakeTime
-local PanTimeButton = MakeButton(
-    ("เวลาร่อน: %.1f วิ"):format(panTime),
-    Color3.fromRGB(90,150,255)
-)
+local PanTimeButton = MakeButton(("เวลาร่อน: %.1f วิ"):format(panTime), Color3.fromRGB(90,150,255))
 
 PanTimeButton.MouseButton1Click:Connect(function()
     panTime += 0.5
@@ -181,30 +196,27 @@ end)
 ------------------------------------------------------
 -- MOVE SPEED
 ------------------------------------------------------
-
-local MoveButton = MakeButton(
-    "ความเร็วเคลื่อนที่: "..moveSpeed,
-    Color3.fromRGB(140,200,255)
-)
-
+local MoveButton = MakeButton("ความเร็วเคลื่อนที่: "..moveSpeed, Color3.fromRGB(140,200,255))
 MoveButton.MouseButton1Click:Connect(function()
     moveSpeed += 1
     if moveSpeed > 4 then moveSpeed = 1 end
     MoveButton.Text = "ความเร็วเคลื่อนที่: "..moveSpeed
 end)
 
-
 ------------------------------------------------------
 -- LOOPS
 ------------------------------------------------------
-
 local function movementLoop()
     task.spawn(function()
         while running do
-            tpTo(posA)
-            task.wait(collectTime)
-            tpTo(posB)
-            task.wait(panTime)
+            if posA then
+                tpTo(posA)
+                task.wait(collectTime)
+            end
+            if posB then
+                tpTo(posB)
+                task.wait(panTime)
+            end
         end
     end)
 end
@@ -230,24 +242,26 @@ end
 ------------------------------------------------------
 -- ES LOGIC
 ------------------------------------------------------
-
 local ESButton = MakeButton("Eternium&Spore", Color3.fromRGB(255,120,120))
 
 local function updateESLabel(zone)
     ESButton.Text = zone == OVERGROUND
-        and "กำลังขุดบนดินนะคับที่รัก"
-        or  "กำลังขุดใต้ดินนะคับที่รัก"
+        and "กำลังขุดบนดิน"
+        or  "กำลังขุดใต้ดิน"
 end
 
 local function switchToZone(zone)
     running = false
     task.wait(0.2)
+
     ensureAtB(zone)
     posA = zone.A
     posB = zone.B
     currentZone = zone
+
     updateESLabel(zone)
     running = true
+
     movementLoop()
     actionLoop()
 end
@@ -269,6 +283,7 @@ ESButton.MouseButton1Click:Connect(function()
         ES_ENABLED = true
         btnA.Active = false
         btnB.Active = false
+
         local z = getCurrentPeriod()
         if getClosestZoneToPlayer() ~= z then
             tpTo(TRANSFER_POINT,5)
@@ -285,9 +300,8 @@ ESButton.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------------
--- VERSION LABEL (BOTTOM)
+-- VERSION LABEL
 ------------------------------------------------------
-
 local VersionLabel = Instance.new("TextLabel", Frame)
 VersionLabel.Size = UDim2.new(1, -6, 0, 18)
 VersionLabel.BackgroundTransparency = 1
