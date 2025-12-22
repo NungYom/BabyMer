@@ -1,7 +1,7 @@
 ------------------------------------------------------
 -- SCRIPT VERSION
 ------------------------------------------------------
-local SCRIPT_VERSION = "v1.0"
+local SCRIPT_VERSION = "v1.1"
 
 ------------------------------------------------------
 -- CONFIG
@@ -201,7 +201,7 @@ local function ensureAtB(zone)
         tpTo(TRANSFER_POINT,5)
         tpTo(zone.B,5)
     end
-    task.wait(2)
+    task.wait(5)
 end
 
 ------------------------------------------------------
