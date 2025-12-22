@@ -144,52 +144,50 @@ RequirePanButton.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------------
--- TIME / SPEED
+-- TIME SETTINGS
 ------------------------------------------------------
 
 local collectTime = defaultCollectTime
-local panTime = defaultPanShakeTime
+local CollectButton = MakeButton(
+    ("เวลาขุด: %.1f วิ"):format(collectTime),
+    Color3.fromRGB(180,140,100)
+)
 
-MakeButton("เวลาขุด: "..collectTime.." วิ", Color3.fromRGB(180,140,100))
-    .MouseButton1Click:Connect(function(self)
-        collectTime = collectTime % 10 + 0.5
-        self.Text = ("เวลาขุด: %.1f วิ"):format(collectTime)
-    end)
-
-MakeButton("เวลาร่อน: "..panTime.." วิ", Color3.fromRGB(90,150,255))
-    .MouseButton1Click:Connect(function(self)
-        panTime = panTime % 10 + 0.5
-        self.Text = ("เวลาร่อน: %.1f วิ"):format(panTime)
-    end)
-
-local MoveButton = MakeButton("ความเร็วเคลื่อนที่: "..moveSpeed, Color3.fromRGB(140,200,255))
-MoveButton.MouseButton1Click:Connect(function()
-    moveSpeed = moveSpeed % 4 + 1
-    MoveButton.Text = "ความเร็วเคลื่อนที่: "..moveSpeed
+CollectButton.MouseButton1Click:Connect(function()
+    collectTime += 0.5
+    if collectTime > 10 then collectTime = 0.5 end
+    CollectButton.Text = ("เวลาขุด: %.1f วิ"):format(collectTime)
 end)
 
 ------------------------------------------------------
--- MOVEMENT
+
+local panTime = defaultPanShakeTime
+local PanTimeButton = MakeButton(
+    ("เวลาร่อน: %.1f วิ"):format(panTime),
+    Color3.fromRGB(90,150,255)
+)
+
+PanTimeButton.MouseButton1Click:Connect(function()
+    panTime += 0.5
+    if panTime > 10 then panTime = 0.5 end
+    PanTimeButton.Text = ("เวลาร่อน: %.1f วิ"):format(panTime)
+end)
+
+------------------------------------------------------
+-- MOVE SPEED
 ------------------------------------------------------
 
-local function tpTo(pos, speed)
-    local step = 0.07 / (speed or moveSpeed)
-    local s = hrp.CFrame
-    local e = CFrame.new(pos)
-    for i=0,1,step do
-        hrp.CFrame = s:Lerp(e,i)
-        task.wait()
-    end
-    hrp.CFrame = e
-end
+local MoveButton = MakeButton(
+    "ความเร็วเคลื่อนที่: "..moveSpeed,
+    Color3.fromRGB(140,200,255)
+)
 
-local function ensureAtB(zone)
-    if (hrp.Position - zone.B).Magnitude > 2 then
-        tpTo(TRANSFER_POINT,5)
-        tpTo(zone.B,5)
-    end
-    task.wait(2)
-end
+MoveButton.MouseButton1Click:Connect(function()
+    moveSpeed += 1
+    if moveSpeed > 4 then moveSpeed = 1 end
+    MoveButton.Text = "ความเร็วเคลื่อนที่: "..moveSpeed
+end)
+
 
 ------------------------------------------------------
 -- LOOPS
