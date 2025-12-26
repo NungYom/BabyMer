@@ -1,5 +1,5 @@
 --==============================
--- FAST AUTO TWEEN GUI
+-- FAST AUTO TWEEN GUI (A / B)
 --==============================
 
 local Players = game:GetService("Players")
@@ -15,28 +15,50 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 local MIN_TIME = 0.1
 local MAX_TIME = 1.0
 local STEP = 0.1
-local tweenTime = 0.5 -- ค่าเริ่มต้น
+local tweenTime = 0.5
 
 --==============================
--- PATH
+-- PATH A (เดิม)
 --==============================
-local path = {
-    Vector3.new(148, 33, -643),
-    Vector3.new(-184, 33, -643),
-    Vector3.new(-184, 33, -615),
-    Vector3.new(148, 33, -615),
-    Vector3.new(148, 33, -587),
-    Vector3.new(-184, 33, -587),
-    Vector3.new(-184, 33, -559),
-    Vector3.new(148, 33, -559),
-    Vector3.new(148, 33, -530),
-    Vector3.new(-184, 33, -530),
-    Vector3.new(-184, 33, -502),
-    Vector3.new(148, 33, -502),
-    Vector3.new(148, 33, -478),
-    Vector3.new(-184, 33, -478),
-    Vector3.new(-184, 33, -451),
-    Vector3.new(148, 33, -451),
+local pathA = {
+    Vector3.new(148,33,-643),
+    Vector3.new(-184,33,-643),
+    Vector3.new(-184,33,-615),
+    Vector3.new(148,33,-615),
+    Vector3.new(148,33,-587),
+    Vector3.new(-184,33,-587),
+    Vector3.new(-184,33,-559),
+    Vector3.new(148,33,-559),
+    Vector3.new(148,33,-530),
+    Vector3.new(-184,33,-530),
+    Vector3.new(-184,33,-502),
+    Vector3.new(148,33,-502),
+    Vector3.new(148,33,-478),
+    Vector3.new(-184,33,-478),
+    Vector3.new(-184,33,-451),
+    Vector3.new(148,33,-451),
+}
+
+--==============================
+-- PATH B (ใหม่)
+--==============================
+local pathB = {
+    Vector3.new(148,33,643),
+    Vector3.new(-184,33,643),
+    Vector3.new(-184,33,615),
+    Vector3.new(148,33,615),
+    Vector3.new(148,33,587),
+    Vector3.new(-184,33,587),
+    Vector3.new(-184,33,559),
+    Vector3.new(148,33,559),
+    Vector3.new(148,33,530),
+    Vector3.new(-184,33,530),
+    Vector3.new(-184,33,502),
+    Vector3.new(148,33,502),
+    Vector3.new(148,33,478),
+    Vector3.new(-184,33,478),
+    Vector3.new(-184,33,451),
+    Vector3.new(148,33,451),
 }
 
 --==============================
@@ -44,6 +66,7 @@ local path = {
 --==============================
 local running = false
 local currentTween
+local currentPath
 local index = 1
 
 --==============================
@@ -57,17 +80,19 @@ local function stopTween()
     end
 end
 
+local function startLoop(path)
+    stopTween()
+    currentPath = path
+    index = 1
+    running = true
+end
+
 local function playTween(pos)
     local tween = TweenService:Create(
         hrp,
-        TweenInfo.new(
-            tweenTime,
-            Enum.EasingStyle.Linear,
-            Enum.EasingDirection.Out
-        ),
+        TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
         {CFrame = CFrame.new(pos)}
     )
-
     currentTween = tween
     tween:Play()
     tween.Completed:Wait()
@@ -76,10 +101,10 @@ end
 task.spawn(function()
     while true do
         task.wait()
-        if running then
-            playTween(path[index])
+        if running and currentPath then
+            playTween(currentPath[index])
             index += 1
-            if index > #path then
+            if index > #currentPath then
                 index = 1
             end
         end
@@ -93,58 +118,77 @@ local gui = Instance.new("ScreenGui", player.PlayerGui)
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromOffset(220, 145)
+frame.Size = UDim2.fromOffset(240, 180)
 frame.Position = UDim2.fromScale(0.05, 0.4)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
 frame.Draggable = true
-
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.BackgroundTransparency = 1
-title.Text = "Fast Tween Path"
+title.Text = "Fast Tween Loop"
 title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 
-local toggle = Instance.new("TextButton", frame)
-toggle.Position = UDim2.fromOffset(10,40)
-toggle.Size = UDim2.fromOffset(200,30)
-toggle.Text = "START"
-toggle.Font = Enum.Font.SourceSansBold
-toggle.TextSize = 16
-toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
-toggle.TextColor3 = Color3.new(1,1,1)
+-- ฝั่ง A
+local btnA = Instance.new("TextButton", frame)
+btnA.Position = UDim2.fromOffset(10,40)
+btnA.Size = UDim2.fromOffset(220,30)
+btnA.Text = "เริ่มลูปฝั่ง A"
+btnA.Font = Enum.Font.SourceSansBold
+btnA.TextSize = 16
+btnA.BackgroundColor3 = Color3.fromRGB(0,140,200)
+btnA.TextColor3 = Color3.new(1,1,1)
 
-toggle.MouseButton1Click:Connect(function()
-    if running then
-        stopTween()
-        toggle.Text = "START"
-        toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
-    else
-        running = true
-        toggle.Text = "STOP"
-        toggle.BackgroundColor3 = Color3.fromRGB(170,0,0)
-    end
+btnA.MouseButton1Click:Connect(function()
+    startLoop(pathA)
 end)
 
+-- ฝั่ง B
+local btnB = Instance.new("TextButton", frame)
+btnB.Position = UDim2.fromOffset(10,75)
+btnB.Size = UDim2.fromOffset(220,30)
+btnB.Text = "เริ่มลูปฝั่ง B"
+btnB.Font = Enum.Font.SourceSansBold
+btnB.TextSize = 16
+btnB.BackgroundColor3 = Color3.fromRGB(200,140,0)
+btnB.TextColor3 = Color3.new(1,1,1)
+
+btnB.MouseButton1Click:Connect(function()
+    startLoop(pathB)
+end)
+
+-- Stop
+local stopBtn = Instance.new("TextButton", frame)
+stopBtn.Position = UDim2.fromOffset(10,110)
+stopBtn.Size = UDim2.fromOffset(220,25)
+stopBtn.Text = "STOP"
+stopBtn.Font = Enum.Font.SourceSansBold
+stopBtn.TextSize = 15
+stopBtn.BackgroundColor3 = Color3.fromRGB(170,0,0)
+stopBtn.TextColor3 = Color3.new(1,1,1)
+
+stopBtn.MouseButton1Click:Connect(stopTween)
+
+-- Tween Time
 local timeLabel = Instance.new("TextLabel", frame)
-timeLabel.Position = UDim2.fromOffset(10,80)
-timeLabel.Size = UDim2.fromOffset(200,20)
+timeLabel.Position = UDim2.fromOffset(10,140)
+timeLabel.Size = UDim2.fromOffset(140,20)
 timeLabel.BackgroundTransparency = 1
 timeLabel.TextColor3 = Color3.new(1,1,1)
 timeLabel.Font = Enum.Font.SourceSans
-timeLabel.TextSize = 16
-timeLabel.Text = "Tween Time : "..tweenTime
+timeLabel.TextSize = 15
+timeLabel.Text = "Tween : "..tweenTime
 
 local timeBtn = Instance.new("TextButton", frame)
-timeBtn.Position = UDim2.fromOffset(10,105)
-timeBtn.Size = UDim2.fromOffset(200,25)
-timeBtn.Text = "+ 0.1 Speed"
+timeBtn.Position = UDim2.fromOffset(155,140)
+timeBtn.Size = UDim2.fromOffset(75,20)
+timeBtn.Text = "+0.1"
 timeBtn.Font = Enum.Font.SourceSansBold
-timeBtn.TextSize = 15
+timeBtn.TextSize = 14
 timeBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
 timeBtn.TextColor3 = Color3.new(1,1,1)
 
@@ -153,5 +197,5 @@ timeBtn.MouseButton1Click:Connect(function()
     if tweenTime > MAX_TIME then
         tweenTime = MIN_TIME
     end
-    timeLabel.Text = "Tween Time : "..tweenTime
+    timeLabel.Text = "Tween : "..tweenTime
 end)
