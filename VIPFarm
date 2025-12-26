@@ -1,5 +1,5 @@
 --==============================
--- AUTO TWEEN PATH GUI
+-- FAST AUTO TWEEN GUI
 --==============================
 
 local Players = game:GetService("Players")
@@ -12,12 +12,13 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 --==============================
 -- CONFIG
 --==============================
-local MIN_SPEED = 5
-local MAX_SPEED = 15
-local speed = 10 -- ค่าเริ่มต้น
+local MIN_TIME = 0.1
+local MAX_TIME = 1.0
+local STEP = 0.1
+local tweenTime = 0.5 -- ค่าเริ่มต้น
 
 --==============================
--- PATH (ตามที่กำหนดมา)
+-- PATH
 --==============================
 local path = {
     Vector3.new(148, 33, -643),
@@ -42,11 +43,11 @@ local path = {
 -- STATE
 --==============================
 local running = false
-local currentTween = nil
-local currentIndex = 1
+local currentTween
+local index = 1
 
 --==============================
--- FUNCTION
+-- CORE
 --==============================
 local function stopTween()
     running = false
@@ -56,13 +57,14 @@ local function stopTween()
     end
 end
 
-local function tweenTo(pos)
-    local distance = (hrp.Position - pos).Magnitude
-    local time = distance / speed
-
+local function playTween(pos)
     local tween = TweenService:Create(
         hrp,
-        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        TweenInfo.new(
+            tweenTime,
+            Enum.EasingStyle.Linear,
+            Enum.EasingDirection.Out
+        ),
         {CFrame = CFrame.new(pos)}
     )
 
@@ -75,12 +77,10 @@ task.spawn(function()
     while true do
         task.wait()
         if running then
-            local target = path[currentIndex]
-            tweenTo(target)
-
-            currentIndex += 1
-            if currentIndex > #path then
-                currentIndex = 1
+            playTween(path[index])
+            index += 1
+            if index > #path then
+                index = 1
             end
         end
     end
@@ -90,75 +90,68 @@ end)
 -- GUI
 --==============================
 local gui = Instance.new("ScreenGui", player.PlayerGui)
-gui.Name = "AutoTweenGUI"
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromOffset(220, 140)
+frame.Size = UDim2.fromOffset(220, 145)
 frame.Position = UDim2.fromScale(0.05, 0.4)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-frame.BorderSizePixel = 0
+frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
 frame.Draggable = true
 
-local uiCorner = Instance.new("UICorner", frame)
-uiCorner.CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
 
--- Title
 local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "Auto Tween Path"
-title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1,0,0,30)
 title.BackgroundTransparency = 1
+title.Text = "Fast Tween Path"
+title.TextColor3 = Color3.new(1,1,1)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
 
--- Start / Stop
-local toggleBtn = Instance.new("TextButton", frame)
-toggleBtn.Position = UDim2.fromOffset(10, 40)
-toggleBtn.Size = UDim2.fromOffset(200, 30)
-toggleBtn.Text = "START"
-toggleBtn.Font = Enum.Font.SourceSansBold
-toggleBtn.TextSize = 16
-toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-toggleBtn.TextColor3 = Color3.new(1,1,1)
+local toggle = Instance.new("TextButton", frame)
+toggle.Position = UDim2.fromOffset(10,40)
+toggle.Size = UDim2.fromOffset(200,30)
+toggle.Text = "START"
+toggle.Font = Enum.Font.SourceSansBold
+toggle.TextSize = 16
+toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
+toggle.TextColor3 = Color3.new(1,1,1)
 
-toggleBtn.MouseButton1Click:Connect(function()
+toggle.MouseButton1Click:Connect(function()
     if running then
         stopTween()
-        toggleBtn.Text = "START"
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(0,170,0)
+        toggle.Text = "START"
+        toggle.BackgroundColor3 = Color3.fromRGB(0,170,0)
     else
         running = true
-        toggleBtn.Text = "STOP"
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(170,0,0)
+        toggle.Text = "STOP"
+        toggle.BackgroundColor3 = Color3.fromRGB(170,0,0)
     end
 end)
 
--- Speed Text
-local speedLabel = Instance.new("TextLabel", frame)
-speedLabel.Position = UDim2.fromOffset(10, 80)
-speedLabel.Size = UDim2.fromOffset(200, 20)
-speedLabel.Text = "Speed X : "..speed
-speedLabel.BackgroundTransparency = 1
-speedLabel.TextColor3 = Color3.new(1,1,1)
-speedLabel.Font = Enum.Font.SourceSans
-speedLabel.TextSize = 16
+local timeLabel = Instance.new("TextLabel", frame)
+timeLabel.Position = UDim2.fromOffset(10,80)
+timeLabel.Size = UDim2.fromOffset(200,20)
+timeLabel.BackgroundTransparency = 1
+timeLabel.TextColor3 = Color3.new(1,1,1)
+timeLabel.Font = Enum.Font.SourceSans
+timeLabel.TextSize = 16
+timeLabel.Text = "Tween Time : "..tweenTime
 
--- Speed Button
-local speedBtn = Instance.new("TextButton", frame)
-speedBtn.Position = UDim2.fromOffset(10, 105)
-speedBtn.Size = UDim2.fromOffset(200, 25)
-speedBtn.Text = "Increase Speed"
-speedBtn.Font = Enum.Font.SourceSansBold
-speedBtn.TextSize = 15
-speedBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-speedBtn.TextColor3 = Color3.new(1,1,1)
+local timeBtn = Instance.new("TextButton", frame)
+timeBtn.Position = UDim2.fromOffset(10,105)
+timeBtn.Size = UDim2.fromOffset(200,25)
+timeBtn.Text = "+ 0.1 Speed"
+timeBtn.Font = Enum.Font.SourceSansBold
+timeBtn.TextSize = 15
+timeBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+timeBtn.TextColor3 = Color3.new(1,1,1)
 
-speedBtn.MouseButton1Click:Connect(function()
-    speed += 1
-    if speed > MAX_SPEED then
-        speed = MIN_SPEED
+timeBtn.MouseButton1Click:Connect(function()
+    tweenTime = math.round((tweenTime + STEP) * 10) / 10
+    if tweenTime > MAX_TIME then
+        tweenTime = MIN_TIME
     end
-    speedLabel.Text = "Speed X : "..speed
+    timeLabel.Text = "Tween Time : "..tweenTime
 end)
