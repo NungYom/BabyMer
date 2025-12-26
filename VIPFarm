@@ -1,5 +1,5 @@
 --========================================
--- FAST AUTO TWEEN GUI (A / B / AB)
+-- FAST AUTO TWEEN GUI (FIXED A / B / AB)
 --========================================
 
 local Players = game:GetService("Players")
@@ -21,10 +21,9 @@ local START_A = Vector3.new(148,33,-643)
 local START_B = Vector3.new(148,33,643)
 
 --==============================
--- PATHS
+-- PATHS (ไม่มี START รวมอยู่)
 --==============================
 local pathA = {
-    START_A,
     Vector3.new(-184,33,-643),
     Vector3.new(-184,33,-615),
     Vector3.new(148,33,-615),
@@ -43,7 +42,6 @@ local pathA = {
 }
 
 local pathB = {
-    START_B,
     Vector3.new(-184,33,643),
     Vector3.new(-184,33,615),
     Vector3.new(148,33,615),
@@ -58,6 +56,7 @@ local pathB = {
     Vector3.new(148,33,478),
     Vector3.new(-184,33,478),
     Vector3.new(-184,33,451),
+    Vector3.new(148,33,451),
 }
 
 --==============================
@@ -69,7 +68,7 @@ local currentPath
 local index = 1
 
 local mode = "NONE" -- A / B / AB
-local abSide = "A"  -- ใช้เฉพาะ AB
+local abSide = "A"
 
 --==============================
 -- CORE
@@ -88,10 +87,12 @@ local function stopAll()
 end
 
 local function startPath(path, startPos)
-    stopAll()
+    if currentTween then
+        currentTween:Cancel()
+    end
     teleport(startPos)
     currentPath = path
-    index = 2 -- ข้ามจุดเริ่ม เพราะ teleport แล้ว
+    index = 1
     running = true
 end
 
@@ -117,16 +118,15 @@ task.spawn(function()
                 if mode == "AB" then
                     if abSide == "A" then
                         abSide = "B"
-                        teleport(START_B)
-                        currentPath = pathB
+                        startPath(pathB, START_B)
                     else
                         abSide = "A"
-                        teleport(START_A)
-                        currentPath = pathA
+                        startPath(pathA, START_A)
                     end
-                    index = 2
-                else
-                    index = 2
+                elseif mode == "A" then
+                    startPath(pathA, START_A)
+                elseif mode == "B" then
+                    startPath(pathB, START_B)
                 end
             end
         end
