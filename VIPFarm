@@ -1,6 +1,6 @@
---==============================
--- FAST AUTO TWEEN GUI (A / B)
---==============================
+--========================================
+-- FAST AUTO TWEEN GUI (A / B / AB)
+--========================================
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -17,11 +17,14 @@ local MAX_TIME = 1.0
 local STEP = 0.1
 local tweenTime = 0.5
 
+local START_A = Vector3.new(148,33,-643)
+local START_B = Vector3.new(148,33,643)
+
 --==============================
--- PATH A (เดิม)
+-- PATHS
 --==============================
 local pathA = {
-    Vector3.new(148,33,-643),
+    START_A,
     Vector3.new(-184,33,-643),
     Vector3.new(-184,33,-615),
     Vector3.new(148,33,-615),
@@ -39,11 +42,8 @@ local pathA = {
     Vector3.new(148,33,-451),
 }
 
---==============================
--- PATH B (ใหม่)
---==============================
 local pathB = {
-    Vector3.new(148,33,643),
+    START_B,
     Vector3.new(-184,33,643),
     Vector3.new(-184,33,615),
     Vector3.new(148,33,615),
@@ -58,7 +58,6 @@ local pathB = {
     Vector3.new(148,33,478),
     Vector3.new(-184,33,478),
     Vector3.new(-184,33,451),
-    Vector3.new(148,33,451),
 }
 
 --==============================
@@ -69,21 +68,30 @@ local currentTween
 local currentPath
 local index = 1
 
+local mode = "NONE" -- A / B / AB
+local abSide = "A"  -- ใช้เฉพาะ AB
+
 --==============================
 -- CORE
 --==============================
-local function stopTween()
+local function teleport(pos)
+    hrp.CFrame = CFrame.new(pos)
+end
+
+local function stopAll()
     running = false
+    mode = "NONE"
     if currentTween then
         currentTween:Cancel()
         currentTween = nil
     end
 end
 
-local function startLoop(path)
-    stopTween()
+local function startPath(path, startPos)
+    stopAll()
+    teleport(startPos)
     currentPath = path
-    index = 1
+    index = 2 -- ข้ามจุดเริ่ม เพราะ teleport แล้ว
     running = true
 end
 
@@ -104,8 +112,22 @@ task.spawn(function()
         if running and currentPath then
             playTween(currentPath[index])
             index += 1
+
             if index > #currentPath then
-                index = 1
+                if mode == "AB" then
+                    if abSide == "A" then
+                        abSide = "B"
+                        teleport(START_B)
+                        currentPath = pathB
+                    else
+                        abSide = "A"
+                        teleport(START_A)
+                        currentPath = pathA
+                    end
+                    index = 2
+                else
+                    index = 2
+                end
             end
         end
     end
@@ -118,65 +140,53 @@ local gui = Instance.new("ScreenGui", player.PlayerGui)
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromOffset(240, 180)
+frame.Size = UDim2.fromOffset(260, 215)
 frame.Position = UDim2.fromScale(0.05, 0.4)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
 frame.Active = true
 frame.Draggable = true
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1,0,0,30)
-title.BackgroundTransparency = 1
-title.Text = "Fast Tween Loop"
-title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 18
+local function mkBtn(text, y, color)
+    local b = Instance.new("TextButton", frame)
+    b.Position = UDim2.fromOffset(10, y)
+    b.Size = UDim2.fromOffset(240, 30)
+    b.Text = text
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 16
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    return b
+end
 
--- ฝั่ง A
-local btnA = Instance.new("TextButton", frame)
-btnA.Position = UDim2.fromOffset(10,40)
-btnA.Size = UDim2.fromOffset(220,30)
-btnA.Text = "เริ่มลูปฝั่ง A"
-btnA.Font = Enum.Font.SourceSansBold
-btnA.TextSize = 16
-btnA.BackgroundColor3 = Color3.fromRGB(0,140,200)
-btnA.TextColor3 = Color3.new(1,1,1)
+local btnA  = mkBtn("เริ่มลูปฝั่ง A", 40, Color3.fromRGB(0,140,200))
+local btnB  = mkBtn("เริ่มลูปฝั่ง B", 75, Color3.fromRGB(200,140,0))
+local btnAB = mkBtn("เริ่มลูปทั้ง A และ B", 110, Color3.fromRGB(140,0,200))
+local btnStop = mkBtn("STOP", 145, Color3.fromRGB(170,0,0))
+btnStop.Size = UDim2.fromOffset(240,25)
 
 btnA.MouseButton1Click:Connect(function()
-    startLoop(pathA)
+    mode = "A"
+    startPath(pathA, START_A)
 end)
-
--- ฝั่ง B
-local btnB = Instance.new("TextButton", frame)
-btnB.Position = UDim2.fromOffset(10,75)
-btnB.Size = UDim2.fromOffset(220,30)
-btnB.Text = "เริ่มลูปฝั่ง B"
-btnB.Font = Enum.Font.SourceSansBold
-btnB.TextSize = 16
-btnB.BackgroundColor3 = Color3.fromRGB(200,140,0)
-btnB.TextColor3 = Color3.new(1,1,1)
 
 btnB.MouseButton1Click:Connect(function()
-    startLoop(pathB)
+    mode = "B"
+    startPath(pathB, START_B)
 end)
 
--- Stop
-local stopBtn = Instance.new("TextButton", frame)
-stopBtn.Position = UDim2.fromOffset(10,110)
-stopBtn.Size = UDim2.fromOffset(220,25)
-stopBtn.Text = "STOP"
-stopBtn.Font = Enum.Font.SourceSansBold
-stopBtn.TextSize = 15
-stopBtn.BackgroundColor3 = Color3.fromRGB(170,0,0)
-stopBtn.TextColor3 = Color3.new(1,1,1)
+btnAB.MouseButton1Click:Connect(function()
+    mode = "AB"
+    abSide = "A"
+    startPath(pathA, START_A)
+end)
 
-stopBtn.MouseButton1Click:Connect(stopTween)
+btnStop.MouseButton1Click:Connect(stopAll)
 
 -- Tween Time
 local timeLabel = Instance.new("TextLabel", frame)
-timeLabel.Position = UDim2.fromOffset(10,140)
-timeLabel.Size = UDim2.fromOffset(140,20)
+timeLabel.Position = UDim2.fromOffset(10,175)
+timeLabel.Size = UDim2.fromOffset(150,20)
 timeLabel.BackgroundTransparency = 1
 timeLabel.TextColor3 = Color3.new(1,1,1)
 timeLabel.Font = Enum.Font.SourceSans
@@ -184,8 +194,8 @@ timeLabel.TextSize = 15
 timeLabel.Text = "Tween : "..tweenTime
 
 local timeBtn = Instance.new("TextButton", frame)
-timeBtn.Position = UDim2.fromOffset(155,140)
-timeBtn.Size = UDim2.fromOffset(75,20)
+timeBtn.Position = UDim2.fromOffset(170,175)
+timeBtn.Size = UDim2.fromOffset(80,20)
 timeBtn.Text = "+0.1"
 timeBtn.Font = Enum.Font.SourceSansBold
 timeBtn.TextSize = 14
