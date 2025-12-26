@@ -1,0 +1,164 @@
+--==============================
+-- AUTO TWEEN PATH GUI
+--==============================
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+--==============================
+-- CONFIG
+--==============================
+local MIN_SPEED = 5
+local MAX_SPEED = 15
+local speed = 10 -- ค่าเริ่มต้น
+
+--==============================
+-- PATH (ตามที่กำหนดมา)
+--==============================
+local path = {
+    Vector3.new(148, 33, -643),
+    Vector3.new(-184, 33, -643),
+    Vector3.new(-184, 33, -615),
+    Vector3.new(148, 33, -615),
+    Vector3.new(148, 33, -587),
+    Vector3.new(-184, 33, -587),
+    Vector3.new(-184, 33, -559),
+    Vector3.new(148, 33, -559),
+    Vector3.new(148, 33, -530),
+    Vector3.new(-184, 33, -530),
+    Vector3.new(-184, 33, -502),
+    Vector3.new(148, 33, -502),
+    Vector3.new(148, 33, -478),
+    Vector3.new(-184, 33, -478),
+    Vector3.new(-184, 33, -451),
+    Vector3.new(148, 33, -451),
+}
+
+--==============================
+-- STATE
+--==============================
+local running = false
+local currentTween = nil
+local currentIndex = 1
+
+--==============================
+-- FUNCTION
+--==============================
+local function stopTween()
+    running = false
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
+end
+
+local function tweenTo(pos)
+    local distance = (hrp.Position - pos).Magnitude
+    local time = distance / speed
+
+    local tween = TweenService:Create(
+        hrp,
+        TweenInfo.new(time, Enum.EasingStyle.Linear),
+        {CFrame = CFrame.new(pos)}
+    )
+
+    currentTween = tween
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+task.spawn(function()
+    while true do
+        task.wait()
+        if running then
+            local target = path[currentIndex]
+            tweenTo(target)
+
+            currentIndex += 1
+            if currentIndex > #path then
+                currentIndex = 1
+            end
+        end
+    end
+end)
+
+--==============================
+-- GUI
+--==============================
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.Name = "AutoTweenGUI"
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(220, 140)
+frame.Position = UDim2.fromScale(0.05, 0.4)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+
+local uiCorner = Instance.new("UICorner", frame)
+uiCorner.CornerRadius = UDim.new(0, 8)
+
+-- Title
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "Auto Tween Path"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+
+-- Start / Stop
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Position = UDim2.fromOffset(10, 40)
+toggleBtn.Size = UDim2.fromOffset(200, 30)
+toggleBtn.Text = "START"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 16
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    if running then
+        stopTween()
+        toggleBtn.Text = "START"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(0,170,0)
+    else
+        running = true
+        toggleBtn.Text = "STOP"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(170,0,0)
+    end
+end)
+
+-- Speed Text
+local speedLabel = Instance.new("TextLabel", frame)
+speedLabel.Position = UDim2.fromOffset(10, 80)
+speedLabel.Size = UDim2.fromOffset(200, 20)
+speedLabel.Text = "Speed X : "..speed
+speedLabel.BackgroundTransparency = 1
+speedLabel.TextColor3 = Color3.new(1,1,1)
+speedLabel.Font = Enum.Font.SourceSans
+speedLabel.TextSize = 16
+
+-- Speed Button
+local speedBtn = Instance.new("TextButton", frame)
+speedBtn.Position = UDim2.fromOffset(10, 105)
+speedBtn.Size = UDim2.fromOffset(200, 25)
+speedBtn.Text = "Increase Speed"
+speedBtn.Font = Enum.Font.SourceSansBold
+speedBtn.TextSize = 15
+speedBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+speedBtn.TextColor3 = Color3.new(1,1,1)
+
+speedBtn.MouseButton1Click:Connect(function()
+    speed += 1
+    if speed > MAX_SPEED then
+        speed = MIN_SPEED
+    end
+    speedLabel.Text = "Speed X : "..speed
+end)
