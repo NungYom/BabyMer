@@ -1,0 +1,81 @@
+------------------------------------------------------
+-- SERVICES
+------------------------------------------------------
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+------------------------------------------------------
+-- STATE
+------------------------------------------------------
+local enabled = false
+local running = false
+
+------------------------------------------------------
+-- GUI
+------------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "MeatTP_GUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.fromOffset(160, 45)
+button.Position = UDim2.fromScale(0.5, 0.85)
+button.AnchorPoint = Vector2.new(0.5, 0.5)
+button.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+button.TextColor3 = Color3.new(1,1,1)
+button.TextScaled = true
+button.Font = Enum.Font.SourceSansBold
+button.Text = "MEAT TP : OFF"
+button.Parent = gui
+
+------------------------------------------------------
+-- BUTTON LOGIC
+------------------------------------------------------
+button.MouseButton1Click:Connect(function()
+	enabled = not enabled
+
+	if enabled then
+		button.Text = "MEAT TP : ON"
+		button.BackgroundColor3 = Color3.fromRGB(60, 180, 80)
+	else
+		button.Text = "MEAT TP : OFF"
+		button.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+	end
+end)
+
+------------------------------------------------------
+-- MAIN LOOP
+------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+	if not enabled then return end
+	if running then return end
+
+	running = true
+
+	for _, v in pairs(workspace:GetChildren()) do
+		if not enabled then break end
+
+		pcall(function()
+			if v.Name:lower():find("meat") then
+				local targetName = v.Name:lower():gsub("_", "")
+				local target = v:FindFirstChild(targetName)
+
+				if target then
+					local root = character:FindFirstChild("RootPart")
+						or character:FindFirstChild("HumanoidRootPart")
+
+					if root then
+						root.CFrame = target.CFrame
+						task.wait(0.3)
+					end
+				end
+			end
+		end)
+	end
+
+	running = false
+end)
