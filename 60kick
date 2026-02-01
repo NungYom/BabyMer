@@ -1,8 +1,17 @@
+-- Auto Execute Safe Kick (Local Script)
+
+-- รอให้เกมโหลดจริง
+repeat task.wait() until game:IsLoaded()
+
+-- รอ LocalPlayer
 local Players = game:GetService("Players")
+repeat task.wait() until Players.LocalPlayer
 local player = Players.LocalPlayer
 
-task.delay(0, function()
-    if player then
-        player:Kick("Auto reset private server")
-    end
-end)
+-- หน่วงเวลาก่อนทำงาน (เช่น ให้คุณเช็คบอส / ฟาร์ม)
+task.wait(60)
+
+-- เตะตัวเองออก เพื่อ reset server
+if player then
+	player:Kick("Auto reset private server")
+end
