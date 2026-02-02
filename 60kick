@@ -1,5 +1,3 @@
--- รอให้เกมโหลดจริง
-repeat task.wait() until game:IsLoaded()
 -- Services
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
