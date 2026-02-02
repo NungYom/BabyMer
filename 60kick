@@ -5,21 +5,19 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
 -- Config
-local CHECK_DELAY_START = 30      -- วินาทีก่อนเริ่มตรวจ
-local CHECK_INTERVAL = 1          -- ตรวจทุกกี่วินาที
-local POINT_FOLDER = workspace:WaitForChild("Point1")
-local BOSS_NAME = "Boss01"
+local START_DELAY = 30      -- รอ 30 วินาทีก่อนเริ่ม
+local CHECK_INTERVAL = 1    -- ตรวจทุก 1 วิ
 
--- รอ 30 วินาที
-task.wait(CHECK_DELAY_START)
+-- Path ที่ถูกต้อง
+local worldBoss = workspace:WaitForChild("WorldBoss")
+local point1 = worldBoss:WaitForChild("Point1")
 
--- Loop ตรวจสอบ
+task.wait(START_DELAY)
+
 while true do
-    local boss = POINT_FOLDER:FindFirstChild(BOSS_NAME)
-
-    if not boss then
-        -- บอสหาย = เตะออก
-        player:Kick("Boss01 defeated. Leaving server.")
+    -- ถ้า Point1 ว่าง = บอสตาย
+    if #point1:GetChildren() == 0 then
+        player:Kick("Boss defeated. Leaving server.")
         break
     end
 
