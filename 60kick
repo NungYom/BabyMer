@@ -1,17 +1,27 @@
--- Auto Execute Safe Kick (Local Script)
-
 -- รอให้เกมโหลดจริง
 repeat task.wait() until game:IsLoaded()
-
--- รอ LocalPlayer
+-- Services
 local Players = game:GetService("Players")
-repeat task.wait() until Players.LocalPlayer
 local player = Players.LocalPlayer
 
--- หน่วงเวลาก่อนทำงาน (เช่น ให้คุณเช็คบอส / ฟาร์ม)
-task.wait(45)
+-- Config
+local CHECK_DELAY_START = 30      -- วินาทีก่อนเริ่มตรวจ
+local CHECK_INTERVAL = 1          -- ตรวจทุกกี่วินาที
+local POINT_FOLDER = workspace:WaitForChild("Point1")
+local BOSS_NAME = "Boss01"
 
--- เตะตัวเองออก เพื่อ reset server
-if player then
-	player:Kick("Auto reset private server")
+-- รอ 30 วินาที
+task.wait(CHECK_DELAY_START)
+
+-- Loop ตรวจสอบ
+while true do
+    local boss = POINT_FOLDER:FindFirstChild(BOSS_NAME)
+
+    if not boss then
+        -- บอสหาย = เตะออก
+        player:Kick("Boss01 defeated. Leaving server.")
+        break
+    end
+
+    task.wait(CHECK_INTERVAL)
 end
