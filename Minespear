@@ -21,9 +21,11 @@ local HRP = character:WaitForChild("HumanoidRootPart")
 -- =====================================================
 local PREP_POINT_1 = Vector3.new(1291.04578, 95.697731, -366.907959)
 local PREP_POINT_2 = Vector3.new(435.460327, 96.8663254, -1033.87878)
+local PREP_POINT_3 = Vector3.new(1247.36975, 76.5539093, -569.399109) -- จุดสำหรับ Boss06
 
 local FIND_BOSS_12_TIME = 20
 local FIND_BOSS_3_TIME  = 5
+local FIND_BOSS_6_TIME = 60 -- เวลาในการค้นหา Boss06
 
 local ATTACK_DISTANCE = 4
 local ATTACK_INTERVAL = 0.08 -- ยิงถี่
@@ -40,7 +42,7 @@ local function teleportLoop(cf, duration)
 end
 
 -- =====================================================
--- FIND BOSS IN POINT (ตรงโครงสร้างจริง)
+-- FIND BOSS IN POINT
 -- =====================================================
 local function findBoss(pointFolder, bossNames, timeout)
     local start = tick()
@@ -129,6 +131,24 @@ if not boss3 then
 end
 
 attackBoss("Point2", boss3, root3)
+
+-- ===============================
+-- PREP POINT 3 สำหรับ Boss06
+-- ===============================
+teleportLoop(CFrame.new(PREP_POINT_3), 2)
+
+-- ===============================
+-- Boss06
+-- ===============================
+local point5 = worldBoss:WaitForChild("Point5")
+local boss6, root6 = findBoss(point5, {"Boss06"}, FIND_BOSS_6_TIME)
+
+if not boss6 then
+    lp:Kick("ไม่พบบอส Boss06")
+    return
+end
+
+attackBoss("Point5", boss6, root6)
 
 -- ===============================
 -- END
