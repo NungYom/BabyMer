@@ -1,0 +1,162 @@
+--==============================
+-- SERVICES
+--==============================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+--==============================
+-- CONFIG
+--==============================
+local START_DELAY = 10
+local TELEPORT_DURATION = 2
+local CHECK_INTERVAL = 0.05     -- ยิงถี่
+local HIT_PER_LOOP = 3          -- ยิงซ้ำต่อรอบ
+
+-- Fixed teleport positions
+local PRE_POINT1_POS = Vector3.new(1291.04578, 95.697731, -366.907959)
+local TO_POINT2_POS  = Vector3.new(435.460327, 96.8663254, -1033.87878)
+
+--==============================
+-- PATHS
+--==============================
+local worldBoss = workspace:WaitForChild("WorldBoss")
+local point1 = worldBoss:WaitForChild("Point1")
+local point2 = worldBoss:WaitForChild("Point2")
+
+--==============================
+-- CHARACTER UTILS
+--==============================
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local function getHRP()
+    return getCharacter():WaitForChild("HumanoidRootPart")
+end
+
+--==============================
+-- NOCLIP
+--==============================
+RunService.Stepped:Connect(function()
+    local char = player.Character
+    if char then
+        for _, v in ipairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end
+end)
+
+--==============================
+-- TELEPORT FUNCTIONS
+--==============================
+local function loopTeleportToCFrame(cf, duration)
+    local hrp = getHRP()
+    local start = tick()
+    while tick() - start < duration do
+        hrp.CFrame = cf
+        task.wait(0.05)
+    end
+end
+
+local function loopTeleportToPosition(pos, duration)
+    loopTeleportToCFrame(CFrame.new(pos), duration)
+end
+
+--==============================
+-- BOSS FINDER
+--==============================
+local function findBoss(point, bossNames)
+    for _, name in ipairs(bossNames) do
+        local boss = point:FindFirstChild(name)
+        if boss then
+            return boss
+        end
+    end
+    return nil
+end
+
+--==============================
+-- ATTACK BOSS
+--==============================
+local function attackBoss(point, bossName)
+    while true do
+        local boss = point:FindFirstChild(bossName)
+        if not boss then
+            break
+        end
+
+        local root = boss:FindFirstChild("Root")
+        if root then
+            local rootPos = root.CFrame.Position
+
+            -- teleport ติด Root
+            getHRP().CFrame = root.CFrame * CFrame.new(0, 0, -3)
+
+            -- ยิงรัว
+            for i = 1, HIT_PER_LOOP do
+                local args = {
+                    "Hit",
+                    {
+                        fishInstance = boss,
+                        HitPos = vector.create(rootPos.X, rootPos.Y, rootPos.Z),
+                        toolInstance = getCharacter():WaitForChild("Harpoon23")
+                    }
+                }
+                ReplicatedStorage
+                    :WaitForChild("Remotes")
+                    :WaitForChild("FireRE")
+                    :FireServer(unpack(args))
+            end
+        end
+
+        task.wait(CHECK_INTERVAL)
+    end
+end
+
+--==============================
+-- MAIN FLOW
+--==============================
+task.wait(START_DELAY)
+
+-- ก่อนเข้า Point1
+loopTeleportToPosition(PRE_POINT1_POS, TELEPORT_DURATION)
+
+-- หา Boss01 / Boss02
+local boss1 = findBoss(point1, {"Boss01", "Boss02"})
+if not boss1 then
+    player:Kick("No Boss01 or Boss02 found.")
+    return
+end
+
+-- ตี Boss01 / Boss02
+attackBoss(point1, boss1.Name)
+
+-- ย้ายไป Point2
+loopTeleportToPosition(TO_POINT2_POS, TELEPORT_DURATION)
+
+-- หา Boss03 (5 วินาที)
+local boss3
+local startCheck = tick()
+while tick() - startCheck < 5 do
+    boss3 = point2:FindFirstChild("Boss03")
+    if boss3 then
+        break
+    end
+    task.wait(0.2)
+end
+
+if not boss3 then
+    player:Kick("Boss03 not found in time.")
+    return
+end
+
+-- ตี Boss03
+attackBoss(point2, "Boss03")
+
+-- เสร็จงาน
+player:Kick("All bosses defeated.")
