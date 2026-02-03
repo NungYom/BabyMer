@@ -8,7 +8,8 @@ local lp = Players.LocalPlayer
 -- =====================================================
 -- WAIT GAME LOAD
 -- =====================================================
-task.wait(10)
+if not game:IsLoaded() then game.Loaded:Wait() end
+task.wait(5) -- รอทรัพยากรโหลดให้ชัวร์
 
 -- =====================================================
 -- CHARACTER / HRP
@@ -21,29 +22,29 @@ local HRP = character:WaitForChild("HumanoidRootPart")
 -- =====================================================
 local PREP_POINT_1 = Vector3.new(1291.04578, 95.697731, -366.907959)
 local PREP_POINT_2 = Vector3.new(435.460327, 96.8663254, -1033.87878)
-local PREP_POINT_3 = Vector3.new(1141.59741, -1161.55103, 2600.19995) -- พิกัดใหม่สำหรับ Boss04
+local PREP_POINT_3 = Vector3.new(1141.59741, -1161.55103, 2600.19995)
 
 local FIND_BOSS_12_TIME = 20
 local FIND_BOSS_3_TIME  = 5
-local FIND_BOSS_4_TIME = 60 -- เวลาในการค้นหา Boss04
+local FIND_BOSS_4_TIME  = 60
 
 local ATTACK_DISTANCE = 4
-local ATTACK_INTERVAL = 0.08 -- ยิงถี่
+local ATTACK_INTERVAL = 0.08
 
 -- =====================================================
--- TELEPORT LOOP
+-- HELPER FUNCTIONS
 -- =====================================================
+
+-- ฟังก์ชันวาร์ปไปจุดเตรียมตัว
 local function teleportLoop(cf, duration)
     local start = tick()
     while tick() - start < duration do
         HRP.CFrame = cf
-        task.wait(0.05)
+        task.wait(0.1)
     end
 end
 
--- =====================================================
--- FIND BOSS IN POINT
--- =====================================================
+-- ฟังก์ชันค้นหาบอสใน Folder
 local function findBoss(pointFolder, bossNames, timeout)
     local start = tick()
     while tick() - start < timeout do
@@ -59,111 +60,115 @@ local function findBoss(pointFolder, bossNames, timeout)
                 end
             end
         end
-        task.wait(0.25)
+        task.wait(0.5)
     end
-    return nil
+    return nil, nil
 end
 
 -- =====================================================
--- ATTACK BOSS (Gun08) พร้อมใช้ Skill
+-- ATTACK MODES
 -- =====================================================
-local function attackBossWithSkill(pointName, bossFolder, bossRoot)
-    local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 
-    while bossFolder.Parent do
-        -- teleport ติดบอส
+-- 1. แบบตีธรรมดา (สำหรับ Boss 01, 02, 03)
+local function attackBossNormal(bossFolder, bossRoot)
+    local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
+    
+    print("Starting Normal Attack on: " .. bossFolder.Name)
+    
+    while bossFolder and bossFolder.Parent do
+        -- ติดตามตัวบอส
         HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -ATTACK_DISTANCE)
 
-        -- ยิง
+        -- ส่ง Remote ยิง
         local pos = bossRoot.Position
         local args = {
             "Hit",
             {
-                fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
-                HitPos = vector.create(pos.X, pos.Y, pos.Z),
-                toolInstance = character:WaitForChild("Gun08")
+                fishInstance = bossFolder,
+                HitPos = Vector3.new(pos.X, pos.Y, pos.Z),
+                toolInstance = character:FindFirstChild("Gun08") or lp.Backpack:FindFirstChild("Gun08")
             }
         }
         fireRemote:FireServer(unpack(args))
 
-        -- ใช้ Skill
-        for i = 1, 12 do
-            local skillId = string.format("Skill%02d", i)
-            local skillArgs = {
-                "Skill",
-                {
-                    ID = skillId
-                }
+        task.wait(ATTACK_INTERVAL)
+    end
+    print("Target destroyed/missing.")
+end
+
+-- 2. แบบตี + ใช้สกิล (สำหรับ Boss 04)
+local function attackBossWithSkill(bossFolder, bossRoot)
+    local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
+    local fishRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
+    
+    print("Starting Skill Attack on: " .. bossFolder.Name)
+    
+    while bossFolder and bossFolder.Parent do
+        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -ATTACK_DISTANCE)
+
+        -- ยิงธรรมดา
+        local pos = bossRoot.Position
+        local hitArgs = {
+            "Hit",
+            {
+                fishInstance = bossFolder,
+                HitPos = Vector3.new(pos.X, pos.Y, pos.Z),
+                toolInstance = character:FindFirstChild("Gun08") or lp.Backpack:FindFirstChild("Gun08")
             }
-            ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE"):FireServer(unpack(skillArgs))
-            wait(0.5)
-        end
+        }
+        fireRemote:FireServer(unpack(hitArgs))
+
+        -- ใช้สกิล (ใช้ spawn เพื่อไม่ให้หน่วงการยิง)
+        task.spawn(function()
+            for i = 1, 12 do
+                local skillId = string.format("Skill%02d", i)
+                fishRemote:FireServer("Skill", { ID = skillId })
+            end
+        end)
 
         task.wait(ATTACK_INTERVAL)
     end
 end
 
 -- =====================================================
--- START FLOW
+-- MAIN EXECUTION FLOW
 -- =====================================================
 
 local worldBoss = workspace:WaitForChild("WorldBoss")
 
--- ===============================
--- PREP POINT 1
--- ===============================
+-- --- จุดที่ 1: Boss01 หรือ Boss02 ---
+print("Going to Point 1...")
 teleportLoop(CFrame.new(PREP_POINT_1), 2)
+local b12, r12 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, FIND_BOSS_12_TIME)
 
--- ===============================
--- Boss01 / Boss02
--- ===============================
-local point1 = worldBoss:WaitForChild("Point1")
-local boss12, root12 = findBoss(point1, {"Boss01", "Boss02"}, FIND_BOSS_12_TIME)
-
-if not boss12 then
-    lp:Kick("ไม่พบบอส Boss01 / Boss02")
-    return
+if b12 and r12 then
+    attackBossNormal(b12, r12)
+else
+    warn("Point 1 Boss not found, skipping...")
 end
 
-attackBoss("Point1", boss12, root12)
-
--- ===============================
--- PREP POINT 2
--- ===============================
+-- --- จุดที่ 2: Boss03 ---
+print("Going to Point 2...")
 teleportLoop(CFrame.new(PREP_POINT_2), 2)
+local b3, r3 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, FIND_BOSS_3_TIME)
 
--- ===============================
--- Boss03
--- ===============================
-local point2 = worldBoss:WaitForChild("Point2")
-local boss3, root3 = findBoss(point2, {"Boss03"}, FIND_BOSS_3_TIME)
-
-if not boss3 then
-    lp:Kick("ไม่พบบอส Boss03")
-    return
+if b3 and r3 then
+    attackBossNormal(b3, r3)
+else
+    warn("Point 2 Boss not found, skipping...")
 end
 
-attackBoss("Point2", boss3, root3)
-
--- ===============================
--- PREP POINT 3 สำหรับ Boss04
--- ===============================
+-- --- จุดที่ 3: Boss04 ---
+print("Going to Point 3...")
 teleportLoop(CFrame.new(PREP_POINT_3), 2)
+local b4, r4 = findBoss(worldBoss:WaitForChild("Point3"), {"Boss04"}, FIND_BOSS_4_TIME)
 
--- ===============================
--- Boss04
--- ===============================
-local point3 = worldBoss:WaitForChild("Point3")
-local boss4, root4 = findBoss(point3, {"Boss04"}, FIND_BOSS_4_TIME)
-
-if not boss4 then
-    lp:Kick("ไม่พบบอส Boss04")
-    return
+if b4 and r4 then
+    attackBossWithSkill(b4, r4)
+else
+    warn("Point 3 Boss not found, skipping...")
 end
 
-attackBossWithSkill("Point3", boss4, root4)
-
--- ===============================
--- END
--- ===============================
-lp:Kick("Boss cleared")
+-- --- จบงาน ---
+print("All tasks completed.")
+lp:Kick("Farm Finished: Boss 01-04 cleared.")
