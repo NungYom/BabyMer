@@ -65,7 +65,7 @@ local function findBoss(pointFolder, bossNames, timeout)
 end
 
 -- =====================================================
--- ATTACK BOSS (Gun06) พร้อมใช้ Skill
+-- ATTACK BOSS (Gun08) พร้อมใช้ Skill
 -- =====================================================
 local function attackBossWithSkill(pointName, bossFolder, bossRoot)
     local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
@@ -81,7 +81,7 @@ local function attackBossWithSkill(pointName, bossFolder, bossRoot)
             {
                 fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
                 HitPos = vector.create(pos.X, pos.Y, pos.Z),
-                toolInstance = character:WaitForChild("Gun06")
+                toolInstance = character:WaitForChild("Gun08")
             }
         }
         fireRemote:FireServer(unpack(args))
