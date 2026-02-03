@@ -1,6 +1,3 @@
--- =====================================================
--- SERVICES & INITIAL SETUP
--- =====================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -15,17 +12,15 @@ local HRP = character:WaitForChild("HumanoidRootPart")
 local fireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 local fishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
 
--- =====================================================
--- SYSTEM: NOCLIP & FLOAT (ทะลุวัตถุและลอยตัวตลอดเวลา)
--- =====================================================
+-- ==========================================
+-- SYSTEM: NOCLIP & FLOAT
+-- ==========================================
 local noclipConnection
 noclipConnection = RunService.Stepped:Connect(function()
     if character then
-        -- Noclip: ทะลุทุกอย่าง
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") then part.CanCollide = false end
         end
-        -- Float: ล็อคแรงโน้มถ่วงไม่ให้ตก
         if not HRP:FindFirstChild("FloatForce") then
             local bv = Instance.new("BodyVelocity")
             bv.Name = "FloatForce"
@@ -36,9 +31,60 @@ noclipConnection = RunService.Stepped:Connect(function()
     end
 end)
 
--- =====================================================
--- CONFIGURATION
--- =====================================================
+-- ==========================================
+-- SKILL LOGIC: SEQUENCE SPAM (10 ครั้งต่อสกิล)
+-- ==========================================
+local function castSkillSequence(excludeSkill11)
+    for i = 1, 12 do
+        if excludeSkill11 and i == 11 then continue end -- ข้ามสกิล 11 สำหรับ Boss03
+        
+        local skillID = string.format("Skill%02d", i)
+        -- ยิงสกิลปัจจุบัน 10 ครั้ง ถี่ๆ 0.01 วินาที
+        for count = 1, 10 do
+            fishRE:FireServer("Skill", { ID = skillID })
+            task.wait(0.01)
+        end
+    end
+end
+
+-- ==========================================
+-- ATTACK LOGIC
+-- ==========================================
+local function attack(bossFolder, bossRoot, mode)
+    -- [ Boss04: โหมดโหมโรง 5 วินาที ]
+    if mode == "Boss4" then
+        local startTime = tick()
+        while tick() - startTime < 5 do
+            HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
+            castSkillSequence(false) -- รันสกิลชุดใหญ่ 1-12
+        end
+    end
+
+    -- [ ลูปโจมตีหลัก ]
+    while bossFolder and bossFolder.Parent do
+        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
+        
+        -- ยิงธรรมดา
+        fireRE:FireServer("Hit", {
+            fishInstance = bossFolder,
+            HitPos = bossRoot.Position,
+            toolInstance = character:FindFirstChild("Gun08") or lp.Backpack:FindFirstChild("Gun08")
+        })
+
+        -- จัดการสกิลตามเงื่อนไขบอส
+        if mode == "Boss3" then
+            task.spawn(castSkillSequence, true) -- รัน sequence แบบข้ามสกิล 11 (ใช้ spawn เพื่อไม่ให้ขัดจังหวะการยิง)
+        elseif mode == "Boss4" then
+            task.spawn(castSkillSequence, false) -- รัน sequence ครบทุกสกิล
+        end
+        
+        task.wait(0.08)
+    end
+end
+
+-- ==========================================
+-- MAIN FLOW
+-- ==========================================
 local PREP_POINTS = {
     Vector3.new(1291.04578, 95.697731, -366.907959),
     Vector3.new(435.460327, 96.8663254, -1033.87878),
@@ -66,80 +112,20 @@ local function findBoss(pointFolder, bossNames, timeout)
     return nil, nil
 end
 
--- =====================================================
--- SKILL SYSTEM (ปรับปรุงใหม่ตามเงื่อนไขบอสแต่ละตัว)
--- =====================================================
-local function castSkills(excludeSkill11)
-    for i = 1, 12 do
-        if excludeSkill11 and i == 11 then continue end -- ข้ามสกิล 11 ถ้าเงื่อนไขบอกให้ยกเว้น
-        
-        task.spawn(function()
-            local skillID = string.format("Skill%02d", i)
-            fishRE:FireServer("Skill", { ID = skillID })
-        end)
-    end
-end
-
--- =====================================================
--- ATTACK LOGIC
--- =====================================================
-local function attack(bossFolder, bossRoot, mode)
-    -- mode: "None" (ไม่ใช้สกิล), "Boss3" (เว้น 11), "Boss4" (ครบ)
-
-    -- [ พิเศษสำหรับ Boss04: โหมด Super Skill Spam 5 วินาที ]
-    if mode == "Boss4" then
-        local startTime = tick()
-        while tick() - startTime < 5 do
-            HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
-            castSkills(false) -- ใช้ครบทุกสกิล
-            task.wait(0.05) 
-        end
-    end
-
-    -- [ ลูปโจมตีหลัก ]
-    while bossFolder and bossFolder.Parent do
-        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
-        
-        -- ส่ง Remote ยิง
-        fireRE:FireServer("Hit", {
-            fishInstance = bossFolder,
-            HitPos = bossRoot.Position,
-            toolInstance = character:FindFirstChild("Gun08") or lp.Backpack:FindFirstChild("Gun08")
-        })
-
-        -- เงื่อนไขการใช้สกิลระหว่างยิง
-        if mode == "Boss3" then
-            castSkills(true) -- ใช้ทุกสกิล ยกเว้น 11
-        elseif mode == "Boss4" then
-            castSkills(false) -- ใช้ทุกสกิล ครบ 12 สกิล
-        end
-        
-        task.wait(0.08)
-    end
-end
-
--- =====================================================
--- START EXECUTION
--- =====================================================
-
--- 1. จุดที่ 1 (Boss01/02) - ยิงธรรมดา ไม่ใช้สกิล
+-- ลำดับการรัน
 teleportLoop(CFrame.new(PREP_POINTS[1]), 2)
 local b1, r1 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, 20)
 if b1 then attack(b1, r1, "None") end
 
--- 2. จุดที่ 2 (Boss03) - ยิง + ทุกสกิล ยกเว้น Skill11
 teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 5)
 if b2 then attack(b2, r2, "Boss3") end
 
--- 3. จุดที่ 3 (Boss04) - รัวสกิล 5 วิ + ยิง + ครบทุกสกิล
 teleportLoop(CFrame.new(PREP_POINTS[3]), 2)
 local b3, r3 = findBoss(worldBoss:WaitForChild("Point3"), {"Boss04"}, 60)
 if b3 then attack(b3, r3, "Boss4") end
 
--- =====================================================
--- END OF SCRIPT
--- =====================================================
+-- จบงาน
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
-lp:Kick("Farm Finished")
+lp:Kick("Farm Finished By BabeArm")
