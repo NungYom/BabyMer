@@ -21,11 +21,11 @@ local HRP = character:WaitForChild("HumanoidRootPart")
 -- =====================================================
 local PREP_POINT_1 = Vector3.new(1291.04578, 95.697731, -366.907959)
 local PREP_POINT_2 = Vector3.new(435.460327, 96.8663254, -1033.87878)
-local PREP_POINT_3 = Vector3.new(1247.36975, 76.5539093, -569.399109) -- จุดสำหรับ Boss06
+local PREP_POINT_3 = Vector3.new(1141.59741, -1161.55103, 2600.19995) -- พิกัดใหม่สำหรับ Boss04
 
 local FIND_BOSS_12_TIME = 20
 local FIND_BOSS_3_TIME  = 5
-local FIND_BOSS_6_TIME = 60 -- เวลาในการค้นหา Boss06
+local FIND_BOSS_4_TIME = 60 -- เวลาในการค้นหา Boss04
 
 local ATTACK_DISTANCE = 4
 local ATTACK_INTERVAL = 0.08 -- ยิงถี่
@@ -65,9 +65,9 @@ local function findBoss(pointFolder, bossNames, timeout)
 end
 
 -- =====================================================
--- ATTACK BOSS (Gun06)
+-- ATTACK BOSS (Gun06) พร้อมใช้ Skill
 -- =====================================================
-local function attackBoss(pointName, bossFolder, bossRoot)
+local function attackBossWithSkill(pointName, bossFolder, bossRoot)
     local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 
     while bossFolder.Parent do
@@ -81,10 +81,23 @@ local function attackBoss(pointName, bossFolder, bossRoot)
             {
                 fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
                 HitPos = vector.create(pos.X, pos.Y, pos.Z),
-                toolInstance = character:WaitForChild("Gun08")
+                toolInstance = character:WaitForChild("Gun06")
             }
         }
         fireRemote:FireServer(unpack(args))
+
+        -- ใช้ Skill
+        for i = 1, 12 do
+            local skillId = string.format("Skill%02d", i)
+            local skillArgs = {
+                "Skill",
+                {
+                    ID = skillId
+                }
+            }
+            ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE"):FireServer(unpack(skillArgs))
+            wait(0.5)
+        end
 
         task.wait(ATTACK_INTERVAL)
     end
@@ -133,22 +146,22 @@ end
 attackBoss("Point2", boss3, root3)
 
 -- ===============================
--- PREP POINT 3 สำหรับ Boss06
+-- PREP POINT 3 สำหรับ Boss04
 -- ===============================
 teleportLoop(CFrame.new(PREP_POINT_3), 2)
 
 -- ===============================
--- Boss06
+-- Boss04
 -- ===============================
-local point5 = worldBoss:WaitForChild("Point5")
-local boss6, root6 = findBoss(point5, {"Boss06"}, FIND_BOSS_6_TIME)
+local point3 = worldBoss:WaitForChild("Point3")
+local boss4, root4 = findBoss(point3, {"Boss04"}, FIND_BOSS_4_TIME)
 
-if not boss6 then
-    lp:Kick("ไม่พบบอส Boss06")
+if not boss4 then
+    lp:Kick("ไม่พบบอส Boss04")
     return
 end
 
-attackBoss("Point5", boss6, root6)
+attackBossWithSkill("Point3", boss4, root4)
 
 -- ===============================
 -- END
