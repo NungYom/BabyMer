@@ -5,23 +5,38 @@ local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 
 -- ===============================
+-- WAIT GAME LOAD
+-- ===============================
+print("[AUTO] Waiting for game load...")
+task.wait(10) -- 🔒 รอเกมโหลดก่อน
+print("[AUTO] Game load wait done")
+
+-- ===============================
 -- SAFE CHARACTER / HRP
 -- ===============================
 local function getHRP()
     local char = lp.Character or lp.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart")
+    local hrp = char:WaitForChild("HumanoidRootPart", 10)
+    return char, hrp
 end
 
-local HRP = getHRP()
+local Character, HRP = getHRP()
+if not HRP then
+    lp:Kick("HRP not found")
+    return
+end
 
 -- ===============================
--- TELEPORT
+-- TELEPORT LOOP (ANTI SNAP BACK)
 -- ===============================
-local function teleport(pos)
-    if typeof(pos) == "Vector3" then
-        HRP.CFrame = CFrame.new(pos)
-    else
-        HRP.CFrame = pos
+local function teleportLoop(pos, duration)
+    local cf = typeof(pos) == "Vector3" and CFrame.new(pos) or pos
+    local start = tick()
+    while tick() - start < duration do
+        if HRP and HRP.Parent then
+            HRP.CFrame = cf
+        end
+        task.wait(0.05)
     end
 end
 
@@ -34,19 +49,20 @@ local function kick(reason)
 end
 
 -- ===============================
--- FIND BOSS (BLOCKING)
+-- FIND BOSS
 -- ===============================
 local function findBoss(bossNames, timeout)
     local start = tick()
     while tick() - start < timeout do
-        for _, name in ipairs(bossNames) do
-            local boss = workspace:FindFirstChild("WorldBoss")
-                and workspace.WorldBoss:FindFirstChild(name, true)
-
-            if boss and boss:IsA("Model") then
-                local root = boss:FindFirstChild("Root", true)
-                if root then
-                    return boss
+        local wb = workspace:FindFirstChild("WorldBoss")
+        if wb then
+            for _, name in ipairs(bossNames) do
+                local boss = wb:FindFirstChild(name, true)
+                if boss and boss:IsA("Model") then
+                    local root = boss:FindFirstChild("Root", true)
+                    if root then
+                        return boss, root
+                    end
                 end
             end
         end
@@ -64,20 +80,12 @@ local function waitBossDead(boss)
     end
 end
 
--- ===============================
--- ATTACK PLACEHOLDER
--- ===============================
-local function attackBoss(boss)
-    print("[AUTO] Attacking:", boss.Name)
-    -- ใส่ Gun06 ตรงนี้ภายหลัง
-end
-
 -- =====================================================
--- FLOW START (LOCKED ORDER)
+-- FLOW START
 -- =====================================================
 
 -- ===============================
--- PREP POINT 1 (ใส่พิกัดจริงของคุณ)
+-- PREP POINT 1
 -- ===============================
 local PREP_POINT_1 = Vector3.new(
     1291.04578,
@@ -86,17 +94,14 @@ local PREP_POINT_1 = Vector3.new(
 )
 
 print("[AUTO] TELEPORT → PREP POINT 1")
-teleport(PREP_POINT_1)
-
--- ❗ บังคับรอ 2 วิเต็ม ห้ามข้าม
-task.wait(2)
-print("[AUTO] PREP POINT 1 READY")
+teleportLoop(PREP_POINT_1, 2)
+print("[AUTO] PREP POINT 1 DONE")
 
 -- ===============================
--- Boss01 / Boss02 (25 วิ)
+-- Boss01 / Boss02 (20 วิ)
 -- ===============================
-print("[AUTO] SEARCHING Boss01 / Boss02 (25s)")
-local boss12 = findBoss({"Boss01", "Boss02"}, 25)
+print("[AUTO] SEARCH Boss01 / Boss02 (20s)")
+local boss12, bossRoot = findBoss({"Boss01", "Boss02"}, 20)
 
 if not boss12 then
     kick("ไม่พบบอส Boss01 / Boss02")
@@ -104,8 +109,16 @@ if not boss12 then
 end
 
 print("[AUTO] FOUND:", boss12.Name)
-attackBoss(boss12)
-waitBossDead(boss12)
+
+-- ===============================
+-- LOCK TELEPORT TO BOSS (ยังไม่ยิง)
+-- ===============================
+while boss12 and boss12.Parent do
+    if bossRoot and bossRoot.Parent then
+        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
+    end
+    task.wait(0.05)
+end
 
 print("[AUTO] Boss01 / Boss02 DEAD")
 
@@ -119,14 +132,14 @@ local PREP_POINT_2 = Vector3.new(
 )
 
 print("[AUTO] TELEPORT → PREP POINT 2")
-teleport(PREP_POINT_2)
-task.wait(2)
+teleportLoop(PREP_POINT_2, 2)
+print("[AUTO] PREP POINT 2 DONE")
 
 -- ===============================
 -- Boss03 (5 วิ)
 -- ===============================
-print("[AUTO] SEARCHING Boss03 (5s)")
-local boss3 = findBoss({"Boss03"}, 5)
+print("[AUTO] SEARCH Boss03 (5s)")
+local boss3, boss3Root = findBoss({"Boss03"}, 5)
 
 if not boss3 then
     kick("ไม่พบบอส Boss03")
@@ -134,9 +147,13 @@ if not boss3 then
 end
 
 print("[AUTO] FOUND Boss03")
-attackBoss(boss3)
-waitBossDead(boss3)
+
+while boss3 and boss3.Parent do
+    if boss3Root and boss3Root.Parent then
+        HRP.CFrame = boss3Root.CFrame * CFrame.new(0, 0, -4)
+    end
+    task.wait(0.05)
+end
 
 print("[AUTO] Boss03 DEAD")
-
 kick("จบภารกิจ")
