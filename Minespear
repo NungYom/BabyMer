@@ -43,8 +43,8 @@ local function castSkillSequence(excludeSkill11)
         
         local skillID = string.format("Skill%02d", i)
         
-        -- ส่งคำสั่งสกิล 5 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
-        for count = 1, 5 do
+        -- ส่งคำสั่งสกิล 2 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
+        for count = 1, 2 do
             fishRE:FireServer("Skill", { ID = skillID })
             task.wait(0.1) -- แก้ไขจาก 0.01 เป็น 0.1
         end
@@ -133,4 +133,4 @@ if b3 then attack(b3, r3, "Boss4") end
 -- จบการทำงาน
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
-lp:Kick("Farm Finished :D")
+lp:Kick("Farm Finished")
