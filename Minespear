@@ -133,4 +133,4 @@ if b3 then attack(b3, r3, "Boss4") end
 -- จบการทำงาน
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
-lp:Kick("Farm Finished")
+lp:Kick("Farm Finished :D")
