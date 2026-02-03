@@ -1,0 +1,136 @@
+-- =====================================================
+-- SERVICES
+-- =====================================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lp = Players.LocalPlayer
+
+-- =====================================================
+-- WAIT GAME LOAD
+-- =====================================================
+task.wait(10)
+
+-- =====================================================
+-- CHARACTER / HRP
+-- =====================================================
+local character = lp.Character or lp.CharacterAdded:Wait()
+local HRP = character:WaitForChild("HumanoidRootPart")
+
+-- =====================================================
+-- CONFIG
+-- =====================================================
+local PREP_POINT_1 = Vector3.new(1291.04578, 95.697731, -366.907959)
+local PREP_POINT_2 = Vector3.new(435.460327, 96.8663254, -1033.87878)
+
+local FIND_BOSS_12_TIME = 20
+local FIND_BOSS_3_TIME  = 5
+
+local ATTACK_DISTANCE = 4
+local ATTACK_INTERVAL = 0.08 -- ยิงถี่
+
+-- =====================================================
+-- TELEPORT LOOP
+-- =====================================================
+local function teleportLoop(cf, duration)
+    local start = tick()
+    while tick() - start < duration do
+        HRP.CFrame = cf
+        task.wait(0.05)
+    end
+end
+
+-- =====================================================
+-- FIND BOSS IN POINT (ตรงโครงสร้างจริง)
+-- =====================================================
+local function findBoss(pointFolder, bossNames, timeout)
+    local start = tick()
+    while tick() - start < timeout do
+        for _, bossName in ipairs(bossNames) do
+            local bossFolder = pointFolder:FindFirstChild(bossName)
+            if bossFolder then
+                local model = bossFolder:FindFirstChild("Model")
+                if model then
+                    local root = model:FindFirstChild("Root")
+                    if root then
+                        return bossFolder, root
+                    end
+                end
+            end
+        end
+        task.wait(0.25)
+    end
+    return nil
+end
+
+-- =====================================================
+-- ATTACK BOSS (Gun06)
+-- =====================================================
+local function attackBoss(pointName, bossFolder, bossRoot)
+    local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
+
+    while bossFolder.Parent do
+        -- teleport ติดบอส
+        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -ATTACK_DISTANCE)
+
+        -- ยิง
+        local pos = bossRoot.Position
+        local args = {
+            "Hit",
+            {
+                fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
+                HitPos = vector.create(pos.X, pos.Y, pos.Z),
+                toolInstance = character:WaitForChild("Gun08")
+            }
+        }
+        fireRemote:FireServer(unpack(args))
+
+        task.wait(ATTACK_INTERVAL)
+    end
+end
+
+-- =====================================================
+-- START FLOW
+-- =====================================================
+
+local worldBoss = workspace:WaitForChild("WorldBoss")
+
+-- ===============================
+-- PREP POINT 1
+-- ===============================
+teleportLoop(CFrame.new(PREP_POINT_1), 2)
+
+-- ===============================
+-- Boss01 / Boss02
+-- ===============================
+local point1 = worldBoss:WaitForChild("Point1")
+local boss12, root12 = findBoss(point1, {"Boss01", "Boss02"}, FIND_BOSS_12_TIME)
+
+if not boss12 then
+    lp:Kick("ไม่พบบอส Boss01 / Boss02")
+    return
+end
+
+attackBoss("Point1", boss12, root12)
+
+-- ===============================
+-- PREP POINT 2
+-- ===============================
+teleportLoop(CFrame.new(PREP_POINT_2), 2)
+
+-- ===============================
+-- Boss03
+-- ===============================
+local point2 = worldBoss:WaitForChild("Point2")
+local boss3, root3 = findBoss(point2, {"Boss03"}, FIND_BOSS_3_TIME)
+
+if not boss3 then
+    lp:Kick("ไม่พบบอส Boss03")
+    return
+end
+
+attackBoss("Point2", boss3, root3)
+
+-- ===============================
+-- END
+-- ===============================
+lp:Kick("Boss cleared")
