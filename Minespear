@@ -46,7 +46,7 @@ local function castSkillSequence(excludeSkill11)
         -- ส่งคำสั่งสกิล 10 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
         for count = 1, 10 do
             fishRE:FireServer("Skill", { ID = skillID })
-            task.wait(0.1) -- แก้ไขจาก 0.01 เป็น 0.1
+            task.wait(0.3) -- แก้ไขจาก 0.01 เป็น 0.3
         end
     end
 end
