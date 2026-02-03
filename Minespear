@@ -79,7 +79,7 @@ local function attackBoss(pointName, bossFolder, bossRoot)
             {
                 fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
                 HitPos = vector.create(pos.X, pos.Y, pos.Z),
-                toolInstance = character:WaitForChild("Gun06")
+                toolInstance = character:WaitForChild("Gun08")
             }
         }
         fireRemote:FireServer(unpack(args))
