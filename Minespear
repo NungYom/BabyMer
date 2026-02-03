@@ -1,67 +1,58 @@
--- ===============================
+-- =====================================================
 -- SERVICES
--- ===============================
+-- =====================================================
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
--- ===============================
+-- =====================================================
 -- WAIT GAME LOAD
--- ===============================
-print("[AUTO] Waiting for game load...")
-task.wait(10) -- 🔒 รอเกมโหลดก่อน
-print("[AUTO] Game load wait done")
+-- =====================================================
+task.wait(10)
 
--- ===============================
--- SAFE CHARACTER / HRP
--- ===============================
-local function getHRP()
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart", 10)
-    return char, hrp
-end
+-- =====================================================
+-- CHARACTER / HRP
+-- =====================================================
+local character = lp.Character or lp.CharacterAdded:Wait()
+local HRP = character:WaitForChild("HumanoidRootPart")
 
-local Character, HRP = getHRP()
-if not HRP then
-    lp:Kick("HRP not found")
-    return
-end
+-- =====================================================
+-- CONFIG
+-- =====================================================
+local PREP_POINT_1 = Vector3.new(1291.04578, 95.697731, -366.907959)
+local PREP_POINT_2 = Vector3.new(435.460327, 96.8663254, -1033.87878)
 
--- ===============================
--- TELEPORT LOOP (ANTI SNAP BACK)
--- ===============================
-local function teleportLoop(pos, duration)
-    local cf = typeof(pos) == "Vector3" and CFrame.new(pos) or pos
+local FIND_BOSS_12_TIME = 20
+local FIND_BOSS_3_TIME  = 5
+
+local ATTACK_DISTANCE = 4
+local ATTACK_INTERVAL = 0.08 -- ยิงถี่
+
+-- =====================================================
+-- TELEPORT LOOP
+-- =====================================================
+local function teleportLoop(cf, duration)
     local start = tick()
     while tick() - start < duration do
-        if HRP and HRP.Parent then
-            HRP.CFrame = cf
-        end
+        HRP.CFrame = cf
         task.wait(0.05)
     end
 end
 
--- ===============================
--- KICK
--- ===============================
-local function kick(reason)
-    task.wait(0.5)
-    lp:Kick(reason or "Auto Script End")
-end
-
--- ===============================
--- FIND BOSS
--- ===============================
-local function findBoss(bossNames, timeout)
+-- =====================================================
+-- FIND BOSS IN POINT (ตรงโครงสร้างจริง)
+-- =====================================================
+local function findBoss(pointFolder, bossNames, timeout)
     local start = tick()
     while tick() - start < timeout do
-        local wb = workspace:FindFirstChild("WorldBoss")
-        if wb then
-            for _, name in ipairs(bossNames) do
-                local boss = wb:FindFirstChild(name, true)
-                if boss and boss:IsA("Model") then
-                    local root = boss:FindFirstChild("Root", true)
+        for _, bossName in ipairs(bossNames) do
+            local bossFolder = pointFolder:FindFirstChild(bossName)
+            if bossFolder then
+                local model = bossFolder:FindFirstChild("Model")
+                if model then
+                    local root = model:FindFirstChild("Root")
                     if root then
-                        return boss, root
+                        return bossFolder, root
                     end
                 end
             end
@@ -71,89 +62,75 @@ local function findBoss(bossNames, timeout)
     return nil
 end
 
--- ===============================
--- WAIT BOSS DEAD
--- ===============================
-local function waitBossDead(boss)
-    while boss and boss.Parent do
-        task.wait(0.5)
+-- =====================================================
+-- ATTACK BOSS (Gun06)
+-- =====================================================
+local function attackBoss(pointName, bossFolder, bossRoot)
+    local fireRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
+
+    while bossFolder.Parent do
+        -- teleport ติดบอส
+        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -ATTACK_DISTANCE)
+
+        -- ยิง
+        local pos = bossRoot.Position
+        local args = {
+            "Hit",
+            {
+                fishInstance = workspace.WorldBoss[pointName][bossFolder.Name],
+                HitPos = vector.create(pos.X, pos.Y, pos.Z),
+                toolInstance = character:WaitForChild("Gun06")
+            }
+        }
+        fireRemote:FireServer(unpack(args))
+
+        task.wait(ATTACK_INTERVAL)
     end
 end
 
 -- =====================================================
--- FLOW START
+-- START FLOW
 -- =====================================================
+
+local worldBoss = workspace:WaitForChild("WorldBoss")
 
 -- ===============================
 -- PREP POINT 1
 -- ===============================
-local PREP_POINT_1 = Vector3.new(
-    1291.04578,
-    95.697731,
-    -366.907959
-)
-
-print("[AUTO] TELEPORT → PREP POINT 1")
-teleportLoop(PREP_POINT_1, 2)
-print("[AUTO] PREP POINT 1 DONE")
+teleportLoop(CFrame.new(PREP_POINT_1), 2)
 
 -- ===============================
--- Boss01 / Boss02 (20 วิ)
+-- Boss01 / Boss02
 -- ===============================
-print("[AUTO] SEARCH Boss01 / Boss02 (20s)")
-local boss12, bossRoot = findBoss({"Boss01", "Boss02"}, 20)
+local point1 = worldBoss:WaitForChild("Point1")
+local boss12, root12 = findBoss(point1, {"Boss01", "Boss02"}, FIND_BOSS_12_TIME)
 
 if not boss12 then
-    kick("ไม่พบบอส Boss01 / Boss02")
+    lp:Kick("ไม่พบบอส Boss01 / Boss02")
     return
 end
 
-print("[AUTO] FOUND:", boss12.Name)
-
--- ===============================
--- LOCK TELEPORT TO BOSS (ยังไม่ยิง)
--- ===============================
-while boss12 and boss12.Parent do
-    if bossRoot and bossRoot.Parent then
-        HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
-    end
-    task.wait(0.05)
-end
-
-print("[AUTO] Boss01 / Boss02 DEAD")
+attackBoss("Point1", boss12, root12)
 
 -- ===============================
 -- PREP POINT 2
 -- ===============================
-local PREP_POINT_2 = Vector3.new(
-    435.460327,
-    96.8663254,
-    -1033.87878
-)
-
-print("[AUTO] TELEPORT → PREP POINT 2")
-teleportLoop(PREP_POINT_2, 2)
-print("[AUTO] PREP POINT 2 DONE")
+teleportLoop(CFrame.new(PREP_POINT_2), 2)
 
 -- ===============================
--- Boss03 (5 วิ)
+-- Boss03
 -- ===============================
-print("[AUTO] SEARCH Boss03 (5s)")
-local boss3, boss3Root = findBoss({"Boss03"}, 5)
+local point2 = worldBoss:WaitForChild("Point2")
+local boss3, root3 = findBoss(point2, {"Boss03"}, FIND_BOSS_3_TIME)
 
 if not boss3 then
-    kick("ไม่พบบอส Boss03")
+    lp:Kick("ไม่พบบอส Boss03")
     return
 end
 
-print("[AUTO] FOUND Boss03")
+attackBoss("Point2", boss3, root3)
 
-while boss3 and boss3.Parent do
-    if boss3Root and boss3Root.Parent then
-        HRP.CFrame = boss3Root.CFrame * CFrame.new(0, 0, -4)
-    end
-    task.wait(0.05)
-end
-
-print("[AUTO] Boss03 DEAD")
-kick("จบภารกิจ")
+-- ===============================
+-- END
+-- ===============================
+lp:Kick("Boss cleared")
