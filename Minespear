@@ -7,7 +7,6 @@ local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 local worldBoss = workspace:WaitForChild("WorldBoss")
 
--- รอโหลดเกมและทรัพยากร
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(5)
 
@@ -17,15 +16,13 @@ local fireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 local fishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
 
 -- =====================================================
--- SYSTEM: NOCLIP (ทำงานตลอดเวลาเพื่อวาร์ปทะลุทุกอย่าง)
+-- SYSTEM: NOCLIP (ทำงานตลอดเวลา)
 -- =====================================================
 local noclipConnection
 noclipConnection = RunService.Stepped:Connect(function()
     if character then
         for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end
 end)
@@ -34,12 +31,11 @@ end)
 -- CONFIGURATION
 -- =====================================================
 local PREP_POINTS = {
-    Vector3.new(1291.04578, 95.697731, -366.907959), -- จุด 1
-    Vector3.new(435.460327, 96.8663254, -1033.87878), -- จุด 2
-    Vector3.new(1141.59741, -1161.55103, 2600.19995)  -- จุด 3 (Boss04)
+    Vector3.new(1291.04578, 95.697731, -366.907959),
+    Vector3.new(435.460327, 96.8663254, -1033.87878),
+    Vector3.new(1141.59741, -1161.55103, 2600.19995)
 }
 
--- ฟังก์ชันวาร์ปไปจุดเตรียมตัว
 local function teleportLoop(cf, duration)
     local start = tick()
     while tick() - start < duration do
@@ -48,7 +44,6 @@ local function teleportLoop(cf, duration)
     end
 end
 
--- ฟังก์ชันค้นหาบอส
 local function findBoss(pointFolder, bossNames, timeout)
     local start = tick()
     while tick() - start < timeout do
@@ -63,43 +58,47 @@ local function findBoss(pointFolder, bossNames, timeout)
 end
 
 -- =====================================================
+-- SKILL SYSTEM (ปรับปรุงใหม่เพื่อความเร็วและแม่นยำ)
+-- =====================================================
+local function castAllSkills()
+    -- ใช้ task.spawn เพื่อให้ทุกสกิลถูกส่งออกไปเกือบจะพร้อมกันโดยไม่รอคิวกันเอง
+    for i = 1, 12 do
+        task.spawn(function()
+            local skillID = string.format("Skill%02d", i)
+            fishRE:FireServer("Skill", { ID = skillID })
+        end)
+    end
+end
+
+-- =====================================================
 -- ATTACK LOGIC
 -- =====================================================
 local function attack(bossFolder, bossRoot, isBoss4)
     -- [ พิเศษสำหรับ Boss04: โหมด Super Skill Spam 5 วินาที ]
     if isBoss4 then
         local startTime = tick()
+        -- วนลูปการรันสกิลแบบ Frequency สูง (ส่งทุกๆ 0.05 วินาที)
         while tick() - startTime < 5 do
-            HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4) -- วาร์ปติดตัว
-            -- วนลูปส่งสกิลซ้ำ 5 รอบในจังหวะเดียว เพื่อให้มั่นใจว่ารัวที่สุด
-            for repeatSpam = 1, 5 do
-                for i = 1, 12 do 
-                    fishRE:FireServer("Skill", { ID = string.format("Skill%02d", i) }) 
-                end
-            end
-            task.wait(0.02) -- เร่งความเร็วการส่งข้อมูลสูงสุด
+            HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
+            castAllSkills() -- เรียกใช้ฟังก์ชันสกิลแบบแยก Thread
+            task.wait(0.05) 
         end
     end
 
     -- [ ลูปโจมตีปกติและยิง ]
     while bossFolder and bossFolder.Parent do
-        -- วาร์ปติดตามบอสลอดเวลา
         HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
         
-        -- ส่ง Remote ยิง (Hit)
+        -- ส่ง Remote ยิง
         fireRE:FireServer("Hit", {
             fishInstance = bossFolder,
             HitPos = bossRoot.Position,
             toolInstance = character:FindFirstChild("Gun08") or lp.Backpack:FindFirstChild("Gun08")
         })
 
-        -- ถ้าเป็น Boss04 ให้ยิงไปรัวสกิลไปแบบต่อเนื่อง
+        -- ถ้าเป็น Boss04 ให้กดสกิลรัวๆ ไปพร้อมกับการยิง
         if isBoss4 then
-            for repeatSpam = 1, 2 do
-                for i = 1, 12 do 
-                    fishRE:FireServer("Skill", { ID = string.format("Skill%02d", i) }) 
-                end
-            end
+            castAllSkills()
         end
         
         task.wait(0.08)
@@ -107,26 +106,24 @@ local function attack(bossFolder, bossRoot, isBoss4)
 end
 
 -- =====================================================
--- START EXECUTION (ลำดับการรัน)
+-- START EXECUTION
 -- =====================================================
 
--- --- ลุยจุดที่ 1 (Boss01/02) ---
+-- จุดที่ 1 (Boss01/02)
 teleportLoop(CFrame.new(PREP_POINTS[1]), 2)
 local b1, r1 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, 20)
 if b1 then attack(b1, r1, false) end
 
--- --- ลุยจุดที่ 2 (Boss03) ---
+-- จุดที่ 2 (Boss03)
 teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 5)
 if b2 then attack(b2, r2, false) end
 
--- --- ลุยจุดที่ 3 (Boss04) ---
+-- จุดที่ 3 (Boss04)
 teleportLoop(CFrame.new(PREP_POINTS[3]), 2)
 local b3, r3 = findBoss(worldBoss:WaitForChild("Point3"), {"Boss04"}, 60)
 if b3 then attack(b3, r3, true) end
 
--- =====================================================
--- END OF SCRIPT
--- =====================================================
-if noclipConnection then noclipConnection:Disconnect() end -- ปิด Noclip
-lp:Kick("Farm Finished: Boss 01-04 cleared.")
+-- จบงาน
+if noclipConnection then noclipConnection:Disconnect() end
+lp:Kick("Farm Finished")
