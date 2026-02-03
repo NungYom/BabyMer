@@ -43,8 +43,8 @@ local function castSkillSequence(excludeSkill11)
         
         local skillID = string.format("Skill%02d", i)
         
-        -- ส่งคำสั่งสกิล 10 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
-        for count = 1, 10 do
+        -- ส่งคำสั่งสกิล 5 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
+        for count = 1, 5 do
             fishRE:FireServer("Skill", { ID = skillID })
             task.wait(0.1) -- แก้ไขจาก 0.01 เป็น 0.1
         end
