@@ -34,13 +34,15 @@ local function kick(reason)
 end
 
 -- ===============================
--- FIND BOSS
+-- FIND BOSS (BLOCKING)
 -- ===============================
 local function findBoss(bossNames, timeout)
     local start = tick()
-    while tick() - start <= timeout do
+    while tick() - start < timeout do
         for _, name in ipairs(bossNames) do
-            local boss = workspace.WorldBoss:FindFirstChild(name, true)
+            local boss = workspace:FindFirstChild("WorldBoss")
+                and workspace.WorldBoss:FindFirstChild(name, true)
+
             if boss and boss:IsA("Model") then
                 local root = boss:FindFirstChild("Root", true)
                 if root then
@@ -48,7 +50,7 @@ local function findBoss(bossNames, timeout)
                 end
             end
         end
-        task.wait(0.2)
+        task.wait(0.25)
     end
     return nil
 end
@@ -63,42 +65,52 @@ local function waitBossDead(boss)
 end
 
 -- ===============================
--- ยิงบอส (แทนด้วย Gun06 ของคุณ)
+-- ATTACK PLACEHOLDER
 -- ===============================
 local function attackBoss(boss)
     print("[AUTO] Attacking:", boss.Name)
-    -- <<<<<< ใส่โค้ด Gun06 ตรงนี้ >>>>>>
+    -- ใส่ Gun06 ตรงนี้ภายหลัง
 end
 
 -- =====================================================
--- FLOW START
+-- FLOW START (LOCKED ORDER)
 -- =====================================================
 
--- จุดเตรียมตัวแรก (ใส่พิกัดจริงของคุณ)
-local PREP_POINT_1 = Vector3.new(100, 50, -200)
+-- ===============================
+-- PREP POINT 1 (ใส่พิกัดจริงของคุณ)
+-- ===============================
+local PREP_POINT_1 = Vector3.new(
+    1291.04578,
+    95.697731,
+    -366.907959
+)
 
-print("[AUTO] Go Prep Point 1")
+print("[AUTO] TELEPORT → PREP POINT 1")
 teleport(PREP_POINT_1)
+
+-- ❗ บังคับรอ 2 วิเต็ม ห้ามข้าม
 task.wait(2)
+print("[AUTO] PREP POINT 1 READY")
 
 -- ===============================
--- Boss01 / Boss02 (10 วิ)
+-- Boss01 / Boss02 (25 วิ)
 -- ===============================
-print("[AUTO] Searching Boss01 / Boss02")
-local boss12 = findBoss({"Boss01", "Boss02"}, 10)
+print("[AUTO] SEARCHING Boss01 / Boss02 (25s)")
+local boss12 = findBoss({"Boss01", "Boss02"}, 25)
 
 if not boss12 then
     kick("ไม่พบบอส Boss01 / Boss02")
     return
 end
 
+print("[AUTO] FOUND:", boss12.Name)
 attackBoss(boss12)
 waitBossDead(boss12)
 
-print("[AUTO] Boss01/02 Dead")
+print("[AUTO] Boss01 / Boss02 DEAD")
 
 -- ===============================
--- จุดเตรียมตัวที่สอง
+-- PREP POINT 2
 -- ===============================
 local PREP_POINT_2 = Vector3.new(
     435.460327,
@@ -106,14 +118,14 @@ local PREP_POINT_2 = Vector3.new(
     -1033.87878
 )
 
-print("[AUTO] Go Prep Point 2")
+print("[AUTO] TELEPORT → PREP POINT 2")
 teleport(PREP_POINT_2)
 task.wait(2)
 
 -- ===============================
 -- Boss03 (5 วิ)
 -- ===============================
-print("[AUTO] Searching Boss03")
+print("[AUTO] SEARCHING Boss03 (5s)")
 local boss3 = findBoss({"Boss03"}, 5)
 
 if not boss3 then
@@ -121,9 +133,10 @@ if not boss3 then
     return
 end
 
+print("[AUTO] FOUND Boss03")
 attackBoss(boss3)
 waitBossDead(boss3)
 
-print("[AUTO] Boss03 Dead")
+print("[AUTO] Boss03 DEAD")
 
 kick("จบภารกิจ")
