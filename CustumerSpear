@@ -43,7 +43,7 @@ local function castSkillSequence(excludeSkill11)
         
         local skillID = string.format("Skill%02d", i)
         
-        -- ส่งคำสั่งสกิล 2 ครั้ง โดยเว้นระยะห่าง 0.1 วินาทีตามสั่ง
+        -- ส่งคำสั่งสกิล 2 ครั้ง โดยเว้นระยะห่าง 0.1 วินาที
         for count = 1, 2 do
             fishRE:FireServer("Skill", { ID = skillID })
             task.wait(0.1) 
@@ -55,33 +55,21 @@ end
 -- ATTACK LOGIC
 -- ==========================================
 local function attack(bossFolder, bossRoot, mode)
-    -- [ ช่วงเตรียมตัว Boss04: รัวสกิลนำก่อน 5 วินาที ]
-    if mode == "Boss4" then
-        local startTime = tick()
-        while tick() - startTime < 5 do
-            HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
-            castSkillSequence(false) -- รันครบทุกสกิล
-        end
-    end
-
     -- [ ลูปโจมตีหลัก ]
     while bossFolder and bossFolder.Parent do
         -- วาร์ปตามบอส
         HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
         
-        -- ส่งรีโมทการยิง (Hit)
+        -- ส่งรีโมทการยิง (Hit) โดยใช้ Harpoon23
         fireRE:FireServer("Hit", {
             fishInstance = bossFolder,
             HitPos = bossRoot.Position,
-            -- เปลี่ยนจาก Gun08 เป็น Harpoon23 เรียบร้อยแล้ว
             toolInstance = character:FindFirstChild("Harpoon23") or lp.Backpack:FindFirstChild("Harpoon23")
         })
 
-        -- จัดการสกิลตามเงื่อนไข (ใช้ task.spawn เพื่อไม่ให้การรอกดสกิลไปหน่วงการวาร์ป)
+        -- จัดการสกิลตามเงื่อนไข
         if mode == "Boss3" then
             task.spawn(castSkillSequence, true)
-        elseif mode == "Boss4" then
-            task.spawn(castSkillSequence, false)
         end
         
         task.wait(0.08)
@@ -89,12 +77,11 @@ local function attack(bossFolder, bossRoot, mode)
 end
 
 -- ==========================================
--- MAIN FLOW: ลำดับการทำงาน
+-- MAIN FLOW: ลำดับการทำงาน (เหลือแค่ Boss 1-3)
 -- ==========================================
 local PREP_POINTS = {
     Vector3.new(1291.04578, 95.697731, -366.907959), -- จุด 1
-    Vector3.new(435.460327, 96.8663254, -1033.87878), -- จุด 2
-    Vector3.new(1141.59741, -1161.55103, 2600.19995)  -- จุด 3 (Boss04)
+    Vector3.new(435.460327, 96.8663254, -1033.87878)  -- จุด 2
 }
 
 local function teleportLoop(cf, duration)
@@ -118,20 +105,17 @@ local function findBoss(pointFolder, bossNames, timeout)
     return nil, nil
 end
 
--- --- ทำงานทีละจุด ---
+--- ทำงานจุดที่ 1 (Boss01, Boss02) ---
 teleportLoop(CFrame.new(PREP_POINTS[1]), 2)
 local b1, r1 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, 20)
 if b1 then attack(b1, r1, "None") end
 
+--- ทำงานจุดที่ 2 (Boss03) ---
 teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 5)
 if b2 then attack(b2, r2, "Boss3") end
 
-teleportLoop(CFrame.new(PREP_POINTS[3]), 2)
-local b3, r3 = findBoss(worldBoss:WaitForChild("Point3"), {"Boss04"}, 60)
-if b3 then attack(b3, r3, "Boss4") end
-
--- จบการทำงาน
+-- จบการทำงาน (ลบระบบช่วยเล่นและออกจากเกม)
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
-lp:Kick("Farm Finished")
+lp:Kick("Farm Boss 1-3 Finished")
