@@ -1,0 +1,136 @@
+--// Services
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+--// Remote
+local SkillRE = RS:WaitForChild("Remotes"):WaitForChild("SkillRE")
+
+--// ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "SkillGachaGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+--// Main Frame (เล็กลง 30% + มุมขวาล่าง)
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.fromScale(0.196, 0.294) -- ลดจากเดิม ~30%
+main.AnchorPoint = Vector2.new(1,1)
+main.Position = UDim2.fromScale(0.98, 0.97)
+main.BackgroundColor3 = Color3.fromRGB(30,30,35)
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,10)
+
+--// Title
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.fromScale(1,0.15)
+title.BackgroundTransparency = 1
+title.Text = "🎲 Skill Gacha"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.new(1,1,1)
+
+--------------------------------------------------
+-- SLIDER FUNCTION
+--------------------------------------------------
+local function createSlider(parent, yPos)
+	local holder = Instance.new("Frame", parent)
+	holder.Size = UDim2.fromScale(0.9,0.08)
+	holder.Position = UDim2.fromScale(0.05,yPos)
+	holder.BackgroundColor3 = Color3.fromRGB(50,50,55)
+	holder.BorderSizePixel = 0
+	Instance.new("UICorner", holder).CornerRadius = UDim.new(1,0)
+
+	local knob = Instance.new("Frame", holder)
+	knob.Size = UDim2.fromScale(0.06,1)
+	knob.Position = UDim2.fromScale(0.47,0)
+	knob.BackgroundColor3 = Color3.fromRGB(220,220,220)
+	Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+
+	local value = Instance.new("TextLabel", parent)
+	value.Size = UDim2.fromScale(0.35,0.07)
+	value.Position = UDim2.fromScale(0.325,yPos + 0.085)
+	value.BackgroundTransparency = 1
+	value.Font = Enum.Font.Gotham
+	value.TextSize = 12
+	value.TextColor3 = Color3.new(1,1,1)
+
+	local dragging = false
+	local count = 50
+	value.Text = "Count : 50"
+
+	local function update(x)
+		local pos = math.clamp(x - holder.AbsolutePosition.X, 0, holder.AbsoluteSize.X)
+		local percent = pos / holder.AbsoluteSize.X
+		count = math.clamp(math.floor(percent * 100), 1, 100)
+		knob.Position = UDim2.fromScale(percent - 0.03, 0)
+		value.Text = "Count : "..count
+	end
+
+	holder.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			update(i.Position.X)
+		end
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(i)
+		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+			update(i.Position.X)
+		end
+	end)
+
+	game:GetService("UserInputService").InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	return function()
+		return count
+	end
+end
+
+--------------------------------------------------
+-- COINS GACHA
+--------------------------------------------------
+local coinsBtn = Instance.new("TextButton", main)
+coinsBtn.Size = UDim2.fromScale(0.9,0.1)
+coinsBtn.Position = UDim2.fromScale(0.05,0.18)
+coinsBtn.Text = "สุ่มด้วยเงิน"
+coinsBtn.Font = Enum.Font.GothamBold
+coinsBtn.TextSize = 14
+coinsBtn.TextColor3 = Color3.fromRGB(80,45,0)
+coinsBtn.BackgroundColor3 = Color3.fromRGB(255,200,70)
+Instance.new("UICorner", coinsBtn).CornerRadius = UDim.new(0,8)
+
+local getCoinCount = createSlider(main, 0.30)
+
+coinsBtn.MouseButton1Click:Connect(function()
+	SkillRE:FireServer("SkillGacha", {
+		Key = "Coins",
+		Count = getCoinCount()
+	})
+end)
+
+--------------------------------------------------
+-- GEMS GACHA
+--------------------------------------------------
+local gemsBtn = Instance.new("TextButton", main)
+gemsBtn.Size = UDim2.fromScale(0.9,0.1)
+gemsBtn.Position = UDim2.fromScale(0.05,0.50)
+gemsBtn.Text = "สุ่มด้วยเพชร"
+gemsBtn.Font = Enum.Font.GothamBold
+gemsBtn.TextSize = 14
+gemsBtn.TextColor3 = Color3.new(1,1,1)
+gemsBtn.BackgroundColor3 = Color3.fromRGB(145,120,255)
+Instance.new("UICorner", gemsBtn).CornerRadius = UDim.new(0,8)
+
+local getGemCount = createSlider(main, 0.62)
+
+gemsBtn.MouseButton1Click:Connect(function()
+	SkillRE:FireServer("SkillGacha", {
+		Key = "Gems",
+		Count = getGemCount()
+	})
+end)
