@@ -1,3 +1,6 @@
+-- ==========================================
+-- SERVICES / PLAYER
+-- ==========================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -15,10 +18,9 @@ local fireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 local fishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
 
 -- ==========================================
--- AUTO WEAPON DETECT
+-- AUTO WEAPON DETECT (Gun / Harpoon)
 -- ==========================================
 local function getWeapon()
-    -- เช็คใน Character ก่อน
     for _, v in ipairs(character:GetChildren()) do
         if v:IsA("Tool") and (
             v.Name:match("^Gun%d+$") or
@@ -28,7 +30,6 @@ local function getWeapon()
         end
     end
 
-    -- ถ้าไม่ถือ → เช็ค Backpack
     for _, v in ipairs(lp.Backpack:GetChildren()) do
         if v:IsA("Tool") and (
             v.Name:match("^Gun%d+$") or
@@ -64,7 +65,7 @@ noclipConnection = RunService.Stepped:Connect(function()
 end)
 
 -- ==========================================
--- SKILL SYSTEM (LOCK)
+-- SKILL SYSTEM (NON-BLOCKING)
 -- ==========================================
 local skillBusy = false
 
@@ -86,12 +87,14 @@ local function castSkillSequence(excludeSkill11)
 end
 
 -- ==========================================
--- ATTACK LOGIC (Boss01–Boss03)
+-- ATTACK LOGIC (ยิงทุก 0.3 วิ)
 -- ==========================================
 local function attack(bossFolder, bossRoot, mode)
     while bossFolder and bossFolder.Parent do
+        -- วาร์ปตามบอส (ไม่รออะไร)
         HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
 
+        -- ยิง
         local weapon = getWeapon()
         if weapon then
             fireRE:FireServer("Hit", {
@@ -101,13 +104,14 @@ local function attack(bossFolder, bossRoot, mode)
             })
         end
 
+        -- สกิลรันเบื้องหลัง
         if mode == "Boss3" then
-            castSkillSequence(true) -- ข้าม Skill11
+            task.spawn(castSkillSequence, true)  -- ข้าม Skill11
         else
-            castSkillSequence(false)
+            task.spawn(castSkillSequence, false)
         end
 
-        task.wait(0.12)
+        task.wait(0.3) -- <<< ความเร็วการยิงที่ต้องการ
     end
 end
 
@@ -132,8 +136,10 @@ local function findBoss(pointFolder, bossNames, timeout)
     while tick() - start < timeout do
         for _, name in ipairs(bossNames) do
             local folder = pointFolder:FindFirstChild(name)
-            local root = folder and folder:FindFirstChild("Model")
+            local root = folder
+                and folder:FindFirstChild("Model")
                 and folder.Model:FindFirstChild("Root")
+
             if root then
                 return folder, root
             end
@@ -153,8 +159,12 @@ teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 10)
 if b2 then attack(b2, r2, "Boss3") end
 
+-- ==========================================
 -- CLEANUP
+-- ==========================================
 if noclipConnection then noclipConnection:Disconnect() end
-if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
+if HRP:FindFirstChild("FloatForce") then
+    HRP.FloatForce:Destroy()
+end
 
-lp:Kick("Farm Finished")
+lp:Kick("Farm Finished :D")
