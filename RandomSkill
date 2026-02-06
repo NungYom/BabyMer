@@ -128,7 +128,7 @@ local function createSlider(yPos, defaultValue, onChange)
 end
 
 --==================================================
--- COIN GACHA
+-- COIN / GEM GACHA
 --==================================================
 local coinBtn = button("สุ่มด้วยเงิน", UDim2.fromScale(0.05,0.05), Color3.fromRGB(255,200,70))
 local coinLabel = label("Count : 50", UDim2.fromScale(0.05,0.11))
@@ -141,9 +141,6 @@ coinBtn.MouseButton1Click:Connect(function()
 	SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount})
 end)
 
---==================================================
--- GEM GACHA
---==================================================
 local gemBtn = button("สุ่มด้วยเพชร", UDim2.fromScale(0.05,0.21), Color3.fromRGB(160,130,255))
 local gemLabel = label("Count : 50", UDim2.fromScale(0.05,0.27))
 createSlider(0.32,50,function(v)
@@ -236,6 +233,9 @@ skillBtn.MouseButton1Click:Connect(function()
 	skillBtn.BackgroundColor3 = autoSkill and Color3.fromRGB(90,140,150) or Color3.fromRGB(120,90,150)
 end)
 
+--==================================================
+-- WEAPON / FISH
+--==================================================
 local function getWeapon()
 	for _,v in ipairs(character:GetChildren()) do
 		if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
@@ -259,17 +259,34 @@ local function findNearestFish()
 	return nearest
 end
 
+--==================================================
+-- AUTO SKILL LOGIC (FIXED)
+--==================================================
 local function castSkill()
 	if skillBusy then return end
-	skillBusy=true
-	for i=1,12 do
+	skillBusy = true
+
+	for i = 1, 15 do
 		if not autoSkill then break end
 		FishRE:FireServer("Skill",{ID=string.format("Skill%02d",i)})
-		task.wait(0.1)
+		task.wait(0.2) -- ~3 วิครบทุกสกิล
 	end
-	skillBusy=false
+
+	skillBusy = false
 end
 
+task.spawn(function()
+	while true do
+		if autoSkill then
+			castSkill()
+		end
+		task.wait(0.1)
+	end
+end)
+
+--==================================================
+-- AUTO ATTACK LOOP
+--==================================================
 task.spawn(function()
 	while true do
 		if autoAttack then
@@ -284,7 +301,6 @@ task.spawn(function()
 						toolInstance = weapon
 					})
 				end
-				if autoSkill then task.spawn(castSkill) end
 			end
 		end
 		task.wait(0.3)
