@@ -39,9 +39,13 @@ end
 local noclipConnection
 noclipConnection = RunService.Stepped:Connect(function()
     if not character or not HRP then return end
+
     for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
     end
+
     if not HRP:FindFirstChild("FloatForce") then
         local bv = Instance.new("BodyVelocity")
         bv.Name = "FloatForce"
@@ -52,12 +56,14 @@ noclipConnection = RunService.Stepped:Connect(function()
 end)
 
 -- ==========================================
--- SKILL SYSTEM
+-- SKILL SYSTEM (NON-BLOCKING)
 -- ==========================================
 local skillBusy = false
+
 local function castSkillSequence(excludeSkill11)
     if skillBusy then return end
     skillBusy = true
+
     for i = 1, 12 do
         if excludeSkill11 and i == 11 then continue end
         local skillID = string.format("Skill%02d", i)
@@ -66,6 +72,7 @@ local function castSkillSequence(excludeSkill11)
             task.wait(0.1)
         end
     end
+
     skillBusy = false
 end
 
@@ -117,8 +124,10 @@ local function findBoss(pointFolder, bossNames, timeout)
     while tick() - start < timeout do
         for _, name in ipairs(bossNames) do
             local folder = pointFolder:FindFirstChild(name)
-            local root = folder and folder:FindFirstChild("Model")
+            local root = folder
+                and folder:FindFirstChild("Model")
                 and folder.Model:FindFirstChild("Root")
+
             if root then
                 return folder, root
             end
@@ -130,12 +139,13 @@ end
 -- ==========================================
 -- MAIN FLOW
 -- ==========================================
--- Point1
+
+-- Point1 (Boss01 / Boss02)
 teleportLoop(CFrame.new(PREP_POINTS[1]), 2)
 local b1, r1 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, 20)
 if b1 then attack(b1, r1, "Normal") end
 
--- Point2
+-- Point2 (Boss03)
 teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 10)
 if b2 then attack(b2, r2, "Boss3") end
@@ -146,12 +156,17 @@ local b3, r3 = findBoss(worldBoss:WaitForChild("Point6"), {"Boss06", "Boss07"}, 
 
 if b3 then
     attack(b3, r3, "Normal")
+
+    -- รอให้บอสหายจริง
+    repeat task.wait(0.2) until not b3.Parent
+
+    lp:Kick("Boss06 defeated - Farm Finished")
 else
     lp:Kick("Boss06 not found (20s timeout)")
 end
 
 -- ==========================================
--- CLEANUP
+-- CLEANUP (เผื่อกรณีพิเศษ)
 -- ==========================================
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then HRP.FloatForce:Destroy() end
