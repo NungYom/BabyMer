@@ -1,79 +1,94 @@
 --==================================================
--- SERVICES
+-- SAFE GUI BOOTSTRAP (GUI MUST SHOW)
 --==================================================
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
---==================================================
--- REMOTES
---==================================================
-local SkillRE = RS:WaitForChild("Remotes"):WaitForChild("SkillRE")
-local ToolRE = RS:WaitForChild("Remotes"):WaitForChild("ToolRE")
-local SendFishRF = RS:WaitForChild("Remotes"):WaitForChild("SendFishRF")
+-- ลบของเก่าถ้ามี
+pcall(function()
+	PlayerGui:FindFirstChild("SkillGachaGUI"):Destroy()
+end)
 
---==================================================
--- GUI
---==================================================
+-- ScreenGui
 local gui = Instance.new("ScreenGui")
 gui.Name = "SkillGachaGUI"
 gui.ResetOnSpawn = false
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = PlayerGui
 
-local main = Instance.new("Frame", gui)
+-- Main Frame
+local main = Instance.new("Frame")
+main.Parent = gui
+main.Name = "Main"
 main.Size = UDim2.fromScale(0.196, 0.294)
 main.AnchorPoint = Vector2.new(1,1)
 main.Position = UDim2.fromScale(0.98,0.97)
 main.BackgroundColor3 = Color3.fromRGB(30,30,35)
 main.BorderSizePixel = 0
+main.ZIndex = 10
 Instance.new("UICorner", main).CornerRadius = UDim.new(0,10)
 
 -- Title
-local title = Instance.new("TextLabel", main)
+local title = Instance.new("TextLabel")
+title.Parent = main
 title.Size = UDim2.fromScale(1,0.14)
 title.BackgroundTransparency = 1
 title.Text = "🎲 Skill Gacha"
 title.Font = Enum.Font.GothamBold
 title.TextSize = 15
 title.TextColor3 = Color3.new(1,1,1)
+title.ZIndex = 11
+
+--==================================================
+-- REMOTES (โหลดหลัง GUI)
+--==================================================
+local Remotes = RS:WaitForChild("Remotes")
+local SkillRE = Remotes:WaitForChild("SkillRE")
+local ToolRE = Remotes:WaitForChild("ToolRE")
+local SendFishRF = Remotes:WaitForChild("SendFishRF")
 
 --==================================================
 -- SLIDER FUNCTION
 --==================================================
-local function createSlider(parent, yPos)
-	local holder = Instance.new("Frame", parent)
+local function createSlider(yPos)
+	local holder = Instance.new("Frame", main)
 	holder.Size = UDim2.fromScale(0.9,0.08)
 	holder.Position = UDim2.fromScale(0.05,yPos)
 	holder.BackgroundColor3 = Color3.fromRGB(50,50,55)
 	holder.BorderSizePixel = 0
+	holder.ZIndex = 11
 	Instance.new("UICorner", holder).CornerRadius = UDim.new(1,0)
 
 	local knob = Instance.new("Frame", holder)
 	knob.Size = UDim2.fromScale(0.06,1)
 	knob.Position = UDim2.fromScale(0.47,0)
 	knob.BackgroundColor3 = Color3.fromRGB(220,220,220)
+	knob.ZIndex = 12
 	Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
 
-	local valueLabel = Instance.new("TextLabel", parent)
-	valueLabel.Size = UDim2.fromScale(0.4,0.07)
-	valueLabel.Position = UDim2.fromScale(0.3,yPos + 0.085)
-	valueLabel.BackgroundTransparency = 1
-	valueLabel.Font = Enum.Font.Gotham
-	valueLabel.TextSize = 12
-	valueLabel.TextColor3 = Color3.new(1,1,1)
+	local label = Instance.new("TextLabel", main)
+	label.Size = UDim2.fromScale(0.4,0.07)
+	label.Position = UDim2.fromScale(0.3,yPos + 0.085)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.TextColor3 = Color3.new(1,1,1)
+	label.ZIndex = 11
 
 	local dragging = false
-	local count = 50
-	valueLabel.Text = "Count : 50"
+	local value = 50
+	label.Text = "Count : 50"
 
 	local function update(x)
 		local pos = math.clamp(x - holder.AbsolutePosition.X, 0, holder.AbsoluteSize.X)
 		local percent = pos / holder.AbsoluteSize.X
-		count = math.clamp(math.floor(percent * 100), 1, 100)
+		value = math.clamp(math.floor(percent * 100), 1, 100)
 		knob.Position = UDim2.fromScale(percent - 0.03, 0)
-		valueLabel.Text = "Count : "..count
+		label.Text = "Count : "..value
 	end
 
 	holder.InputBegan:Connect(function(i)
@@ -96,12 +111,12 @@ local function createSlider(parent, yPos)
 	end)
 
 	return function()
-		return count
+		return value
 	end
 end
 
 --==================================================
--- COINS GACHA
+-- COIN GACHA
 --==================================================
 local coinBtn = Instance.new("TextButton", main)
 coinBtn.Size = UDim2.fromScale(0.9,0.1)
@@ -111,19 +126,17 @@ coinBtn.Font = Enum.Font.GothamBold
 coinBtn.TextSize = 14
 coinBtn.TextColor3 = Color3.fromRGB(80,45,0)
 coinBtn.BackgroundColor3 = Color3.fromRGB(255,200,70)
+coinBtn.ZIndex = 11
 Instance.new("UICorner", coinBtn).CornerRadius = UDim.new(0,8)
 
-local getCoinCount = createSlider(main, 0.29)
+local getCoin = createSlider(0.29)
 
 coinBtn.MouseButton1Click:Connect(function()
-	SkillRE:FireServer("SkillGacha", {
-		Key = "Coins",
-		Count = getCoinCount()
-	})
+	SkillRE:FireServer("SkillGacha",{Key="Coins",Count=getCoin()})
 end)
 
 --==================================================
--- GEMS GACHA
+-- GEM GACHA
 --==================================================
 local gemBtn = Instance.new("TextButton", main)
 gemBtn.Size = UDim2.fromScale(0.9,0.1)
@@ -133,15 +146,13 @@ gemBtn.Font = Enum.Font.GothamBold
 gemBtn.TextSize = 14
 gemBtn.TextColor3 = Color3.new(1,1,1)
 gemBtn.BackgroundColor3 = Color3.fromRGB(145,120,255)
+gemBtn.ZIndex = 11
 Instance.new("UICorner", gemBtn).CornerRadius = UDim.new(0,8)
 
-local getGemCount = createSlider(main, 0.59)
+local getGem = createSlider(0.59)
 
 gemBtn.MouseButton1Click:Connect(function()
-	SkillRE:FireServer("SkillGacha", {
-		Key = "Gems",
-		Count = getGemCount()
-	})
+	SkillRE:FireServer("SkillGacha",{Key="Gems",Count=getGem()})
 end)
 
 --==================================================
@@ -150,9 +161,8 @@ end)
 local trading = false
 local tradeTarget = nil
 local playerList = {}
-local currentIndex = 0
+local index = 0
 
--- Status Button
 local statusBtn = Instance.new("TextButton", main)
 statusBtn.Size = UDim2.fromScale(0.9,0.085)
 statusBtn.Position = UDim2.fromScale(0.05,0.75)
@@ -161,9 +171,9 @@ statusBtn.Font = Enum.Font.GothamBold
 statusBtn.TextSize = 13
 statusBtn.TextColor3 = Color3.new(1,1,1)
 statusBtn.BackgroundColor3 = Color3.fromRGB(80,80,85)
+statusBtn.ZIndex = 11
 Instance.new("UICorner", statusBtn).CornerRadius = UDim.new(0,8)
 
--- Target Label
 local targetLabel = Instance.new("TextLabel", main)
 targetLabel.Size = UDim2.fromScale(0.9,0.07)
 targetLabel.Position = UDim2.fromScale(0.05,0.84)
@@ -172,8 +182,8 @@ targetLabel.Text = "เป้าหมาย : ยังไม่มีเป้
 targetLabel.Font = Enum.Font.Gotham
 targetLabel.TextSize = 12
 targetLabel.TextColor3 = Color3.fromRGB(200,200,200)
+targetLabel.ZIndex = 11
 
--- Next Button
 local nextBtn = Instance.new("TextButton", main)
 nextBtn.Size = UDim2.fromScale(0.9,0.08)
 nextBtn.Position = UDim2.fromScale(0.05,0.94)
@@ -183,93 +193,64 @@ nextBtn.Font = Enum.Font.GothamBold
 nextBtn.TextSize = 13
 nextBtn.TextColor3 = Color3.new(1,1,1)
 nextBtn.BackgroundColor3 = Color3.fromRGB(100,120,140)
+nextBtn.ZIndex = 11
 Instance.new("UICorner", nextBtn).CornerRadius = UDim.new(0,8)
 
---==================================================
--- RESET TARGET
---==================================================
 local function resetTarget()
-	tradeTarget = nil
-	currentIndex = 0
 	trading = false
-
-	targetLabel.Text = "เป้าหมาย : ยังไม่มีเป้าหมาย"
+	tradeTarget = nil
+	index = 0
 	statusBtn.Text = "สถานะ : ยังไม่ได้เทรด"
 	statusBtn.BackgroundColor3 = Color3.fromRGB(80,80,85)
+	targetLabel.Text = "เป้าหมาย : ยังไม่มีเป้าหมาย"
 end
 
---==================================================
--- PLAYER LIST REFRESH
---==================================================
-local function refreshPlayerList()
+local function refreshPlayers()
 	playerList = {}
-	local found = false
-
-	for _,plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			table.insert(playerList, plr.Name)
-			if plr.Name == tradeTarget then
-				found = true
-			end
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			table.insert(playerList,p.Name)
 		end
 	end
-
-	if tradeTarget and not found then
+	if tradeTarget and not table.find(playerList,tradeTarget) then
 		resetTarget()
 	end
 end
 
 task.spawn(function()
 	while true do
-		refreshPlayerList()
+		refreshPlayers()
 		task.wait(5)
 	end
 end)
 
-Players.PlayerRemoving:Connect(function(plr)
-	if tradeTarget == plr.Name then
+Players.PlayerRemoving:Connect(function(p)
+	if p.Name == tradeTarget then
 		resetTarget()
 	end
 end)
 
---==================================================
--- NEXT TARGET
---==================================================
 nextBtn.MouseButton1Click:Connect(function()
 	if #playerList == 0 then
 		resetTarget()
 		return
 	end
-
-	currentIndex += 1
-	if currentIndex > #playerList then
-		currentIndex = 1
-	end
-
-	tradeTarget = playerList[currentIndex]
+	index += 1
+	if index > #playerList then index = 1 end
+	tradeTarget = playerList[index]
 	targetLabel.Text = "เป้าหมาย : "..tradeTarget
 end)
 
---==================================================
--- TRADE LOOP
---==================================================
-local function startTrade()
+local function tradeLoop()
 	task.spawn(function()
 		while trading do
-			if not tradeTarget then
+			local target = Players:FindFirstChild(tradeTarget)
+			if not target then
 				resetTarget()
 				break
 			end
-
-			local targetPlayer = Players:FindFirstChild(tradeTarget)
-			if not targetPlayer then
-				resetTarget()
-				break
-			end
-
-			ToolRE:FireServer("Switch", { index = 3 })
-			SendFishRF:InvokeServer(targetPlayer)
-
+			ToolRE:FireServer("Switch",{index=3})
+			SendFishRF:InvokeServer(target)
 			task.wait(0.2)
 		end
 	end)
@@ -277,15 +258,12 @@ end
 
 statusBtn.MouseButton1Click:Connect(function()
 	if not tradeTarget then return end
-
 	trading = not trading
-
 	if trading then
 		statusBtn.Text = "สถานะ : กำลังเทรด"
 		statusBtn.BackgroundColor3 = Color3.fromRGB(60,160,90)
-		startTrade()
+		tradeLoop()
 	else
-		statusBtn.Text = "สถานะ : ยังไม่ได้เทรด"
-		statusBtn.BackgroundColor3 = Color3.fromRGB(80,80,85)
+		resetTarget()
 	end
 end)
