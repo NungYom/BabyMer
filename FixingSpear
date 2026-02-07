@@ -18,28 +18,19 @@ local fireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 local fishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
 
 -- ==========================================
--- AUTO WEAPON DETECT (Gun / Harpoon)
+-- AUTO WEAPON DETECT
 -- ==========================================
 local function getWeapon()
     for _, v in ipairs(character:GetChildren()) do
-        if v:IsA("Tool") and (
-            v.Name:match("^Gun%d+$") or
-            v.Name:match("^Harpoon%d+$")
-        ) then
+        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then
             return v
         end
     end
-
     for _, v in ipairs(lp.Backpack:GetChildren()) do
-        if v:IsA("Tool") and (
-            v.Name:match("^Gun%d+$") or
-            v.Name:match("^Harpoon%d+$")
-        ) then
+        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then
             return v
         end
     end
-
-    return nil
 end
 
 -- ==========================================
@@ -47,8 +38,6 @@ end
 -- ==========================================
 local noclipConnection
 noclipConnection = RunService.Stepped:Connect(function()
-    if not character or not HRP then return end
-
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
@@ -65,36 +54,31 @@ noclipConnection = RunService.Stepped:Connect(function()
 end)
 
 -- ==========================================
--- SKILL SYSTEM (NON-BLOCKING)
+-- SKILL SYSTEM
 -- ==========================================
 local skillBusy = false
-
 local function castSkillSequence(excludeSkill11)
     if skillBusy then return end
     skillBusy = true
 
     for i = 1, 12 do
         if excludeSkill11 and i == 11 then continue end
-
         local skillID = string.format("Skill%02d", i)
         for _ = 1, 2 do
             fishRE:FireServer("Skill", { ID = skillID })
             task.wait(0.1)
         end
     end
-
     skillBusy = false
 end
 
 -- ==========================================
--- ATTACK LOGIC (ยิงทุก 0.3 วิ)
+-- ATTACK LOGIC
 -- ==========================================
 local function attack(bossFolder, bossRoot, mode)
     while bossFolder and bossFolder.Parent do
-        -- วาร์ปตามบอส (ไม่รออะไร)
         HRP.CFrame = bossRoot.CFrame * CFrame.new(0, 0, -4)
 
-        -- ยิง
         local weapon = getWeapon()
         if weapon then
             fireRE:FireServer("Hit", {
@@ -104,14 +88,13 @@ local function attack(bossFolder, bossRoot, mode)
             })
         end
 
-        -- สกิลรันเบื้องหลัง
         if mode == "Boss3" then
-            task.spawn(castSkillSequence, true)  -- ข้าม Skill11
+            task.spawn(castSkillSequence, true)
         else
             task.spawn(castSkillSequence, false)
         end
 
-        task.wait(0.3) -- <<< ความเร็วการยิงที่ต้องการ
+        task.wait(0.3)
     end
 end
 
@@ -119,8 +102,9 @@ end
 -- TELEPORT / FIND BOSS
 -- ==========================================
 local PREP_POINTS = {
-    Vector3.new(1291.04578, 95.697731, -366.907959),   -- Point1
-    Vector3.new(435.460327, 96.8663254, -1033.87878)  -- Point2
+    Vector3.new(1291.04578, 95.697731, -366.907959),       -- Point1
+    Vector3.new(435.460327, 96.8663254, -1033.87878),     -- Point2
+    Vector3.new(1141.59741, -1161.55103, 3600.19995)      -- Point3
 }
 
 local function teleportLoop(cf, duration)
@@ -151,16 +135,29 @@ end
 -- ==========================================
 -- MAIN FLOW
 -- ==========================================
+
+-- Point 1
 teleportLoop(CFrame.new(PREP_POINTS[1]), 2)
 local b1, r1 = findBoss(worldBoss:WaitForChild("Point1"), {"Boss01", "Boss02"}, 20)
 if b1 then attack(b1, r1, "Normal") end
 
+-- Point 2
 teleportLoop(CFrame.new(PREP_POINTS[2]), 2)
 local b2, r2 = findBoss(worldBoss:WaitForChild("Point2"), {"Boss03"}, 10)
 if b2 then attack(b2, r2, "Boss3") end
 
+-- Point 3 (Boss04)
+teleportLoop(CFrame.new(PREP_POINTS[3]), 2)
+local b3, r3 = findBoss(worldBoss:WaitForChild("Point3"), {"Boss04"}, 10)
+
+if b3 then
+    attack(b3, r3, "Normal")
+else
+    lp:Kick("Boss04 not found within 10 seconds")
+end
+
 -- ==========================================
--- CLEANUP
+-- CLEANUP / EXIT
 -- ==========================================
 if noclipConnection then noclipConnection:Disconnect() end
 if HRP:FindFirstChild("FloatForce") then
