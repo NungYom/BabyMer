@@ -50,7 +50,7 @@ task.spawn(function()
         if AutoEnabled then
             DamageAllBlocks()
         end
-        task.wait(0.1)
+        task.wait(0.4)
     end
 end)
 
@@ -61,10 +61,10 @@ Button.MouseButton1Click:Connect(function()
     AutoEnabled = not AutoEnabled
     
     if AutoEnabled then
-        Button.Text = "AUTO: ON"
+        Button.Text = "ย้าาาากก"
         Button.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
     else
-        Button.Text = "AUTO: OFF"
+        Button.Text = "สงบนิ่งง"
         Button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     end
 end)
