@@ -1,0 +1,70 @@
+-- =========================================
+-- SERVICES
+-- =========================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local lp = Players.LocalPlayer
+
+-- =========================================
+-- VARIABLES
+-- =========================================
+local LuckyFolder = workspace:WaitForChild("LuckyBlocks")
+local DamageRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("DamageBlockEvent")
+
+local AutoEnabled = false
+
+-- =========================================
+-- GUI
+-- =========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LuckyAutoGui"
+ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0, 160, 0, 50)
+Button.Position = UDim2.new(0, 20, 0, 200)
+Button.Text = "AUTO: OFF"
+Button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+Button.TextColor3 = Color3.new(1,1,1)
+Button.TextScaled = true
+Button.Parent = ScreenGui
+
+-- =========================================
+-- FUNCTION : DAMAGE ALL BLOCKS
+-- =========================================
+local function DamageAllBlocks()
+    for _, block in pairs(LuckyFolder:GetChildren()) do
+        if block:IsA("Model") or block:IsA("Folder") or block:IsA("Part") then
+            local args = { block }
+            DamageRemote:FireServer(unpack(args))
+        end
+    end
+end
+
+-- =========================================
+-- LOOP
+-- =========================================
+task.spawn(function()
+    while true do
+        if AutoEnabled then
+            DamageAllBlocks()
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- =========================================
+-- BUTTON TOGGLE
+-- =========================================
+Button.MouseButton1Click:Connect(function()
+    AutoEnabled = not AutoEnabled
+    
+    if AutoEnabled then
+        Button.Text = "AUTO: ON"
+        Button.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+    else
+        Button.Text = "AUTO: OFF"
+        Button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    end
+end)
