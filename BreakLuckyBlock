@@ -3,6 +3,7 @@
 -- =========================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local lp = Players.LocalPlayer
 
@@ -17,6 +18,7 @@ local FloorEnabled = false
 
 local Y_LOCK = -1
 local SavedBaseplates = {}
+local NoclipConnection = nil
 
 -- =========================================
 -- GUI
@@ -26,7 +28,7 @@ ScreenGui.Name = "LuckyAutoGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = lp:WaitForChild("PlayerGui")
 
--- ===== AUTO BUTTON =====
+-- AUTO BUTTON
 local AutoButton = Instance.new("TextButton")
 AutoButton.Size = UDim2.new(0, 160, 0, 50)
 AutoButton.Position = UDim2.new(0, 20, 0, 200)
@@ -36,7 +38,7 @@ AutoButton.TextColor3 = Color3.new(1,1,1)
 AutoButton.TextScaled = true
 AutoButton.Parent = ScreenGui
 
--- ===== FLOOR BUTTON =====
+-- FLOOR BUTTON
 local FloorButton = Instance.new("TextButton")
 FloorButton.Size = UDim2.new(0, 160, 0, 50)
 FloorButton.Position = UDim2.new(0, 20, 0, 260)
@@ -47,7 +49,7 @@ FloorButton.TextScaled = true
 FloorButton.Parent = ScreenGui
 
 -- =========================================
--- FUNCTION : DAMAGE ALL BLOCKS
+-- DAMAGE FUNCTION
 -- =========================================
 local function DamageAllBlocks()
     for _, block in pairs(LuckyFolder:GetChildren()) do
@@ -58,7 +60,7 @@ local function DamageAllBlocks()
 end
 
 -- =========================================
--- FUNCTION : GET BASEPLATES
+-- BASEPLATE FUNCTIONS
 -- =========================================
 local function GetBaseplates()
     local plates = {}
@@ -70,10 +72,7 @@ local function GetBaseplates()
     return plates
 end
 
--- =========================================
--- FLOOR ENABLE
--- =========================================
-local function EnableFloorMode()
+local function EnableFloorVisual()
     for _, part in pairs(GetBaseplates()) do
         if not SavedBaseplates[part] then
             SavedBaseplates[part] = {
@@ -89,10 +88,7 @@ local function EnableFloorMode()
     end
 end
 
--- =========================================
--- FLOOR DISABLE
--- =========================================
-local function DisableFloorMode()
+local function DisableFloorVisual()
     for part, data in pairs(SavedBaseplates) do
         if part and part.Parent then
             part.Material = data.Material
@@ -101,6 +97,48 @@ local function DisableFloorMode()
         end
     end
     SavedBaseplates = {}
+end
+
+-- =========================================
+-- FLOAT + NOCLIP
+-- =========================================
+local function EnableFloatNoclip()
+    local char = lp.Character
+    if not char then return end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = true
+    end
+
+    NoclipConnection = RunService.Stepped:Connect(function()
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end)
+end
+
+local function DisableFloatNoclip()
+    local char = lp.Character
+    if not char then return end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = false
+    end
+
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
+
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
 end
 
 -- =========================================
@@ -140,7 +178,6 @@ end)
 -- =========================================
 AutoButton.MouseButton1Click:Connect(function()
     AutoEnabled = not AutoEnabled
-    
     if AutoEnabled then
         AutoButton.Text = "AUTO: ON"
         AutoButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
@@ -153,12 +190,26 @@ end)
 FloorButton.MouseButton1Click:Connect(function()
     FloorEnabled = not FloorEnabled
 
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
     if FloorEnabled then
-        EnableFloorMode()
+        EnableFloorVisual()
+        EnableFloatNoclip()
         FloorButton.Text = "FLOOR: ON"
         FloorButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
     else
-        DisableFloorMode()
+        DisableFloorVisual()
+        DisableFloatNoclip()
+
+        if hrp then
+            hrp.CFrame = CFrame.new(
+                hrp.Position.X,
+                12,
+                hrp.Position.Z
+            )
+        end
+
         FloorButton.Text = "FLOOR: OFF"
         FloorButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     end
