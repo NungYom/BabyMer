@@ -13,22 +13,38 @@ local LuckyFolder = workspace:WaitForChild("LuckyBlocks")
 local DamageRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("DamageBlockEvent")
 
 local AutoEnabled = false
+local FloorEnabled = false
+
+local Y_LOCK = -1
+local SavedBaseplates = {}
 
 -- =========================================
 -- GUI
 -- =========================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "LuckyAutoGui"
+ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = lp:WaitForChild("PlayerGui")
 
-local Button = Instance.new("TextButton")
-Button.Size = UDim2.new(0, 160, 0, 50)
-Button.Position = UDim2.new(0, 20, 0, 200)
-Button.Text = "AUTO: OFF"
-Button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-Button.TextColor3 = Color3.new(1,1,1)
-Button.TextScaled = true
-Button.Parent = ScreenGui
+-- ===== AUTO BUTTON =====
+local AutoButton = Instance.new("TextButton")
+AutoButton.Size = UDim2.new(0, 160, 0, 50)
+AutoButton.Position = UDim2.new(0, 20, 0, 200)
+AutoButton.Text = "AUTO: OFF"
+AutoButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+AutoButton.TextColor3 = Color3.new(1,1,1)
+AutoButton.TextScaled = true
+AutoButton.Parent = ScreenGui
+
+-- ===== FLOOR BUTTON =====
+local FloorButton = Instance.new("TextButton")
+FloorButton.Size = UDim2.new(0, 160, 0, 50)
+FloorButton.Position = UDim2.new(0, 20, 0, 260)
+FloorButton.Text = "FLOOR: OFF"
+FloorButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+FloorButton.TextColor3 = Color3.new(1,1,1)
+FloorButton.TextScaled = true
+FloorButton.Parent = ScreenGui
 
 -- =========================================
 -- FUNCTION : DAMAGE ALL BLOCKS
@@ -36,14 +52,59 @@ Button.Parent = ScreenGui
 local function DamageAllBlocks()
     for _, block in pairs(LuckyFolder:GetChildren()) do
         if block:IsA("Model") or block:IsA("Folder") or block:IsA("Part") then
-            local args = { block }
-            DamageRemote:FireServer(unpack(args))
+            DamageRemote:FireServer(block)
         end
     end
 end
 
 -- =========================================
--- LOOP
+-- FUNCTION : GET BASEPLATES
+-- =========================================
+local function GetBaseplates()
+    local plates = {}
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Part") and obj.Name == "Baseplate" then
+            table.insert(plates, obj)
+        end
+    end
+    return plates
+end
+
+-- =========================================
+-- FLOOR ENABLE
+-- =========================================
+local function EnableFloorMode()
+    for _, part in pairs(GetBaseplates()) do
+        if not SavedBaseplates[part] then
+            SavedBaseplates[part] = {
+                Material = part.Material,
+                Color = part.Color,
+                Transparency = part.Transparency
+            }
+        end
+
+        part.Material = Enum.Material.Glass
+        part.Color = Color3.fromRGB(0, 255, 120)
+        part.Transparency = 0.35
+    end
+end
+
+-- =========================================
+-- FLOOR DISABLE
+-- =========================================
+local function DisableFloorMode()
+    for part, data in pairs(SavedBaseplates) do
+        if part and part.Parent then
+            part.Material = data.Material
+            part.Color = data.Color
+            part.Transparency = data.Transparency
+        end
+    end
+    SavedBaseplates = {}
+end
+
+-- =========================================
+-- AUTO LOOP
 -- =========================================
 task.spawn(function()
     while true do
@@ -55,16 +116,50 @@ task.spawn(function()
 end)
 
 -- =========================================
--- BUTTON TOGGLE
+-- Y LOCK LOOP
 -- =========================================
-Button.MouseButton1Click:Connect(function()
+task.spawn(function()
+    while true do
+        if FloorEnabled then
+            local char = lp.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                hrp.CFrame = CFrame.new(
+                    hrp.Position.X,
+                    Y_LOCK,
+                    hrp.Position.Z
+                )
+            end
+        end
+        task.wait(0.05)
+    end
+end)
+
+-- =========================================
+-- BUTTON EVENTS
+-- =========================================
+AutoButton.MouseButton1Click:Connect(function()
     AutoEnabled = not AutoEnabled
     
     if AutoEnabled then
-        Button.Text = "ย้าาาากก"
-        Button.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+        AutoButton.Text = "AUTO: ON"
+        AutoButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
     else
-        Button.Text = "สงบนิ่งง"
-        Button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        AutoButton.Text = "AUTO: OFF"
+        AutoButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    end
+end)
+
+FloorButton.MouseButton1Click:Connect(function()
+    FloorEnabled = not FloorEnabled
+
+    if FloorEnabled then
+        EnableFloorMode()
+        FloorButton.Text = "FLOOR: ON"
+        FloorButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+    else
+        DisableFloorMode()
+        FloorButton.Text = "FLOOR: OFF"
+        FloorButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     end
 end)
