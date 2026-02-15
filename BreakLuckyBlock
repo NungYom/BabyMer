@@ -18,7 +18,7 @@ local FloorEnabled = false
 local NoclipConnection = nil
 
 -- =========================================
--- CREATE SUPPORT FLOOR (STATIC)
+-- CREATE SUPPORT FLOOR (เลื่อนลงอีก 5)
 -- =========================================
 do
     local p1 = Vector3.new(66, -7, -237)
@@ -37,7 +37,7 @@ do
     local centerZ = (minZ + maxZ) / 2
 
     local thickness = 4
-    local topY = -1
+    local topY = -6 -- เดิม -1 → ลงอีก 5
     local centerY = topY - (thickness / 2)
 
     local floor = Instance.new("Part")
@@ -53,32 +53,30 @@ do
 end
 
 -- =========================================
--- GUI
+-- GUI (ซ้ายล่าง ไม่บังเงิน)
 -- =========================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "LuckyAutoGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = lp:WaitForChild("PlayerGui")
 
--- AUTO BUTTON
-local AutoButton = Instance.new("TextButton")
-AutoButton.Size = UDim2.new(0, 160, 0, 50)
-AutoButton.Position = UDim2.new(0, 20, 0, 195)
-AutoButton.Text = "AUTO: OFF"
-AutoButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-AutoButton.TextColor3 = Color3.new(1,1,1)
-AutoButton.TextScaled = true
-AutoButton.Parent = ScreenGui
+-- ใช้ AnchorPoint เพื่อจัดตำแหน่งแม่น
+local function CreateButton(text, yOffset)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 150, 0, 45)
+    btn.AnchorPoint = Vector2.new(0, 1)
+    btn.Position = UDim2.new(0, 20, 1, -yOffset)
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Parent = ScreenGui
+    return btn
+end
 
--- FLOOR BUTTON
-local FloorButton = Instance.new("TextButton")
-FloorButton.Size = UDim2.new(0, 160, 0, 50)
-FloorButton.Position = UDim2.new(0, 20, 0, 255)
-FloorButton.Text = "FLOOR: OFF"
-FloorButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-FloorButton.TextColor3 = Color3.new(1,1,1)
-FloorButton.TextScaled = true
-FloorButton.Parent = ScreenGui
+-- วางให้สูงจากขอบล่างพอสมควร
+local AutoButton = CreateButton("AUTO: OFF", 110)
+local FloorButton = CreateButton("FLOOR: OFF", 60)
 
 -- =========================================
 -- DAMAGE FUNCTION
