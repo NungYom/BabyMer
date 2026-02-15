@@ -2,104 +2,78 @@
 -- SERVICES
 -- =========================================
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local lp = Players.LocalPlayer
 
 -- =========================================
--- VARIABLES
+-- CREATE GUI
 -- =========================================
-local LuckyFolder = workspace:WaitForChild("LuckyBlocks")
-local DamageRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("DamageBlockEvent")
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
 
-local AutoEnabled = false
+local MainFrame = Instance.new("Frame")
+MainFrame.Parent = ScreenGui
+MainFrame.Size = UDim2.new(0, 200, 0, 60)
+MainFrame.Position = UDim2.new(0, 20, 0, 20 - 5) -- เลื่อนขึ้น 5 หน่วย
+MainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+MainFrame.BorderSizePixel = 0
+
+local FloorButton = Instance.new("TextButton")
+FloorButton.Parent = MainFrame
+FloorButton.Size = UDim2.new(1, -10, 1, -10)
+FloorButton.Position = UDim2.new(0, 5, 0, 5)
+FloorButton.Text = "FLOOR: OFF"
+FloorButton.TextColor3 = Color3.new(1,1,1)
+FloorButton.BackgroundColor3 = Color3.fromRGB(200,60,60)
+FloorButton.TextScaled = true
+FloorButton.BorderSizePixel = 0
+
+-- =========================================
+-- CREATE FLOOR PART (STATIC)
+-- =========================================
+
+local minX, maxX = -240, 66
+local minZ, maxZ = -237, 132
+
+local sizeX = math.abs(maxX - minX)
+local sizeZ = math.abs(maxZ - minZ)
+
+local centerX = (minX + maxX) / 2
+local centerZ = (minZ + maxZ) / 2
+
+local FloorPart = Instance.new("Part")
+FloorPart.Name = "CustomFloor"
+FloorPart.Size = Vector3.new(sizeX, 4, sizeZ)
+FloorPart.Position = Vector3.new(centerX, -1 - 2, centerZ)
+-- -1 คือระดับบนสุดของพื้น
+-- -2 คือครึ่งหนึ่งของความหนา (4/2)
+FloorPart.Anchored = true
+FloorPart.CanCollide = true
+FloorPart.Material = Enum.Material.SmoothPlastic
+FloorPart.Color = Color3.fromRGB(240,240,240)
+FloorPart.Transparency = 0
+FloorPart.Parent = workspace
+
+-- =========================================
+-- NOCLIP SYSTEM
+-- =========================================
+
 local FloorEnabled = false
 local NoclipConnection = nil
 
--- =========================================
--- CREATE SUPPORT FLOOR (เลื่อนลงอีก 5)
--- =========================================
-do
-    local p1 = Vector3.new(66, -7, -237)
-    local p2 = Vector3.new(-240, -3, 132)
-
-    local minX = math.min(p1.X, p2.X)
-    local maxX = math.max(p1.X, p2.X)
-
-    local minZ = math.min(p1.Z, p2.Z)
-    local maxZ = math.max(p1.Z, p2.Z)
-
-    local sizeX = maxX - minX
-    local sizeZ = maxZ - minZ
-
-    local centerX = (minX + maxX) / 2
-    local centerZ = (minZ + maxZ) / 2
-
-    local thickness = 4
-    local topY = -6 -- เดิม -1 → ลงอีก 5
-    local centerY = topY - (thickness / 2)
-
-    local floor = Instance.new("Part")
-    floor.Name = "CustomSupportFloor"
-    floor.Anchored = true
-    floor.CanCollide = true
-    floor.Material = Enum.Material.SmoothPlastic
-    floor.Color = Color3.fromRGB(235,235,235)
-    floor.Transparency = 0.15
-    floor.Size = Vector3.new(sizeX, thickness, sizeZ)
-    floor.Position = Vector3.new(centerX, centerY, centerZ)
-    floor.Parent = workspace
-end
-
--- =========================================
--- GUI (ซ้ายล่าง ไม่บังเงิน)
--- =========================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LuckyAutoGui"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = lp:WaitForChild("PlayerGui")
-
--- ใช้ AnchorPoint เพื่อจัดตำแหน่งแม่น
-local function CreateButton(text, yOffset)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 150, 0, 45)
-    btn.AnchorPoint = Vector2.new(0, 1)
-    btn.Position = UDim2.new(0, 20, 1, -yOffset)
-    btn.Text = text
-    btn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.TextScaled = true
-    btn.Parent = ScreenGui
-    return btn
-end
-
--- วางให้สูงจากขอบล่างพอสมควร
-local AutoButton = CreateButton("AUTO: OFF", 110)
-local FloorButton = CreateButton("FLOOR: OFF", 60)
-
--- =========================================
--- DAMAGE FUNCTION
--- =========================================
-local function DamageAllBlocks()
-    for _, block in pairs(LuckyFolder:GetChildren()) do
-        if block:IsA("Model") or block:IsA("Folder") or block:IsA("Part") then
-            DamageRemote:FireServer(block)
-        end
-    end
-end
-
--- =========================================
--- NOCLIP
--- =========================================
 local function EnableNoclip()
-    local char = lp.Character
-    if not char then return end
+    if NoclipConnection then return end
 
     NoclipConnection = RunService.Stepped:Connect(function()
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+        local char = lp.Character
+        if char then
+            for _, v in pairs(char:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
             end
         end
     end)
@@ -112,42 +86,20 @@ local function DisableNoclip()
     end
 
     local char = lp.Character
-    if not char then return end
-
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = true
+    if char then
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = true
+            end
         end
     end
 end
 
 -- =========================================
--- AUTO LOOP
+-- FLOOR TOGGLE FUNCTION
 -- =========================================
-task.spawn(function()
-    while true do
-        if AutoEnabled then
-            DamageAllBlocks()
-        end
-        task.wait(0.4)
-    end
-end)
 
--- =========================================
--- BUTTON EVENTS
--- =========================================
-AutoButton.MouseButton1Click:Connect(function()
-    AutoEnabled = not AutoEnabled
-    if AutoEnabled then
-        AutoButton.Text = "AUTO: ON"
-        AutoButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
-    else
-        AutoButton.Text = "AUTO: OFF"
-        AutoButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-    end
-end)
-
-FloorButton.MouseButton1Click:Connect(function()
+local function ToggleFloor()
     FloorEnabled = not FloorEnabled
 
     local char = lp.Character
@@ -165,7 +117,7 @@ FloorButton.MouseButton1Click:Connect(function()
         end
 
         FloorButton.Text = "FLOOR: ON"
-        FloorButton.BackgroundColor3 = Color3.fromRGB(60, 200, 60)
+        FloorButton.BackgroundColor3 = Color3.fromRGB(60,200,60)
 
     else
         DisableNoclip()
@@ -179,6 +131,23 @@ FloorButton.MouseButton1Click:Connect(function()
         end
 
         FloorButton.Text = "FLOOR: OFF"
-        FloorButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        FloorButton.BackgroundColor3 = Color3.fromRGB(200,60,60)
+    end
+end
+
+-- =========================================
+-- INPUTS
+-- =========================================
+
+-- คลิกปุ่ม
+FloorButton.MouseButton1Click:Connect(ToggleFloor)
+
+-- กด Alt
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    if input.KeyCode == Enum.KeyCode.LeftAlt
+    or input.KeyCode == Enum.KeyCode.RightAlt then
+        ToggleFloor()
     end
 end)
