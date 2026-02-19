@@ -40,7 +40,6 @@ button.Parent = gui
 -- CONFIG & STATE
 --============================--
 local running = true 
-local floatForce
 local noclipConnection
 local lootTimers = {}
 local specialDoneCount = 0 
@@ -48,7 +47,7 @@ local specialDoneCount = 0
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
 local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
 local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
-local HOVER_HEIGHT_VALUE = -17 -- ปรับเป็นค่าลบเพื่อให้ตัวละครอยู่ใต้ Collider
+local HOVER_HEIGHT_VALUE = -17 
 
 --============================--
 -- HELPERS
@@ -96,60 +95,40 @@ local function getBestTarget()
     return priorityTarget or closestTarget
 end
 
-local function getClosestTimedSafeLoot()
-    local gameFolder = workspace:FindFirstChild("Game")
-    local debris = gameFolder and gameFolder:FindFirstChild("Debris")
-    if not debris then return end
+--============================--
+-- SYSTEMS (LOOPED FLOAT & NOCLIP)
+--============================--
 
-    local char = lp.Character
-    local myPos = char.HumanoidRootPart.Position
-    local currentTime = tick()
-    local closestLoot, shortestDist = nil, math.huge
-
-    for _, bag in pairs(debris:GetChildren()) do
-        if bag.Name == "Lootbag" then
-            local mesh = bag:FindFirstChild("Meshes/LootsackLP")
-            if mesh and mesh:IsA("BasePart") then
-                local safe = true
-                local enemies = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Enemies")
-                if enemies then
-                    for _, enemy in pairs(enemies:GetChildren()) do
-                        local eroot = enemy:FindFirstChild("HumanoidRootPart")
-                        if eroot and (eroot.Position - mesh.Position).Magnitude <= 15 then
-                            safe = false; break
-                        end
+-- ฟังก์ชันจัดการ Float แบบ Loop
+local function startFloatLoop()
+    task.spawn(function()
+        while true do
+            if running then
+                local char = lp.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local bv = root:FindFirstChild("FloatVelocity")
+                    if not bv then
+                        bv = Instance.new("BodyVelocity")
+                        bv.Name = "FloatVelocity"
+                        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        bv.Velocity = Vector3.new(0, 0, 0)
+                        bv.Parent = root
+                    else
+                        bv.Velocity = Vector3.new(0, 0, 0)
                     end
                 end
-
-                if safe then
-                    if not lootTimers[bag] then lootTimers[bag] = currentTime end
-                    if (currentTime - lootTimers[bag]) >= 5 then
-                        local dist = (mesh.Position - myPos).Magnitude
-                        if dist < shortestDist then
-                            shortestDist = dist
-                            closestLoot = mesh
-                        end
-                    end
-                else
-                    lootTimers[bag] = nil
+            else
+                -- ถ้าปิดสคริปต์ให้ลบแรงลอยออก
+                local char = lp.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and root:FindFirstChild("FloatVelocity") then
+                    root.FloatVelocity:Destroy()
                 end
             end
+            task.wait(0.1)
         end
-    end
-    return closestLoot
-end
-
---============================--
--- SYSTEMS
---============================--
-local function enableFloat()
-    local char = lp.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    if floatForce then floatForce:Destroy() end
-    floatForce = Instance.new("BodyVelocity")
-    floatForce.Velocity = Vector3.new(0, 0, 0)
-    floatForce.MaxForce = Vector3.new(0, math.huge, 0)
-    floatForce.Parent = char.HumanoidRootPart
+    end)
 end
 
 local function enableNoclip()
@@ -189,41 +168,32 @@ local function startMainLoop()
                             specialDoneCount = specialDoneCount + 1
                         end
                     else
-                        local lootMesh = getClosestTimedSafeLoot()
-                        if lootMesh then
-                            root.CFrame = lootMesh.CFrame
-                            task.wait(0.3)
-                        else
-                            local enemy = getBestTarget()
-                            local basePos = (colliderPart and colliderPart.Position) or root.Position
-                            -- ย้ายตำแหน่งตัวละครลงไปแกน Y ด้านล่าง (HOVER_HEIGHT_VALUE เป็น -17)
-                            local hoverOffset = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
+                        local enemy = getBestTarget()
+                        local basePos = (colliderPart and colliderPart.Position) or root.Position
+                        local hoverOffset = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
 
-                            if enemy and enemy:FindFirstChild("HumanoidRootPart") then
-                                local enemyPos = enemy.HumanoidRootPart.Position
-                                -- ตัวละครอยู่ข้างล่าง แต่หันหน้ามองไปที่ศัตรู
-                                root.CFrame = CFrame.lookAt(basePos + hoverOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
+                        if enemy and enemy:FindFirstChild("HumanoidRootPart") then
+                            local enemyPos = enemy.HumanoidRootPart.Position
+                            root.CFrame = CFrame.lookAt(basePos + hoverOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
-                                local tool = getTool()
-                                if tool then
-                                    local myPos = root.Position
-                                    local fireTime = DateTime.now().UnixTimestampMillis / 1000
-                                    pcall(function()
-                                        ProjectileRemote:InvokeServer(myPos, enemyPos, tool.Name, 0, fireTime)
-                                        AudioRemote:InvokeServer(myPos, "WeaponRangedAttack")
-                                        DamageRemote:InvokeServer({
-                                            IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
-                                            WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
-                                            TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = tool:GetAttribute("Key"),
-                                            Position = myPos
-                                        }, myPos)
-                                        AudioRemote:InvokeServer(myPos, "WeaponRangedReload")
-                                    end)
-                                end
-                            elseif colliderPart then
-                                -- ถ้าไม่มีศัตรู ให้ล็อคตัวอยู่ใต้ Collider ตลอดเวลา
-                                root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
+                            local tool = getTool()
+                            if tool then
+                                local myPos = root.Position
+                                local fireTime = DateTime.now().UnixTimestampMillis / 1000
+                                pcall(function()
+                                    ProjectileRemote:InvokeServer(myPos, enemyPos, tool.Name, 0, fireTime)
+                                    AudioRemote:InvokeServer(myPos, "WeaponRangedAttack")
+                                    DamageRemote:InvokeServer({
+                                        IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
+                                        WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
+                                        TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = tool:GetAttribute("Key"),
+                                        Position = myPos
+                                    }, myPos)
+                                    AudioRemote:InvokeServer(myPos, "WeaponRangedReload")
+                                end)
                             end
+                        elseif colliderPart then
+                            root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                         end
                     end
                 end
@@ -237,10 +207,11 @@ end
 -- INITIALIZATION
 --============================--
 local function initialize()
-    enableFloat()
     enableNoclip()
+    startFloatLoop() -- เริ่มระบบ Float แบบตรวจสอบตลอดเวลา
+    
     task.spawn(function()
-        task.wait(10) -- ปรับเป็น 10 วินาทีตามที่ขอครับ
+        task.wait(10)
         
         if game.PlaceId == 74317689712426 then
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
@@ -262,7 +233,10 @@ button.MouseButton1Click:Connect(function()
     running = not running
     button.Text = running and "Ranged + Priority Lock : ON" or "Ranged + Priority Lock : OFF"
     button.BackgroundColor3 = running and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    if running then enableFloat() enableNoclip() specialDoneCount = 0 end
+    if running then 
+        enableNoclip() 
+        specialDoneCount = 0 
+    end
 end)
 
 initialize()
