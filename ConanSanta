@@ -48,7 +48,7 @@ local specialDoneCount = 0
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
 local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
 local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
-local HOVER_HEIGHT_VALUE = 15 -- ปรับจาก 35 เป็น 15 ตามคำขอ
+local HOVER_HEIGHT_VALUE = 17 -- ปรับเป็น 17 studs ตามคำขอ
 
 --============================--
 -- HELPERS
@@ -178,7 +178,7 @@ local function startMainLoop()
                         colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
                     end)
 
-                    -- 1. Special Logic (2 รอบ)
+                    -- 1. Special Logic (TP+Tween 2 รอบเมื่อถึงจุด)
                     if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
                         for i = 1, 2 do
                             root.CFrame = CFrame.new(TP_TARGET)
@@ -204,7 +204,7 @@ local function startMainLoop()
                             local hoverHeight = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
 
                             if enemy and enemy:FindFirstChild("HumanoidRootPart") then
-                                -- หันหน้าหาศัตรูในระดับความสูง 15 studs
+                                -- หันหน้าหาศัตรูในระดับความสูง 17 studs
                                 local enemyPos = enemy.HumanoidRootPart.Position
                                 root.CFrame = CFrame.lookAt(basePos + hoverHeight, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
@@ -228,7 +228,7 @@ local function startMainLoop()
                                     end)
                                 end
                             elseif colliderPart then
-                                -- ลอยเหนือ Collider 15 studs
+                                -- ลอยเหนือ Collider 17 studs
                                 root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                             end
                         end
