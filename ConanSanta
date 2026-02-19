@@ -33,7 +33,7 @@ button.Position = UDim2.new(0, 20, 0, 200)
 button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
 button.TextColor3 = Color3.new(1, 1, 1)
 button.TextScaled = true
-button.Text = "Ranged + Collider Lock : ON"
+button.Text = "Ranged + Priority Lock : ON"
 button.Parent = gui
 
 --============================--
@@ -48,7 +48,7 @@ local specialDoneCount = 0
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
 local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
 local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
-local HOVER_HEIGHT_VALUE = 17 -- ปรับเป็น 17 studs ตามคำขอ
+local HOVER_HEIGHT_VALUE = 17 
 
 --============================--
 -- HELPERS
@@ -61,7 +61,8 @@ local function getTool()
     end
 end
 
-local function getClosestEnemy()
+-- ระบบหาศัตรูแบบลำดับความสำคัญ (GreenYeti First)
+local function getBestTarget()
     local gameFolder = workspace:FindFirstChild("Game")
     local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
     if not enemies then return end
@@ -70,18 +71,36 @@ local function getClosestEnemy()
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
     local myPos = char.HumanoidRootPart.Position
-    local closest, shortest = nil, math.huge
+    local priorityTarget = nil
+    local closestTarget = nil
+    local shortestDist = math.huge
+    local priorityShortestDist = math.huge
 
     for _, enemy in pairs(enemies:GetChildren()) do
-        if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-            local dist = (enemy.HumanoidRootPart.Position - myPos).Magnitude
-            if dist < shortest then
-                shortest = dist
-                closest = enemy
+        local root = enemy:FindFirstChild("HumanoidRootPart")
+        local hum = enemy:FindFirstChild("Humanoid")
+        
+        if root and hum and hum.Health > 0 then
+            local dist = (root.Position - myPos).Magnitude
+            
+            -- เงื่อนไขที่ 1: ถ้าเจอ GreenYeti ให้เก็บไว้ในรายการ Priority
+            if enemy.Name == "Enemy_GreenYeti" then
+                if dist < priorityShortestDist then
+                    priorityShortestDist = dist
+                    priorityTarget = enemy
+                end
+            end
+            
+            -- เงื่อนไขที่ 2: หาตัวที่ใกล้ที่สุดเก็บไว้สำรอง
+            if dist < shortestDist then
+                shortestDist = dist
+                closestTarget = enemy
             end
         end
     end
-    return closest
+
+    -- ส่งคืน GreenYeti ก่อน ถ้าไม่มีค่อยส่งตัวที่ใกล้ที่สุด
+    return priorityTarget or closestTarget
 end
 
 local function getClosestTimedSafeLoot()
@@ -90,8 +109,6 @@ local function getClosestTimedSafeLoot()
     if not debris then return end
 
     local char = lp.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
     local myPos = char.HumanoidRootPart.Position
     local currentTime = tick()
     local closestLoot, shortestDist = nil, math.huge
@@ -104,10 +121,9 @@ local function getClosestTimedSafeLoot()
                 local enemies = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Enemies")
                 if enemies then
                     for _, enemy in pairs(enemies:GetChildren()) do
-                        if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                            if (enemy.HumanoidRootPart.Position - mesh.Position).Magnitude <= 15 then
-                                safe = false; break
-                            end
+                        local eroot = enemy:FindFirstChild("HumanoidRootPart")
+                        if eroot and (eroot.Position - mesh.Position).Magnitude <= 15 then
+                            safe = false; break
                         end
                     end
                 end
@@ -131,7 +147,7 @@ local function getClosestTimedSafeLoot()
 end
 
 --============================--
--- SYSTEMS (FLOAT & NOCLIP)
+-- SYSTEMS
 --============================--
 local function enableFloat()
     local char = lp.Character
@@ -143,10 +159,6 @@ local function enableFloat()
     floatForce.Parent = char.HumanoidRootPart
 end
 
-local function disableFloat()
-    if floatForce then floatForce:Destroy() floatForce = nil end
-end
-
 local function enableNoclip()
     if noclipConnection then noclipConnection:Disconnect() end
     noclipConnection = RunService.Stepped:Connect(function()
@@ -156,10 +168,6 @@ local function enableNoclip()
             end
         end
     end)
-end
-
-local function disableNoclip()
-    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
 end
 
 --============================--
@@ -178,19 +186,15 @@ local function startMainLoop()
                         colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
                     end)
 
-                    -- 1. Special Logic (TP+Tween 2 รอบเมื่อถึงจุด)
+                    -- 1. Special Logic
                     if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
                         for i = 1, 2 do
                             root.CFrame = CFrame.new(TP_TARGET)
                             task.wait(0.2)
-                            
-                            local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Linear)
-                            local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(TWEEN_TARGET)})
+                            local tween = TweenService:Create(root, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = CFrame.new(TWEEN_TARGET)})
                             tween:Play()
                             tween.Completed:Wait()
-                            
                             specialDoneCount = specialDoneCount + 1
-                            if specialDoneCount >= 2 then break end
                         end
                     else
                         -- 2. Normal Behavior
@@ -199,12 +203,11 @@ local function startMainLoop()
                             root.CFrame = lootMesh.CFrame
                             task.wait(0.3)
                         else
-                            local enemy = getClosestEnemy()
+                            local enemy = getBestTarget() -- ใช้ฟังก์ชัน Priority ใหม่
                             local basePos = (colliderPart and colliderPart.Position) or root.Position
                             local hoverHeight = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
 
                             if enemy and enemy:FindFirstChild("HumanoidRootPart") then
-                                -- หันหน้าหาศัตรูในระดับความสูง 17 studs
                                 local enemyPos = enemy.HumanoidRootPart.Position
                                 root.CFrame = CFrame.lookAt(basePos + hoverHeight, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
@@ -212,23 +215,19 @@ local function startMainLoop()
                                 if tool then
                                     local myPos = root.Position
                                     local fireTime = DateTime.now().UnixTimestampMillis / 1000
-                                    local weaponId = tool.Name
-                                    local weaponKey = tool:GetAttribute("Key")
-
                                     pcall(function()
-                                        ProjectileRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), Vector3.new(enemyPos.X, enemyPos.Y, enemyPos.Z), weaponId, 0, fireTime)
-                                        AudioRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), "WeaponRangedAttack")
+                                        ProjectileRemote:InvokeServer(myPos, enemyPos, tool.Name, 0, fireTime)
+                                        AudioRemote:InvokeServer(myPos, "WeaponRangedAttack")
                                         DamageRemote:InvokeServer({
                                             IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
-                                            WeaponId = weaponId, FireTime = fireTime, IsHeavy = false,
-                                            TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = weaponKey,
-                                            Position = Vector3.new(myPos.X, myPos.Y, myPos.Z)
-                                        }, Vector3.new(myPos.X, myPos.Y, myPos.Z))
-                                        AudioRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), "WeaponRangedReload")
+                                            WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
+                                            TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = tool:GetAttribute("Key"),
+                                            Position = myPos
+                                        }, myPos)
+                                        AudioRemote:InvokeServer(myPos, "WeaponRangedReload")
                                     end)
                                 end
                             elseif colliderPart then
-                                -- ลอยเหนือ Collider 17 studs
                                 root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                             end
                         end
@@ -241,54 +240,34 @@ local function startMainLoop()
 end
 
 --============================--
--- INITIALIZATION FUNCTION
+-- INITIALIZATION
 --============================--
 local function initialize()
     enableFloat()
     enableNoclip()
-
     task.spawn(function()
         task.wait(3) 
-        
         if game.PlaceId == 74317689712426 then
-            local char = lp.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then
                 root.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578)
                 task.wait(0.2)
-                pcall(function()
-                    StartEarlyRemote:InvokeServer()
-                end)
+                pcall(function() StartEarlyRemote:InvokeServer() end)
             end
         else
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
             task.wait(0.1)
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
         end
-        
         startMainLoop()
     end)
 end
 
---============================--
--- TOGGLE EVENT
---============================--
 button.MouseButton1Click:Connect(function()
     running = not running
-    if running then
-        button.Text = "Ranged + Collider Lock : ON"
-        button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        enableFloat()
-        enableNoclip()
-        specialDoneCount = 0 
-    else
-        button.Text = "Ranged + Collider Lock : OFF"
-        button.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-        disableFloat()
-        disableNoclip()
-        table.clear(lootTimers)
-    end
+    button.Text = running and "Ranged + Priority Lock : ON" or "Ranged + Priority Lock : OFF"
+    button.BackgroundColor3 = running and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    if running then enableFloat() enableNoclip() specialDoneCount = 0 end
 end)
 
--- RUN IMMEDIATELY
 initialize()
