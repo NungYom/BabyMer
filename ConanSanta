@@ -33,7 +33,7 @@ button.Position = UDim2.new(0, 20, 0, 200)
 button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
 button.TextColor3 = Color3.new(1, 1, 1)
 button.TextScaled = true
-button.Text = "Ranged + Priority Lock : ON"
+button.Text = "Ranged + Fly Priority : ON"
 button.Parent = gui
 
 --============================--
@@ -50,80 +50,48 @@ local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
 local HOVER_HEIGHT_VALUE = -17 
 
 --============================--
--- HELPERS
---============================--
-local function getTool()
-    if lp.Character then
-        for _, v in pairs(lp.Character:GetChildren()) do
-            if v:IsA("Tool") then return v end
-        end
-    end
-end
-
-local function getBestTarget()
-    local gameFolder = workspace:FindFirstChild("Game")
-    local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
-    if not enemies then return end
-    
-    local char = lp.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
-    local myPos = char.HumanoidRootPart.Position
-    local priorityTarget = nil
-    local closestTarget = nil
-    local shortestDist = math.huge
-    local priorityShortestDist = math.huge
-
-    for _, enemy in pairs(enemies:GetChildren()) do
-        local root = enemy:FindFirstChild("HumanoidRootPart")
-        local hum = enemy:FindFirstChild("Humanoid")
-        
-        if root and hum and hum.Health > 0 then
-            local dist = (root.Position - myPos).Magnitude
-            if enemy.Name == "Enemy_GreenYeti" then
-                if dist < priorityShortestDist then
-                    priorityShortestDist = dist
-                    priorityTarget = enemy
-                end
-            end
-            if dist < shortestDist then
-                shortestDist = dist
-                closestTarget = enemy
-            end
-        end
-    end
-    return priorityTarget or closestTarget
-end
-
---============================--
--- SYSTEMS (LOOPED FLOAT & NOCLIP)
+-- SYSTEMS (LOOPED FLY & NOCLIP)
 --============================--
 
--- ฟังก์ชันจัดการ Float แบบ Loop
-local function startFloatLoop()
+-- ระบบ Fly ที่จะคอยเช็คและบังคับฟิสิกส์ตลอดเวลา
+local function startFlyLoop()
     task.spawn(function()
         while true do
-            if running then
-                local char = lp.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local bv = root:FindFirstChild("FloatVelocity")
-                    if not bv then
-                        bv = Instance.new("BodyVelocity")
-                        bv.Name = "FloatVelocity"
-                        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        bv.Velocity = Vector3.new(0, 0, 0)
-                        bv.Parent = root
-                    else
-                        bv.Velocity = Vector3.new(0, 0, 0)
-                    end
+            local char = lp.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if running and root then
+                -- จัดการ BodyVelocity (กันตก)
+                local bv = root:FindFirstChild("FlyVelocity")
+                if not bv then
+                    bv = Instance.new("BodyVelocity")
+                    bv.Name = "FlyVelocity"
+                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bv.Velocity = Vector3.new(0, 0, 0)
+                    bv.Parent = root
+                else
+                    bv.Velocity = Vector3.new(0, 0, 0)
+                end
+
+                -- จัดการ BodyGyro (กันตัวละครล้ม/เอียง)
+                local bg = root:FindFirstChild("FlyGyro")
+                if not bg then
+                    bg = Instance.new("BodyGyro")
+                    bg.Name = "FlyGyro"
+                    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    bg.D = 100
+                    bg.P = 3000
+                    bg.CFrame = root.CFrame
+                    bg.Parent = root
+                else
+                    -- บังคับให้หน้าตั้งตรงหรือหันตาม CFrame ที่เราสั่งใน Main Loop
+                    bg.CFrame = root.CFrame 
                 end
             else
-                -- ถ้าปิดสคริปต์ให้ลบแรงลอยออก
-                local char = lp.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
-                if root and root:FindFirstChild("FloatVelocity") then
-                    root.FloatVelocity:Destroy()
+                -- ถ้าปิดระบบ ให้ลบ Fly objects ทิ้ง
+                if root then
+                    if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+                    if root:FindFirstChild("FlyGyro") then root.FlyGyro:Destroy() end
                 end
             end
             task.wait(0.1)
@@ -143,7 +111,41 @@ local function enableNoclip()
 end
 
 --============================--
--- MAIN LOOP
+-- HELPERS (TARGETING)
+--============================--
+local function getBestTarget()
+    local gameFolder = workspace:FindFirstChild("Game")
+    local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
+    if not enemies then return end
+    
+    local myPos = lp.Character.HumanoidRootPart.Position
+    local priorityTarget, closestTarget = nil, nil
+    local pDist, cDist = math.huge, math.huge
+
+    for _, enemy in pairs(enemies:GetChildren()) do
+        local root = enemy:FindFirstChild("HumanoidRootPart")
+        local hum = enemy:FindFirstChild("Humanoid")
+        if root and hum and hum.Health > 0 then
+            local dist = (root.Position - myPos).Magnitude
+            if enemy.Name == "Enemy_GreenYeti" then
+                if dist < pDist then pDist = dist; priorityTarget = enemy end
+            end
+            if dist < cDist then cDist = dist; closestTarget = enemy end
+        end
+    end
+    return priorityTarget or closestTarget
+end
+
+local function getTool()
+    if lp.Character then
+        for _, v in pairs(lp.Character:GetChildren()) do
+            if v:IsA("Tool") then return v end
+        end
+    end
+end
+
+--============================--
+-- MAIN LOGIC
 --============================--
 local function startMainLoop()
     task.spawn(function()
@@ -158,6 +160,7 @@ local function startMainLoop()
                         colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
                     end)
 
+                    -- Special Logic (Tween 2 รอบ)
                     if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
                         for i = 1, 2 do
                             root.CFrame = CFrame.new(TP_TARGET)
@@ -168,31 +171,33 @@ local function startMainLoop()
                             specialDoneCount = specialDoneCount + 1
                         end
                     else
+                        -- พฤติกรรมปกติ: Fly ใต้รถ
                         local enemy = getBestTarget()
                         local basePos = (colliderPart and colliderPart.Position) or root.Position
-                        local hoverOffset = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
+                        local flyOffset = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
 
                         if enemy and enemy:FindFirstChild("HumanoidRootPart") then
                             local enemyPos = enemy.HumanoidRootPart.Position
-                            root.CFrame = CFrame.lookAt(basePos + hoverOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
+                            -- ล็อคตำแหน่งใต้รถ + หันหน้าหาศัตรู
+                            root.CFrame = CFrame.lookAt(basePos + flyOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
                             local tool = getTool()
                             if tool then
-                                local myPos = root.Position
                                 local fireTime = DateTime.now().UnixTimestampMillis / 1000
                                 pcall(function()
-                                    ProjectileRemote:InvokeServer(myPos, enemyPos, tool.Name, 0, fireTime)
-                                    AudioRemote:InvokeServer(myPos, "WeaponRangedAttack")
+                                    ProjectileRemote:InvokeServer(root.Position, enemyPos, tool.Name, 0, fireTime)
+                                    AudioRemote:InvokeServer(root.Position, "WeaponRangedAttack")
                                     DamageRemote:InvokeServer({
                                         IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
                                         WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
                                         TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = tool:GetAttribute("Key"),
-                                        Position = myPos
-                                    }, myPos)
-                                    AudioRemote:InvokeServer(myPos, "WeaponRangedReload")
+                                        Position = root.Position
+                                    }, root.Position)
+                                    AudioRemote:InvokeServer(root.Position, "WeaponRangedReload")
                                 end)
                             end
                         elseif colliderPart then
+                            -- ถ้าไม่มีศัตรู Fly นิ่งๆ ใต้รถ
                             root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                         end
                     end
@@ -208,10 +213,10 @@ end
 --============================--
 local function initialize()
     enableNoclip()
-    startFloatLoop() -- เริ่มระบบ Float แบบตรวจสอบตลอดเวลา
+    startFlyLoop()
     
     task.spawn(function()
-        task.wait(10)
+        task.wait(10) -- รอ 10 วิ ตามที่สั่ง
         
         if game.PlaceId == 74317689712426 then
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
@@ -231,12 +236,9 @@ end
 
 button.MouseButton1Click:Connect(function()
     running = not running
-    button.Text = running and "Ranged + Priority Lock : ON" or "Ranged + Priority Lock : OFF"
+    button.Text = running and "Ranged + Fly Priority : ON" or "Ranged + Fly Priority : OFF"
     button.BackgroundColor3 = running and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    if running then 
-        enableNoclip() 
-        specialDoneCount = 0 
-    end
+    if running then enableNoclip() specialDoneCount = 0 end
 end)
 
 initialize()
