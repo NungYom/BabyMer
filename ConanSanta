@@ -216,7 +216,7 @@ local function initialize()
     startFlyLoop()
     
     task.spawn(function()
-        task.wait(10) -- รอ 10 วิ ตามที่สั่ง
+        task.wait(4) -- รอ 4 วิ ตามที่สั่ง
         
         if game.PlaceId == 74317689712426 then
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
