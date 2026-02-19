@@ -48,7 +48,7 @@ local specialDoneCount = 0
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
 local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
 local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
-local HOVER_HEIGHT_VALUE = 17 
+local HOVER_HEIGHT_VALUE = -17 -- ปรับเป็นค่าลบเพื่อให้ตัวละครอยู่ใต้ Collider
 
 --============================--
 -- HELPERS
@@ -61,7 +61,6 @@ local function getTool()
     end
 end
 
--- ระบบหาศัตรูแบบลำดับความสำคัญ (GreenYeti First)
 local function getBestTarget()
     local gameFolder = workspace:FindFirstChild("Game")
     local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
@@ -82,24 +81,18 @@ local function getBestTarget()
         
         if root and hum and hum.Health > 0 then
             local dist = (root.Position - myPos).Magnitude
-            
-            -- เงื่อนไขที่ 1: ถ้าเจอ GreenYeti ให้เก็บไว้ในรายการ Priority
             if enemy.Name == "Enemy_GreenYeti" then
                 if dist < priorityShortestDist then
                     priorityShortestDist = dist
                     priorityTarget = enemy
                 end
             end
-            
-            -- เงื่อนไขที่ 2: หาตัวที่ใกล้ที่สุดเก็บไว้สำรอง
             if dist < shortestDist then
                 shortestDist = dist
                 closestTarget = enemy
             end
         end
     end
-
-    -- ส่งคืน GreenYeti ก่อน ถ้าไม่มีค่อยส่งตัวที่ใกล้ที่สุด
     return priorityTarget or closestTarget
 end
 
@@ -186,7 +179,6 @@ local function startMainLoop()
                         colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
                     end)
 
-                    -- 1. Special Logic
                     if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
                         for i = 1, 2 do
                             root.CFrame = CFrame.new(TP_TARGET)
@@ -197,19 +189,20 @@ local function startMainLoop()
                             specialDoneCount = specialDoneCount + 1
                         end
                     else
-                        -- 2. Normal Behavior
                         local lootMesh = getClosestTimedSafeLoot()
                         if lootMesh then
                             root.CFrame = lootMesh.CFrame
                             task.wait(0.3)
                         else
-                            local enemy = getBestTarget() -- ใช้ฟังก์ชัน Priority ใหม่
+                            local enemy = getBestTarget()
                             local basePos = (colliderPart and colliderPart.Position) or root.Position
-                            local hoverHeight = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
+                            -- ย้ายตำแหน่งตัวละครลงไปแกน Y ด้านล่าง (HOVER_HEIGHT_VALUE เป็น -17)
+                            local hoverOffset = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
 
                             if enemy and enemy:FindFirstChild("HumanoidRootPart") then
                                 local enemyPos = enemy.HumanoidRootPart.Position
-                                root.CFrame = CFrame.lookAt(basePos + hoverHeight, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
+                                -- ตัวละครอยู่ข้างล่าง แต่หันหน้ามองไปที่ศัตรู
+                                root.CFrame = CFrame.lookAt(basePos + hoverOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
                                 local tool = getTool()
                                 if tool then
@@ -228,6 +221,7 @@ local function startMainLoop()
                                     end)
                                 end
                             elseif colliderPart then
+                                -- ถ้าไม่มีศัตรู ให้ล็อคตัวอยู่ใต้ Collider ตลอดเวลา
                                 root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                             end
                         end
@@ -246,7 +240,8 @@ local function initialize()
     enableFloat()
     enableNoclip()
     task.spawn(function()
-        task.wait(3) 
+        task.wait(10) -- ปรับเป็น 10 วินาทีตามที่ขอครับ
+        
         if game.PlaceId == 74317689712426 then
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then
