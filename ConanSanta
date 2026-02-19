@@ -1,0 +1,294 @@
+--============================--
+-- SERVICES
+--============================--
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local lp = Players.LocalPlayer
+
+--============================--
+-- REMOTES (KNIT)
+--============================--
+local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
+local KnitServices = KnitPkg:WaitForChild("Services")
+
+local ProjectileRemote = KnitServices:WaitForChild("ProjectileService"):WaitForChild("RF"):WaitForChild("FireToOthers")
+local AudioRemote = KnitServices:WaitForChild("AudioPlaybackService"):WaitForChild("RF"):WaitForChild("PlayFromClient")
+local DamageRemote = KnitServices:WaitForChild("DamageService"):WaitForChild("RF"):WaitForChild("HandleHit")
+local StartEarlyRemote = KnitServices:WaitForChild("CaravanService"):WaitForChild("RF"):WaitForChild("StartEarly")
+
+--============================--
+-- GUI
+--============================--
+local gui = Instance.new("ScreenGui")
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 260, 0, 55)
+button.Position = UDim2.new(0, 20, 0, 200)
+button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextScaled = true
+button.Text = "Ranged + Collider Lock : ON"
+button.Parent = gui
+
+--============================--
+-- CONFIG & STATE
+--============================--
+local running = true 
+local floatForce
+local noclipConnection
+local lootTimers = {}
+local specialDoneCount = 0 
+
+local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
+local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
+local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
+local HOVER_HEIGHT_VALUE = 15 -- ปรับจาก 35 เป็น 15 ตามคำขอ
+
+--============================--
+-- HELPERS
+--============================--
+local function getTool()
+    if lp.Character then
+        for _, v in pairs(lp.Character:GetChildren()) do
+            if v:IsA("Tool") then return v end
+        end
+    end
+end
+
+local function getClosestEnemy()
+    local gameFolder = workspace:FindFirstChild("Game")
+    local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
+    if not enemies then return end
+    
+    local char = lp.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    local myPos = char.HumanoidRootPart.Position
+    local closest, shortest = nil, math.huge
+
+    for _, enemy in pairs(enemies:GetChildren()) do
+        if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+            local dist = (enemy.HumanoidRootPart.Position - myPos).Magnitude
+            if dist < shortest then
+                shortest = dist
+                closest = enemy
+            end
+        end
+    end
+    return closest
+end
+
+local function getClosestTimedSafeLoot()
+    local gameFolder = workspace:FindFirstChild("Game")
+    local debris = gameFolder and gameFolder:FindFirstChild("Debris")
+    if not debris then return end
+
+    local char = lp.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    local myPos = char.HumanoidRootPart.Position
+    local currentTime = tick()
+    local closestLoot, shortestDist = nil, math.huge
+
+    for _, bag in pairs(debris:GetChildren()) do
+        if bag.Name == "Lootbag" then
+            local mesh = bag:FindFirstChild("Meshes/LootsackLP")
+            if mesh and mesh:IsA("BasePart") then
+                local safe = true
+                local enemies = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Enemies")
+                if enemies then
+                    for _, enemy in pairs(enemies:GetChildren()) do
+                        if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                            if (enemy.HumanoidRootPart.Position - mesh.Position).Magnitude <= 15 then
+                                safe = false; break
+                            end
+                        end
+                    end
+                end
+
+                if safe then
+                    if not lootTimers[bag] then lootTimers[bag] = currentTime end
+                    if (currentTime - lootTimers[bag]) >= 5 then
+                        local dist = (mesh.Position - myPos).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            closestLoot = mesh
+                        end
+                    end
+                else
+                    lootTimers[bag] = nil
+                end
+            end
+        end
+    end
+    return closestLoot
+end
+
+--============================--
+-- SYSTEMS (FLOAT & NOCLIP)
+--============================--
+local function enableFloat()
+    local char = lp.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    if floatForce then floatForce:Destroy() end
+    floatForce = Instance.new("BodyVelocity")
+    floatForce.Velocity = Vector3.new(0, 0, 0)
+    floatForce.MaxForce = Vector3.new(0, math.huge, 0)
+    floatForce.Parent = char.HumanoidRootPart
+end
+
+local function disableFloat()
+    if floatForce then floatForce:Destroy() floatForce = nil end
+end
+
+local function enableNoclip()
+    if noclipConnection then noclipConnection:Disconnect() end
+    noclipConnection = RunService.Stepped:Connect(function()
+        if lp.Character then
+            for _, v in pairs(lp.Character:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end)
+end
+
+local function disableNoclip()
+    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
+end
+
+--============================--
+-- MAIN LOOP
+--============================--
+local function startMainLoop()
+    task.spawn(function()
+        while true do
+            if running then
+                local char = lp.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if root then
+                    local colliderPart = nil
+                    pcall(function()
+                        colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
+                    end)
+
+                    -- 1. Special Logic (2 รอบ)
+                    if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
+                        for i = 1, 2 do
+                            root.CFrame = CFrame.new(TP_TARGET)
+                            task.wait(0.2)
+                            
+                            local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Linear)
+                            local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(TWEEN_TARGET)})
+                            tween:Play()
+                            tween.Completed:Wait()
+                            
+                            specialDoneCount = specialDoneCount + 1
+                            if specialDoneCount >= 2 then break end
+                        end
+                    else
+                        -- 2. Normal Behavior
+                        local lootMesh = getClosestTimedSafeLoot()
+                        if lootMesh then
+                            root.CFrame = lootMesh.CFrame
+                            task.wait(0.3)
+                        else
+                            local enemy = getClosestEnemy()
+                            local basePos = (colliderPart and colliderPart.Position) or root.Position
+                            local hoverHeight = Vector3.new(0, HOVER_HEIGHT_VALUE, 0)
+
+                            if enemy and enemy:FindFirstChild("HumanoidRootPart") then
+                                -- หันหน้าหาศัตรูในระดับความสูง 15 studs
+                                local enemyPos = enemy.HumanoidRootPart.Position
+                                root.CFrame = CFrame.lookAt(basePos + hoverHeight, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
+
+                                local tool = getTool()
+                                if tool then
+                                    local myPos = root.Position
+                                    local fireTime = DateTime.now().UnixTimestampMillis / 1000
+                                    local weaponId = tool.Name
+                                    local weaponKey = tool:GetAttribute("Key")
+
+                                    pcall(function()
+                                        ProjectileRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), Vector3.new(enemyPos.X, enemyPos.Y, enemyPos.Z), weaponId, 0, fireTime)
+                                        AudioRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), "WeaponRangedAttack")
+                                        DamageRemote:InvokeServer({
+                                            IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
+                                            WeaponId = weaponId, FireTime = fireTime, IsHeavy = false,
+                                            TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = weaponKey,
+                                            Position = Vector3.new(myPos.X, myPos.Y, myPos.Z)
+                                        }, Vector3.new(myPos.X, myPos.Y, myPos.Z))
+                                        AudioRemote:InvokeServer(Vector3.new(myPos.X, myPos.Y, myPos.Z), "WeaponRangedReload")
+                                    end)
+                                end
+                            elseif colliderPart then
+                                -- ลอยเหนือ Collider 15 studs
+                                root.CFrame = colliderPart.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(0.05)
+        end
+    end)
+end
+
+--============================--
+-- INITIALIZATION FUNCTION
+--============================--
+local function initialize()
+    enableFloat()
+    enableNoclip()
+
+    task.spawn(function()
+        task.wait(3) 
+        
+        if game.PlaceId == 74317689712426 then
+            local char = lp.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578)
+                task.wait(0.2)
+                pcall(function()
+                    StartEarlyRemote:InvokeServer()
+                end)
+            end
+        else
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            task.wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+        end
+        
+        startMainLoop()
+    end)
+end
+
+--============================--
+-- TOGGLE EVENT
+--============================--
+button.MouseButton1Click:Connect(function()
+    running = not running
+    if running then
+        button.Text = "Ranged + Collider Lock : ON"
+        button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        enableFloat()
+        enableNoclip()
+        specialDoneCount = 0 
+    else
+        button.Text = "Ranged + Collider Lock : OFF"
+        button.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        disableFloat()
+        disableNoclip()
+        table.clear(lootTimers)
+    end
+end)
+
+-- RUN IMMEDIATELY
+initialize()
