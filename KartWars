@@ -1,0 +1,108 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- === 1. สร้างหน้าจอ GUI ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CheatMenu_V3"
+screenGui.ResetOnSpawn = false -- ให้เมนูอยู่ตลอดแม้ตายแล้ว
+screenGui.Parent = playerGui
+
+local farmBtn = Instance.new("TextButton")
+farmBtn.Size = UDim2.new(0, 200, 0, 50)
+farmBtn.Position = UDim2.new(0, 50, 0, 50)
+farmBtn.Text = "Farm ItemBox: OFF"
+farmBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+farmBtn.TextColor3 = Color3.new(1,1,1)
+farmBtn.Parent = screenGui
+
+local tpBtn = Instance.new("TextButton")
+tpBtn.Size = UDim2.new(0, 200, 0, 50)
+tpBtn.Position = UDim2.new(0, 50, 0, 110)
+tpBtn.Text = "TP: Run Checkpoints"
+tpBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 250)
+tpBtn.TextColor3 = Color3.new(1,1,1)
+tpBtn.Parent = screenGui
+
+-- === 2. ตั้งค่าระบบ ===
+local isFarming = false
+local claimRemote = ReplicatedStorage:WaitForChild("Net"):WaitForChild("RF/ClaimItemBox")
+
+-- ฟังก์ชันสำหรับหาโฟลเดอร์แมพปัจจุบัน (DolphinDive หรืออื่นๆ)
+local function GetCurrentMapFolder()
+	local currentMap = workspace:FindFirstChild("CurrentMap")
+	if currentMap then
+		return currentMap:GetChildren()[1] -- ดึงโฟลเดอร์แรกที่เจอ (เช่น DolphinDive)
+	end
+	return nil
+end
+
+--- ปุ่มที่ 1: ระบบ Farm (แก้ Path ให้หาอัตโนมัติ) ---
+farmBtn.MouseButton1Click:Connect(function()
+	isFarming = not isFarming
+	farmBtn.Text = isFarming and "Farm ItemBox: ON" or "Farm ItemBox: OFF"
+	farmBtn.BackgroundColor3 = isFarming and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+	
+	if isFarming then
+		task.spawn(function()
+			while isFarming do
+				pcall(function()
+					local mapFolder = GetCurrentMapFolder()
+					local itemBox = mapFolder.Objects["Itemboxes (7)"].ItemBox
+					if itemBox then
+						claimRemote:InvokeServer(itemBox)
+					end
+				end)
+				task.wait(1)
+			end
+		end)
+	end
+end)
+
+--- ปุ่มที่ 2: ระบบ TP (แก้ให้หา Checkpoints อัตโนมัติ) ---
+tpBtn.MouseButton1Click:Connect(function()
+	local character = player.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	
+	if not hrp then 
+		warn("ไม่พบตัวละคร")
+		return 
+	end
+	
+	local mapFolder = GetCurrentMapFolder()
+	if not mapFolder or not mapFolder:FindFirstChild("Checkpoints") then
+		warn("ไม่พบโฟลเดอร์ Checkpoints")
+		return
+	end
+
+	local cpFolder = mapFolder.Checkpoints
+	local items = cpFolder:GetChildren()
+
+	-- เรียงลำดับชื่อเลข 1, 2, 3...
+	table.sort(items, function(a, b)
+		local numA = tonumber(a.Name) or 0
+		local numB = tonumber(b.Name) or 0
+		return numA < numB
+	end)
+
+	tpBtn.Active = false
+	tpBtn.Text = "TP Running..."
+
+	-- เริ่ม TP ไปแต่ละจุด
+	for _, cp in ipairs(items) do
+		if cp:IsA("BasePart") or cp:IsA("Model") then
+			-- ใช้ PivotTo เพื่อความชัวร์ในการย้ายตำแหน่ง
+			hrp.CFrame = cp:GetPivot() 
+			task.wait(0.4)
+		end
+	end
+
+	-- วนกลับมาจุดที่ 1
+	if #items > 0 then
+		hrp.CFrame = items[1]:GetPivot()
+	end
+	
+	tpBtn.Active = true
+	tpBtn.Text = "TP: Run Checkpoints"
+end)
