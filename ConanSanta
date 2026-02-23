@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- 1. รอจนกว่า Client จะโหลดข้อมูลเบื้องต้นจาก Server เสร็จ
+-- 1. รอจนกว่า Client จะโหลดข้อมูลโครงสร้างพื้นฐานเสร็จ
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
@@ -20,7 +20,7 @@ local lp = Players.LocalPlayer
 local ProjectileRemote, AudioRemote, DamageRemote, StartEarlyRemote
 
 local function setupRemotes()
-    local success, err = pcall(function()
+    local success = pcall(function()
         local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
         local KnitServices = KnitPkg:WaitForChild("Services")
         
@@ -64,7 +64,6 @@ local function getBestTarget()
         
         if eRoot and eHum and eHum.Health > 0 then
             local dist = (eRoot.Position - myPos).Magnitude
-            -- Priority: GreenYeti
             if enemy.Name == "Enemy_GreenYeti" and dist < priorityShortestDist then
                 priorityShortestDist = dist
                 priorityTarget = enemy
@@ -78,15 +77,26 @@ local function getBestTarget()
 end
 
 --============================--
--- INITIALIZATION LOGIC
+-- INITIALIZATION LOGIC (แก้ไขตามเงื่อนไขใหม่)
 --============================--
 
 local function runInitialization()
-    -- รอให้ตัวละครและชิ้นส่วนสำคัญโหลดเสร็จ
+    warn("Waiting for Character to spawn...")
+    -- 1. รอจนกว่าตัวละครจะเกิด (CharacterAdded)
     local char = lp.Character or lp.CharacterAdded:Wait()
-    local root = char:WaitForChild("HumanoidRootPart", 20)
     
-    -- พยายามดึง Remotes จนกว่าจะสำเร็จ (Retry loop)
+    -- 2. เมื่อเจอตัวละครแล้ว ให้รออีก 5 วินาทีตามที่ต้องการ
+    warn("Character detected! Waiting additional 5 seconds before starting...")
+    task.wait(5)
+    
+    -- 3. ตรวจสอบชิ้นส่วนสำคัญหลังจากรอเสร็จ
+    local root = char:WaitForChild("HumanoidRootPart", 10)
+    if not root then 
+        warn("Critical Error: HumanoidRootPart not found after waiting.")
+        return 
+    end
+
+    -- 4. พยายามดึง Remotes (Retry loop จนกว่า Knit จะพร้อม)
     local retries = 0
     while not ProjectileRemote and retries < 15 do
         setupRemotes()
@@ -94,10 +104,9 @@ local function runInitialization()
         retries = retries + 1
     end
 
-    -- ตรวจสอบเงื่อนไข PlaceId
+    -- 5. ตรวจสอบเงื่อนไข PlaceId
     if game.PlaceId == 74317689712426 then
-        warn("Detected Special Place: Auto-Teleporting...")
-        -- วาร์ปซ้ำป้องกันการโดนดีดกลับตอนโหลดแมพ
+        warn("Special Place: Executing Auto-Teleport...")
         for i = 1, 5 do
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 lp.Character.HumanoidRootPart.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578)
@@ -105,13 +114,12 @@ local function runInitialization()
             task.wait(0.5)
         end
         
-        -- เรียกใช้ StartEarly
         if StartEarlyRemote then
             pcall(function() StartEarlyRemote:InvokeServer() end)
         end
     else
-        warn("Detected General Place: Equipping Tool...")
-        task.wait(2)
+        warn("General Place: Equipping Tool...")
+        -- กดเลข 1 เพื่อหยิบดาบ/ปืน
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
@@ -123,7 +131,6 @@ end
 --============================--
 
 task.spawn(function()
-    -- รันการตั้งค่าเริ่มต้นก่อนเข้า Loop
     runInitialization()
 
     while true do
@@ -132,12 +139,12 @@ task.spawn(function()
             local root = char and char:FindFirstChild("HumanoidRootPart")
 
             if root then
-                -- 1. Noclip (ทำทุก Frame เพื่อให้พาร์ทใหม่ๆ ไม่ติดคอลลิชัน)
+                -- Noclip
                 for _, v in pairs(char:GetDescendants()) do
                     if v:IsA("BasePart") then v.CanCollide = false end
                 end
 
-                -- 2. Float System
+                -- Float System (BodyVelocity)
                 local bv = root:FindFirstChild("FloatVelocity")
                 if not bv then
                     bv = Instance.new("BodyVelocity")
@@ -149,7 +156,7 @@ task.spawn(function()
                     bv.Velocity = Vector3.zero
                 end
 
-                -- 3. Wagon & Special Position Logic
+                -- Wagon Logic
                 local wagon = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Objectives"):FindFirstChild("EscortWagon")
                 local collider = wagon and wagon.Character:FindFirstChild("Collider")
 
@@ -161,16 +168,14 @@ task.spawn(function()
                     tween.Completed:Wait()
                     specialDoneCount = specialDoneCount + 1
                 else
-                    -- 4. Combat Logic
+                    -- Combat Logic
                     local target = getBestTarget()
                     local basePos = (collider and collider.Position) or root.Position
                     
                     if target and target:FindFirstChild("HumanoidRootPart") then
                         local tPos = target.HumanoidRootPart.Position
-                        -- หันหน้าไปหาศัตรูแต่ลอยอยู่ที่ระดับเดิม
                         root.CFrame = CFrame.lookAt(basePos + Vector3.new(0, HOVER_HEIGHT_VALUE, 0), Vector3.new(tPos.X, basePos.Y + HOVER_HEIGHT_VALUE, tPos.Z))
                         
-                        -- โจมตี
                         local tool = char:FindFirstChildOfClass("Tool")
                         if tool and ProjectileRemote then
                             local fireTime = DateTime.now().UnixTimestampMillis / 1000
@@ -187,7 +192,6 @@ task.spawn(function()
                             end)
                         end
                     elseif collider then
-                        -- กรณีไม่มีเป้าหมาย ให้เกาะไปกับรถ
                         root.CFrame = collider.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                     end
                 end
@@ -220,7 +224,6 @@ button.MouseButton1Click:Connect(function()
     button.BackgroundColor3 = running and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
     
     if not running then
-        -- ล้างสถานะ Float เมื่อปิด
         local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
         if root and root:FindFirstChild("FloatVelocity") then
             root.FloatVelocity:Destroy()
