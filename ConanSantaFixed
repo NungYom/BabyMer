@@ -1,26 +1,53 @@
 --============================--
--- SERVICES
+-- 1. SERVICE INITIALIZATION (เบื้องต้น)
 --============================--
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- 1. รอจนกว่า Client จะโหลดข้อมูลโครงสร้างพื้นฐานเสร็จ
+local lp = Players.LocalPlayer
+
+-- ประกาศตัวแปร Remote สำหรับ Knit ไว้ก่อน
+local ProjectileRemote, AudioRemote, DamageRemote, StartEarlyRemote
+
+--============================--
+-- 2. GUI (สร้างทันทีเพื่อให้ผู้ใช้รู้ว่าสคริปต์โหลดแล้ว)
+--============================--
+local playerGui = lp:WaitForChild("PlayerGui")
+local gui = Instance.new("ScreenGui", playerGui)
+gui.Name = "Gemini_Stability_System"
+gui.ResetOnSpawn = false
+
+local button = Instance.new("TextButton", gui)
+button.Size = UDim2.new(0, 260, 0, 55)
+button.Position = UDim2.new(0, 20, 0, 200)
+button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+button.TextScaled = true
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Text = "SYSTEM LOADING..." -- ตั้งสถานะเริ่มต้นเป็นกำลังโหลด
+
+--============================--
+-- 3. CHARACTER WAIT & THE 5-SECOND DELAY (คั่นกลางเพื่อความเสถียร)
+--============================--
+warn("Step 1: Waiting for Character...")
+local char = lp.Character or lp.CharacterAdded:Wait()
+
+warn("Step 2: Character found! Waiting additional 5 seconds for stability...")
+task.wait(5)
+
+--============================--
+-- 4. GAME LOAD CHECK & REMOTES SETUP
+--============================--
+warn("Step 3: Checking Game Load status...")
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-local lp = Players.LocalPlayer
-
---============================--
--- REMOTES (KNIT) SETUP
---============================--
-local ProjectileRemote, AudioRemote, DamageRemote, StartEarlyRemote
-
 local function setupRemotes()
     local success = pcall(function()
+        -- รอ Knit Packages ให้ปรากฏในเครื่องเรา
         local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
         local KnitServices = KnitPkg:WaitForChild("Services")
         
@@ -45,7 +72,6 @@ local HOVER_HEIGHT_VALUE = -17
 --============================--
 -- HELPERS
 --============================--
-
 local function getBestTarget()
     local gameFolder = workspace:FindFirstChild("Game")
     local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
@@ -61,7 +87,6 @@ local function getBestTarget()
     for _, enemy in pairs(enemies:GetChildren()) do
         local eRoot = enemy:FindFirstChild("HumanoidRootPart")
         local eHum = enemy:FindFirstChild("Humanoid")
-        
         if eRoot and eHum and eHum.Health > 0 then
             local dist = (eRoot.Position - myPos).Magnitude
             if enemy.Name == "Enemy_GreenYeti" and dist < priorityShortestDist then
@@ -77,26 +102,10 @@ local function getBestTarget()
 end
 
 --============================--
--- INITIALIZATION LOGIC (แก้ไขตามเงื่อนไขใหม่)
+-- MAIN ENGINE (INITIALIZE & LOOP)
 --============================--
-
-local function runInitialization()
-    warn("Waiting for Character to spawn...")
-    -- 1. รอจนกว่าตัวละครจะเกิด (CharacterAdded)
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    
-    -- 2. เมื่อเจอตัวละครแล้ว ให้รออีก 5 วินาทีตามที่ต้องการ
-    warn("Character detected! Waiting additional 5 seconds before starting...")
-    task.wait(5)
-    
-    -- 3. ตรวจสอบชิ้นส่วนสำคัญหลังจากรอเสร็จ
-    local root = char:WaitForChild("HumanoidRootPart", 10)
-    if not root then 
-        warn("Critical Error: HumanoidRootPart not found after waiting.")
-        return 
-    end
-
-    -- 4. พยายามดึง Remotes (Retry loop จนกว่า Knit จะพร้อม)
+task.spawn(function()
+    -- พยายามดึง Remotes จนกว่าจะสำเร็จ
     local retries = 0
     while not ProjectileRemote and retries < 15 do
         setupRemotes()
@@ -104,59 +113,46 @@ local function runInitialization()
         retries = retries + 1
     end
 
-    -- 5. ตรวจสอบเงื่อนไข PlaceId
+    -- ปรับสถานะปุ่มเมื่อพร้อมทำงาน
+    button.Text = "Ranged + Priority Lock : ON"
+    warn("Step 4: Everything is ready. Starting Main Logic!")
+
+    -- Place Specific Logic
     if game.PlaceId == 74317689712426 then
-        warn("Special Place: Executing Auto-Teleport...")
-        for i = 1, 5 do
-            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                lp.Character.HumanoidRootPart.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578)
-            end
+        warn("Special Place Logic Triggered")
+        for i = 1, 3 do
+            local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if root then root.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578) end
             task.wait(0.5)
         end
-        
-        if StartEarlyRemote then
-            pcall(function() StartEarlyRemote:InvokeServer() end)
-        end
+        if StartEarlyRemote then pcall(function() StartEarlyRemote:InvokeServer() end) end
     else
-        warn("General Place: Equipping Tool...")
-        -- กดเลข 1 เพื่อหยิบดาบ/ปืน
+        warn("General Place Logic Triggered")
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
     end
-end
 
---============================--
--- MAIN ENGINE (LOOP)
---============================--
-
-task.spawn(function()
-    runInitialization()
-
+    -- LOOP การทำงานหลัก
     while true do
         if running then
-            local char = lp.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local character = lp.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
 
             if root then
-                -- Noclip
-                for _, v in pairs(char:GetDescendants()) do
+                -- Noclip (ทำซ้ำทุกเฟรมเพื่อความชัวร์)
+                for _, v in pairs(character:GetDescendants()) do
                     if v:IsA("BasePart") then v.CanCollide = false end
                 end
 
-                -- Float System (BodyVelocity)
-                local bv = root:FindFirstChild("FloatVelocity")
-                if not bv then
-                    bv = Instance.new("BodyVelocity")
-                    bv.Name = "FloatVelocity"
-                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    bv.Velocity = Vector3.zero
-                    bv.Parent = root
-                else
-                    bv.Velocity = Vector3.zero
-                end
+                -- Float (BodyVelocity)
+                local bv = root:FindFirstChild("FloatVelocity") or Instance.new("BodyVelocity")
+                bv.Name = "FloatVelocity"
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bv.Velocity = Vector3.zero
+                bv.Parent = root
 
-                -- Wagon Logic
+                -- Objective Logic
                 local wagon = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Objectives"):FindFirstChild("EscortWagon")
                 local collider = wagon and wagon.Character:FindFirstChild("Collider")
 
@@ -176,19 +172,16 @@ task.spawn(function()
                         local tPos = target.HumanoidRootPart.Position
                         root.CFrame = CFrame.lookAt(basePos + Vector3.new(0, HOVER_HEIGHT_VALUE, 0), Vector3.new(tPos.X, basePos.Y + HOVER_HEIGHT_VALUE, tPos.Z))
                         
-                        local tool = char:FindFirstChildOfClass("Tool")
+                        local tool = character:FindFirstChildOfClass("Tool")
                         if tool and ProjectileRemote then
                             local fireTime = DateTime.now().UnixTimestampMillis / 1000
                             pcall(function()
                                 ProjectileRemote:InvokeServer(root.Position, tPos, tool.Name, 0, fireTime)
-                                AudioRemote:InvokeServer(root.Position, "WeaponRangedAttack")
                                 DamageRemote:InvokeServer({
                                     IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = target.Name,
-                                    WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
-                                    TargetItem = target.Humanoid, WeaponKey = tool:GetAttribute("Key"),
-                                    Position = root.Position
+                                    WeaponId = tool.Name, FireTime = fireTime, TargetItem = target.Humanoid,
+                                    WeaponKey = tool:GetAttribute("Key"), Position = root.Position
                                 }, root.Position)
-                                AudioRemote:InvokeServer(root.Position, "WeaponRangedReload")
                             end)
                         end
                     elseif collider then
@@ -202,22 +195,8 @@ task.spawn(function()
 end)
 
 --============================--
--- GUI SYSTEM
+-- 5. GUI INTERACTION
 --============================--
-local playerGui = lp:WaitForChild("PlayerGui")
-local gui = Instance.new("ScreenGui", playerGui)
-gui.Name = "GeminiController"
-gui.ResetOnSpawn = false
-
-local button = Instance.new("TextButton", gui)
-button.Size = UDim2.new(0, 260, 0, 55)
-button.Position = UDim2.new(0, 20, 0, 200)
-button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-button.TextColor3 = Color3.new(1, 1, 1)
-button.TextScaled = true
-button.Text = "Ranged + Priority Lock : ON"
-button.Parent = gui
-
 button.MouseButton1Click:Connect(function()
     running = not running
     button.Text = "Ranged + Priority Lock : " .. (running and "ON" or "OFF")
@@ -225,8 +204,6 @@ button.MouseButton1Click:Connect(function()
     
     if not running then
         local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-        if root and root:FindFirstChild("FloatVelocity") then
-            root.FloatVelocity:Destroy()
-        end
+        if root and root:FindFirstChild("FloatVelocity") then root.FloatVelocity:Destroy() end
     end
 end)
