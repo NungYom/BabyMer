@@ -7,25 +7,40 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
+-- รอจนกว่าเกมจะโหลดเสร็จสมบูรณ์
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
 local lp = Players.LocalPlayer
+-- ตรวจสอบให้แน่ใจว่ามี PlayerGui ก่อนสร้าง UI
+local playerGui = lp:WaitForChild("PlayerGui", 20)
 
 --============================--
 -- REMOTES (KNIT)
 --============================--
-local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
-local KnitServices = KnitPkg:WaitForChild("Services")
+-- ใช้ pcall เพื่อป้องกันสคริปต์พังหากหา Knit ไม่เจอ
+local success, err = pcall(function()
+    local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
+    local KnitServices = KnitPkg:WaitForChild("Services")
+    
+    ProjectileRemote = KnitServices:WaitForChild("ProjectileService"):WaitForChild("RF"):WaitForChild("FireToOthers")
+    AudioRemote = KnitServices:WaitForChild("AudioPlaybackService"):WaitForChild("RF"):WaitForChild("PlayFromClient")
+    DamageRemote = KnitServices:WaitForChild("DamageService"):WaitForChild("RF"):WaitForChild("HandleHit")
+    StartEarlyRemote = KnitServices:WaitForChild("CaravanService"):WaitForChild("RF"):WaitForChild("StartEarly")
+end)
 
-local ProjectileRemote = KnitServices:WaitForChild("ProjectileService"):WaitForChild("RF"):WaitForChild("FireToOthers")
-local AudioRemote = KnitServices:WaitForChild("AudioPlaybackService"):WaitForChild("RF"):WaitForChild("PlayFromClient")
-local DamageRemote = KnitServices:WaitForChild("DamageService"):WaitForChild("RF"):WaitForChild("HandleHit")
-local StartEarlyRemote = KnitServices:WaitForChild("CaravanService"):WaitForChild("RF"):WaitForChild("StartEarly")
+if not success then
+    warn("Failed to initialize Remotes: ", err)
+end
 
 --============================--
 -- GUI
 --============================--
 local gui = Instance.new("ScreenGui")
+gui.Name = "KnitControllerGui"
 gui.ResetOnSpawn = false
-gui.Parent = lp:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 
 local button = Instance.new("TextButton")
 button.Size = UDim2.new(0, 260, 0, 55)
@@ -41,7 +56,6 @@ button.Parent = gui
 --============================--
 local running = true 
 local noclipConnection
-local lootTimers = {}
 local specialDoneCount = 0 
 
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
@@ -53,26 +67,24 @@ local HOVER_HEIGHT_VALUE = -17
 -- HELPERS
 --============================--
 local function getTool()
-    if lp.Character then
-        for _, v in pairs(lp.Character:GetChildren()) do
-            if v:IsA("Tool") then return v end
-        end
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    for _, v in pairs(char:GetChildren()) do
+        if v:IsA("Tool") then return v end
     end
 end
 
 local function getBestTarget()
     local gameFolder = workspace:FindFirstChild("Game")
     local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
-    if not enemies then return end
+    if not enemies then return nil end
     
     local char = lp.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil end
 
-    local myPos = char.HumanoidRootPart.Position
-    local priorityTarget = nil
-    local closestTarget = nil
-    local shortestDist = math.huge
-    local priorityShortestDist = math.huge
+    local myPos = rootPart.Position
+    local priorityTarget, closestTarget = nil, nil
+    local shortestDist, priorityShortestDist = math.huge, math.huge
 
     for _, enemy in pairs(enemies:GetChildren()) do
         local root = enemy:FindFirstChild("HumanoidRootPart")
@@ -96,10 +108,9 @@ local function getBestTarget()
 end
 
 --============================--
--- SYSTEMS (LOOPED FLOAT & NOCLIP)
+-- SYSTEMS
 --============================--
 
--- ฟังก์ชันจัดการ Float แบบ Loop
 local function startFloatLoop()
     task.spawn(function()
         while true do
@@ -107,19 +118,13 @@ local function startFloatLoop()
                 local char = lp.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
                 if root then
-                    local bv = root:FindFirstChild("FloatVelocity")
-                    if not bv then
-                        bv = Instance.new("BodyVelocity")
-                        bv.Name = "FloatVelocity"
-                        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        bv.Velocity = Vector3.new(0, 0, 0)
-                        bv.Parent = root
-                    else
-                        bv.Velocity = Vector3.new(0, 0, 0)
-                    end
+                    local bv = root:FindFirstChild("FloatVelocity") or Instance.new("BodyVelocity")
+                    bv.Name = "FloatVelocity"
+                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bv.Velocity = Vector3.zero
+                    bv.Parent = root
                 end
             else
-                -- ถ้าปิดสคริปต์ให้ลบแรงลอยออก
                 local char = lp.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
                 if root and root:FindFirstChild("FloatVelocity") then
@@ -134,7 +139,7 @@ end
 local function enableNoclip()
     if noclipConnection then noclipConnection:Disconnect() end
     noclipConnection = RunService.Stepped:Connect(function()
-        if lp.Character then
+        if running and lp.Character then
             for _, v in pairs(lp.Character:GetDescendants()) do
                 if v:IsA("BasePart") then v.CanCollide = false end
             end
@@ -153,10 +158,11 @@ local function startMainLoop()
                 local root = char and char:FindFirstChild("HumanoidRootPart")
                 
                 if root then
-                    local colliderPart = nil
-                    pcall(function()
-                        colliderPart = workspace.Game.Objectives.EscortWagon.Character:FindFirstChild("Collider")
-                    end)
+                    local wagon = workspace:FindFirstChild("Game") 
+                        and workspace.Game:FindFirstChild("Objectives") 
+                        and workspace.Game.Objectives:FindFirstChild("EscortWagon")
+                    
+                    local colliderPart = wagon and wagon.Character:FindFirstChild("Collider")
 
                     if colliderPart and (colliderPart.Position - CHECK_POS).Magnitude <= 5 and specialDoneCount < 2 then
                         for i = 1, 2 do
@@ -177,19 +183,18 @@ local function startMainLoop()
                             root.CFrame = CFrame.lookAt(basePos + hoverOffset, Vector3.new(enemyPos.X, basePos.Y + HOVER_HEIGHT_VALUE, enemyPos.Z))
 
                             local tool = getTool()
-                            if tool then
-                                local myPos = root.Position
+                            if tool and ProjectileRemote then
                                 local fireTime = DateTime.now().UnixTimestampMillis / 1000
                                 pcall(function()
-                                    ProjectileRemote:InvokeServer(myPos, enemyPos, tool.Name, 0, fireTime)
-                                    AudioRemote:InvokeServer(myPos, "WeaponRangedAttack")
+                                    ProjectileRemote:InvokeServer(root.Position, enemyPos, tool.Name, 0, fireTime)
+                                    AudioRemote:InvokeServer(root.Position, "WeaponRangedAttack")
                                     DamageRemote:InvokeServer({
                                         IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = enemy.Name,
                                         WeaponId = tool.Name, FireTime = fireTime, IsHeavy = false,
                                         TargetItem = enemy:FindFirstChild("Humanoid"), WeaponKey = tool:GetAttribute("Key"),
-                                        Position = myPos
-                                    }, myPos)
-                                    AudioRemote:InvokeServer(myPos, "WeaponRangedReload")
+                                        Position = root.Position
+                                    }, root.Position)
+                                    AudioRemote:InvokeServer(root.Position, "WeaponRangedReload")
                                 end)
                             end
                         elseif colliderPart then
@@ -207,20 +212,24 @@ end
 -- INITIALIZATION
 --============================--
 local function initialize()
-    enableNoclip()
-    startFloatLoop() -- เริ่มระบบ Float แบบตรวจสอบตลอดเวลา
+    -- รอตัวละครโหลดอย่างน้อยหนึ่งครั้ง
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    char:WaitForChild("HumanoidRootPart", 10)
     
-    task.spawn(function()
-        task.wait(10)
-        
+    enableNoclip()
+    startFloatLoop()
+    
+    -- ทำงานหลังโหลด 5 วินาที (ลดจาก 10 เพราะเรามี IsLoaded ช่วยแล้ว)
+    task.delay(5, function()
         if game.PlaceId == 74317689712426 then
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then
                 root.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578)
-                task.wait(0.2)
-                pcall(function() StartEarlyRemote:InvokeServer() end)
+                task.wait(0.5)
+                if StartEarlyRemote then pcall(function() StartEarlyRemote:InvokeServer() end) end
             end
         else
+            -- กดเลข 1 เพื่อหยิบอาวุธ
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
             task.wait(0.1)
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
@@ -234,9 +243,9 @@ button.MouseButton1Click:Connect(function()
     button.Text = running and "Ranged + Priority Lock : ON" or "Ranged + Priority Lock : OFF"
     button.BackgroundColor3 = running and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
     if running then 
-        enableNoclip() 
         specialDoneCount = 0 
     end
 end)
 
+-- รันสคริปต์
 initialize()
