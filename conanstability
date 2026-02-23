@@ -1,87 +1,125 @@
 --============================--
--- 1. INITIAL SERVICE SETUP
+-- 1. SERVICE INITIALIZATION (เบื้องต้น)
 --============================--
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local lp = Players.LocalPlayer
 
+-- ประกาศตัวแปร Remote สำหรับ Knit ไว้ก่อน
+local ProjectileRemote, AudioRemote, DamageRemote, StartEarlyRemote
+
 --============================--
--- 2. GUI SYSTEM (แสดงทันทีเพื่อให้รู้ว่า Script ทำงาน)
+-- 2. GUI (สร้างทันทีเพื่อให้ผู้ใช้รู้ว่าสคริปต์โหลดแล้ว)
 --============================--
 local playerGui = lp:WaitForChild("PlayerGui")
 local gui = Instance.new("ScreenGui", playerGui)
-gui.Name = "Gemini_Stability_Pro"
+gui.Name = "Gemini_Stability_System"
 gui.ResetOnSpawn = false
 
 local button = Instance.new("TextButton", gui)
 button.Size = UDim2.new(0, 260, 0, 55)
 button.Position = UDim2.new(0, 20, 0, 200)
-button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-button.TextColor3 = Color3.new(1, 1, 1)
+button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
 button.TextScaled = true
-button.Text = "WAITING FOR CHARACTER..."
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Text = "SYSTEM LOADING..." -- ตั้งสถานะเริ่มต้นเป็นกำลังโหลด
 
 --============================--
--- 3. INITIALIZATION ENGINE
+-- 3. CHARACTER WAIT & THE 5-SECOND DELAY (คั่นกลางเพื่อความเสถียร)
 --============================--
-local ProjectileRemote, AudioRemote, DamageRemote, StartEarlyRemote
-local running = true
-local specialDoneCount = 0
-local HOVER_HEIGHT_VALUE = -17
+warn("Step 1: Waiting for Character...")
+local char = lp.Character or lp.CharacterAdded:Wait()
+
+warn("Step 2: Character found! Waiting additional 5 seconds for stability...")
+task.wait(5)
+
+--============================--
+-- 4. GAME LOAD CHECK & REMOTES SETUP
+--============================--
+warn("Step 3: Checking Game Load status...")
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local function setupRemotes()
+    local success = pcall(function()
+        -- รอ Knit Packages ให้ปรากฏในเครื่องเรา
+        local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
+        local KnitServices = KnitPkg:WaitForChild("Services")
+        
+        ProjectileRemote = KnitServices:WaitForChild("ProjectileService"):WaitForChild("RF"):WaitForChild("FireToOthers")
+        AudioRemote = KnitServices:WaitForChild("AudioPlaybackService"):WaitForChild("RF"):WaitForChild("PlayFromClient")
+        DamageRemote = KnitServices:WaitForChild("DamageService"):WaitForChild("RF"):WaitForChild("HandleHit")
+        StartEarlyRemote = KnitServices:WaitForChild("CaravanService"):WaitForChild("RF"):WaitForChild("StartEarly")
+    end)
+    return success
+end
+
+--============================--
+-- CONFIG & STATE
+--============================--
+local running = true 
+local specialDoneCount = 0 
 local CHECK_POS = Vector3.new(159.381332, 175.252686, -150.63121)
 local TP_TARGET = Vector3.new(295.815918, 190, -143.153671)
 local TWEEN_TARGET = Vector3.new(295.815918, 200, -143.153671)
+local HOVER_HEIGHT_VALUE = -17 
 
+--============================--
+-- HELPERS
+--============================--
+local function getBestTarget()
+    local gameFolder = workspace:FindFirstChild("Game")
+    local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
+    if not enemies or not lp.Character then return end
+
+    local rootPart = lp.Character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    local myPos = rootPart.Position
+    local priorityTarget, closestTarget = nil, nil
+    local shortestDist, priorityShortestDist = math.huge, math.huge
+
+    for _, enemy in pairs(enemies:GetChildren()) do
+        local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+        local eHum = enemy:FindFirstChild("Humanoid")
+        if eRoot and eHum and eHum.Health > 0 then
+            local dist = (eRoot.Position - myPos).Magnitude
+            if enemy.Name == "Enemy_GreenYeti" and dist < priorityShortestDist then
+                priorityShortestDist = dist
+                priorityTarget = enemy
+            elseif dist < shortestDist then
+                shortestDist = dist
+                closestTarget = enemy
+            end
+        end
+    end
+    return priorityTarget or closestTarget
+end
+
+--============================--
+-- MAIN ENGINE (INITIALIZE & LOOP)
+--============================--
 task.spawn(function()
-    -- STEP A: รอตัวละครเกิด
-    warn("[STABILITY] Step 1: Waiting for CharacterAdded...")
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    
-    -- STEP B: รอเพิ่มอีก 5 วินาทีตามใจสั่ง (The 5-Second Delay)
-    warn("[STABILITY] Step 2: Character found! Cooling down for 5 seconds...")
-    button.Text = "STABILIZING (5s)..."
-    task.wait(5)
-
-    -- STEP C: เช็คสถานะ Game Load
-    warn("[STABILITY] Step 3: Checking game:IsLoaded()...")
-    if not game:IsLoaded() then
-        game.Loaded:Wait()
-    end
-
-    -- STEP D: ตรวจสอบความพร้อมของ Knit และ Remote (Retry Loop)
-    warn("[STABILITY] Step 4: Binding Remotes and Knit Services...")
-    button.Text = "BINDING REMOTES..."
-    
-    local function setupRemotes()
-        local success = pcall(function()
-            local KnitPkg = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit")
-            local KnitServices = KnitPkg:WaitForChild("Services")
-            
-            ProjectileRemote = KnitServices:WaitForChild("ProjectileService"):WaitForChild("RF"):WaitForChild("FireToOthers")
-            AudioRemote = KnitServices:WaitForChild("AudioPlaybackService"):WaitForChild("RF"):WaitForChild("PlayFromClient")
-            DamageRemote = KnitServices:WaitForChild("DamageService"):WaitForChild("RF"):WaitForChild("HandleHit")
-            StartEarlyRemote = KnitServices:WaitForChild("CaravanService"):WaitForChild("RF"):WaitForChild("StartEarly")
-        end)
-        return success
-    end
-
+    -- พยายามดึง Remotes จนกว่าจะสำเร็จ
     local retries = 0
-    while not ProjectileRemote and retries < 20 do
+    while not ProjectileRemote and retries < 15 do
         setupRemotes()
         if not ProjectileRemote then task.wait(1) end
         retries = retries + 1
     end
 
-    -- STEP E: เริ่มต้น Logic ประจำ Place
-    warn("[STABILITY] Step 5: Final Check passed. Starting Main Engine!")
+    -- ปรับสถานะปุ่มเมื่อพร้อมทำงาน
     button.Text = "Ranged + Priority Lock : ON"
-    button.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    warn("Step 4: Everything is ready. Starting Main Logic!")
 
+    -- Place Specific Logic
     if game.PlaceId == 74317689712426 then
+        warn("Special Place Logic Triggered")
         for i = 1, 3 do
             local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if root then root.CFrame = CFrame.new(16.0412464, 6.2709465, -317.254578) end
@@ -89,22 +127,20 @@ task.spawn(function()
         end
         if StartEarlyRemote then pcall(function() StartEarlyRemote:InvokeServer() end) end
     else
-        task.wait(1)
+        warn("General Place Logic Triggered")
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
     end
 
-    --============================--
-    -- 4. MAIN LOOP (CORE LOGIC)
-    --============================--
+    -- LOOP การทำงานหลัก
     while true do
-        local success, err = pcall(function()
-            if running and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                local character = lp.Character
-                local root = character.HumanoidRootPart
-                
-                -- Noclip
+        if running then
+            local character = lp.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+
+            if root then
+                -- Noclip (ทำซ้ำทุกเฟรมเพื่อความชัวร์)
                 for _, v in pairs(character:GetDescendants()) do
                     if v:IsA("BasePart") then v.CanCollide = false end
                 end
@@ -116,7 +152,7 @@ task.spawn(function()
                 bv.Velocity = Vector3.zero
                 bv.Parent = root
 
-                -- Objective Check
+                -- Objective Logic
                 local wagon = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Objectives"):FindFirstChild("EscortWagon")
                 local collider = wagon and wagon.Character:FindFirstChild("Collider")
 
@@ -128,32 +164,7 @@ task.spawn(function()
                     tween.Completed:Wait()
                     specialDoneCount = specialDoneCount + 1
                 else
-                    -- Combat System
-                    local function getBestTarget()
-                        local gameFolder = workspace:FindFirstChild("Game")
-                        local enemies = gameFolder and gameFolder:FindFirstChild("Enemies")
-                        if not enemies then return nil end
-                        
-                        local priorityTarget, closestTarget = nil, nil
-                        local shortestDist, priorityShortestDist = math.huge, math.huge
-
-                        for _, enemy in pairs(enemies:GetChildren()) do
-                            local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-                            local eHum = enemy:FindFirstChild("Humanoid")
-                            if eRoot and eHum and eHum.Health > 0 then
-                                local dist = (eRoot.Position - root.Position).Magnitude
-                                if enemy.Name == "Enemy_GreenYeti" and dist < priorityShortestDist then
-                                    priorityShortestDist = dist
-                                    priorityTarget = enemy
-                                elseif dist < shortestDist then
-                                    shortestDist = dist
-                                    closestTarget = enemy
-                                end
-                            end
-                        end
-                        return priorityTarget or closestTarget
-                    end
-
+                    -- Combat Logic
                     local target = getBestTarget()
                     local basePos = (collider and collider.Position) or root.Position
                     
@@ -164,27 +175,27 @@ task.spawn(function()
                         local tool = character:FindFirstChildOfClass("Tool")
                         if tool and ProjectileRemote then
                             local fireTime = DateTime.now().UnixTimestampMillis / 1000
-                            ProjectileRemote:InvokeServer(root.Position, tPos, tool.Name, 0, fireTime)
-                            DamageRemote:InvokeServer({
-                                IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = target.Name,
-                                WeaponId = tool.Name, FireTime = fireTime, TargetItem = target.Humanoid,
-                                WeaponKey = tool:GetAttribute("Key"), Position = root.Position
-                            }, root.Position)
+                            pcall(function()
+                                ProjectileRemote:InvokeServer(root.Position, tPos, tool.Name, 0, fireTime)
+                                DamageRemote:InvokeServer({
+                                    IsEnemyBlocking = false, Type = "PlayerToEnemyRanged", EnemyId = target.Name,
+                                    WeaponId = tool.Name, FireTime = fireTime, TargetItem = target.Humanoid,
+                                    WeaponKey = tool:GetAttribute("Key"), Position = root.Position
+                                }, root.Position)
+                            end)
                         end
                     elseif collider then
                         root.CFrame = collider.CFrame * CFrame.new(0, HOVER_HEIGHT_VALUE, 0)
                     end
                 end
             end
-        end)
-        
-        if not success then warn("Loop Error: " .. tostring(err)) end
+        end
         task.wait(0.05)
     end
 end)
 
 --============================--
--- 5. BUTTON INTERACTION
+-- 5. GUI INTERACTION
 --============================--
 button.MouseButton1Click:Connect(function()
     running = not running
