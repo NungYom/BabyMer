@@ -4,7 +4,7 @@ local player = Players.LocalPlayer
 
 -- [[ 1. สร้าง ScreenGui ]]
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FinalFarmGui"
+screenGui.Name = "FinalFarmGui_Fixed"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
@@ -20,11 +20,7 @@ local function createButton(name, pos, color)
     btn.Font = Enum.Font.SourceSansBold
     btn.TextSize = 18
     btn.Parent = screenGui
-
-    local uiCorner = Instance.new("UICorner")
-    uiCorner.CornerRadius = UDim.new(0, 10)
-    uiCorner.Parent = btn
-    
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
     return btn
 end
 
@@ -36,7 +32,21 @@ local btnAuto = createButton("AutoFarm", UDim2.new(0.8, 0, 0.6, 0), Color3.fromR
 local mode = "None"
 local savedCFrame = nil
 
--- [[ 4. ฟังก์ชันค้นหาเป้าหมาย (แก้ไข Hitbox และ Priority) ]]
+-- [[ 4. ฟังก์ชันจัดการ Humanoid (กันล้ม) ]]
+local function fixHumanoid(char)
+    local humanoid = char:WaitForChild("Humanoid")
+    -- ปิดสถานะที่ทำให้ตัวละครล้มหรือนอน
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+    -- บังคับให้ยืนตลอดเวลา
+    humanoid.PlatformStand = false 
+end
+
+player.CharacterAdded:Connect(fixHumanoid)
+if player.Character then fixHumanoid(player.Character) end
+
+-- [[ 5. ฟังก์ชันค้นหาเป้าหมาย ]]
 local function getTarget()
     local zones = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Zones")
     if not zones then return nil end
@@ -44,59 +54,54 @@ local function getTarget()
     if mode == "Lock" then
         return savedCFrame
     elseif mode == "Flag" then
-        -- แก้ไข: ให้ลดระดับแกน Y ลง 2 Studs
         local flag = zones:FindFirstChild("FlagZone")
-        if flag then
-            return flag.CFrame * CFrame.new(0, -2, 0)
-        end
+        -- ยกตัวขึ้น 2 Studs เพื่อไม่ให้จมดิน (จากเดิมที่ลดลงไป)
+        return flag and (flag.CFrame * CFrame.new(4, -11.2, 0))
     elseif mode == "Auto" then
-        -- ลำดับความสำคัญ: 10X -> 4X -> 3X -> 2X
         local priorities = {"10XAura", "4XAura", "3XAura", "2XAura"}
-        
-        for _, auraName in ipairs(priorities) do
-            local zoneFolder = zones:FindFirstChild(auraName)
-            if zoneFolder then
-                -- ตรวจสอบชื่อ "Hitbox" (b ตัวเล็กตามรูป Explorer)
-                local hb = zoneFolder:FindFirstChild("Hitbox") or zoneFolder:FindFirstChild("HitBox")
+        for _, name in ipairs(priorities) do
+            local zone = zones:FindFirstChild(name)
+            if zone then
+                local hb = zone:FindFirstChild("Hitbox") or zone:FindFirstChild("HitBox")
                 if hb then
-                    return hb.CFrame
+                    -- แก้ไข: เพิ่ม CFrame.new(0, 2, 0) เพื่อให้ตัวละครลอยขึ้นจาก Hitbox เล็กน้อย กันการนอน/ติดพื้น
+                    return hb.CFrame * CFrame.new(0, 2, 0)
                 end
             end
         end
-        
-        -- ถ้าไม่เจอ Aura เลย ให้ไปที่ FlagZone และลด Y ลง 2 Studs
         local flag = zones:FindFirstChild("FlagZone")
-        if flag then
-            return flag.CFrame * CFrame.new(0, -2, 0)
-        end
+        return flag and (flag.CFrame * CFrame.new(4, -11.2, 0))
     end
     return nil
 end
 
--- [[ 5. ระบบ Loop TP แบบ Locked Physics ]]
+-- [[ 6. ระบบ Loop TP ]]
 RunService.Stepped:Connect(function()
     if mode == "None" then return end
-    
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+    local hum = char and char:FindFirstChild("Humanoid")
     
-    local target = getTarget()
-    if target then
-        root.CFrame = target
-        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    if root and hum then
+        local target = getTarget()
+        if target then
+            root.CFrame = target
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            -- บังคับให้ Humanoid อยู่ในท่าลอยหรือยืน (ป้องกัน Animation นอน)
+            if hum:GetState() == Enum.HumanoidStateType.Seated or hum:GetState() == Enum.HumanoidStateType.Physics then
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
     end
 end)
 
--- [[ 6. ระบบ Toggle ปุ่ม ]]
+-- [[ 7. ระบบปุ่ม ]]
 local function updateUI()
     btnLock.Text = (mode == "Lock") and "LockPos: ON" or "LockPos: OFF"
     btnLock.BackgroundColor3 = (mode == "Lock") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
-    
     btnFlag.Text = (mode == "Flag") and "FlagFarm: ON" or "FlagFarm: OFF"
     btnFlag.BackgroundColor3 = (mode == "Flag") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
-    
     btnAuto.Text = (mode == "Auto") and "AutoFarm: ON" or "AutoFarm: OFF"
     btnAuto.BackgroundColor3 = (mode == "Auto") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
 end
@@ -104,19 +109,11 @@ end
 btnLock.MouseButton1Click:Connect(function()
     if mode == "Lock" then mode = "None" else
         mode = "Lock"
-        local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then savedCFrame = root.CFrame end
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            savedCFrame = player.Character.HumanoidRootPart.CFrame
+        end
     end
     updateUI()
 end)
-
-btnFlag.MouseButton1Click:Connect(function()
-    mode = (mode == "Flag") and "None" or "Flag"
-    updateUI()
-end)
-
-btnAuto.MouseButton1Click:Connect(function()
-    mode = (mode == "Auto") and "None" or "Auto"
-    updateUI()
-end)
+btnFlag.MouseButton1Click:Connect(function() mode = (mode == "Flag") and "None" or "Flag" updateUI() end)
+btnAuto.MouseButton1Click:Connect(function() mode = (mode == "Auto") and "None" or "Auto" updateUI() end)
