@@ -4,11 +4,11 @@ local player = Players.LocalPlayer
 
 -- [[ 1. สร้าง ScreenGui ]]
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "CustomFarmGui"
-screenGui.ResetOnSpawn = false -- ตายแล้ว GUI ไม่หาย
+screenGui.Name = "FinalFarmGui"
+screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- [[ 2. ฟังก์ชันสร้างปุ่ม (ใช้สไตล์ตามที่คุณส่งมา) ]]
+-- [[ 2. ฟังก์ชันสร้างปุ่ม ]]
 local function createButton(name, pos, color)
     local btn = Instance.new("TextButton")
     btn.Name = name
@@ -28,16 +28,15 @@ local function createButton(name, pos, color)
     return btn
 end
 
--- วางปุ่ม 3 ปุ่มเรียงกันทางด้านขวาของจอ (หรือปรับ Position ตามชอบ)
-local btnLock = createButton("LockPos", UDim2.new(0.8, 0, 0.4, 0), Color3.fromRGB(100, 100, 100))
-local btnFlag = createButton("FlagFarm", UDim2.new(0.8, 0, 0.5, 0), Color3.fromRGB(100, 100, 100))
-local btnAuto = createButton("AutoFarm", UDim2.new(0.8, 0, 0.6, 0), Color3.fromRGB(100, 100, 100))
+local btnLock = createButton("LockPos", UDim2.new(0.8, 0, 0.4, 0), Color3.fromRGB(80, 80, 80))
+local btnFlag = createButton("FlagFarm", UDim2.new(0.8, 0, 0.5, 0), Color3.fromRGB(80, 80, 80))
+local btnAuto = createButton("AutoFarm", UDim2.new(0.8, 0, 0.6, 0), Color3.fromRGB(80, 80, 80))
 
 -- [[ 3. ตัวแปรสถานะ ]]
 local mode = "None"
 local savedCFrame = nil
 
--- [[ 4. ฟังก์ชันค้นหาพิกัดตามเงื่อนไข (Priority System) ]]
+-- [[ 4. ฟังก์ชันค้นหาเป้าหมาย (แก้ไข Hitbox และ Priority) ]]
 local function getTarget()
     local zones = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Zones")
     if not zones then return nil end
@@ -45,26 +44,36 @@ local function getTarget()
     if mode == "Lock" then
         return savedCFrame
     elseif mode == "Flag" then
+        -- แก้ไข: ให้ลดระดับแกน Y ลง 2 Studs
         local flag = zones:FindFirstChild("FlagZone")
-        return flag and (flag.CFrame * CFrame.new(0, -3, 0))
+        if flag then
+            return flag.CFrame * CFrame.new(0, -2, 0)
+        end
     elseif mode == "Auto" then
-        -- ลำดับ Priority: 4X -> 3X -> 2X
-        local prio = {"4XAura", "3XAura", "2XAura"}
-        for _, name in ipairs(prio) do
-            local zoneFolder = zones:FindFirstChild(name)
+        -- ลำดับความสำคัญ: 10X -> 4X -> 3X -> 2X
+        local priorities = {"10XAura", "4XAura", "3XAura", "2XAura"}
+        
+        for _, auraName in ipairs(priorities) do
+            local zoneFolder = zones:FindFirstChild(auraName)
             if zoneFolder then
-                local hitBox = zoneFolder:FindFirstChild("HitBox")
-                if hitBox then return hitBox.CFrame end
+                -- ตรวจสอบชื่อ "Hitbox" (b ตัวเล็กตามรูป Explorer)
+                local hb = zoneFolder:FindFirstChild("Hitbox") or zoneFolder:FindFirstChild("HitBox")
+                if hb then
+                    return hb.CFrame
+                end
             end
         end
-        -- ถ้าไม่เจอ Aura เลย ให้ไป FlagZone (Y-3)
+        
+        -- ถ้าไม่เจอ Aura เลย ให้ไปที่ FlagZone และลด Y ลง 2 Studs
         local flag = zones:FindFirstChild("FlagZone")
-        return flag and (flag.CFrame * CFrame.new(0, -3, 0))
+        if flag then
+            return flag.CFrame * CFrame.new(0, -2, 0)
+        end
     end
     return nil
 end
 
--- [[ 5. ระบบ Loop TP แบบนิ่งสนิท (Physics Lock) ]]
+-- [[ 5. ระบบ Loop TP แบบ Locked Physics ]]
 RunService.Stepped:Connect(function()
     if mode == "None" then return end
     
@@ -75,57 +84,39 @@ RunService.Stepped:Connect(function()
     local target = getTarget()
     if target then
         root.CFrame = target
-        -- ล้างความเร็วเพื่อความนิ่ง ใครผลักก็ไม่ขยับ
         root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end
 end)
 
--- [[ 6. ระบบจัดการปุ่มสลับสถานะ (Toggle) ]]
-local function resetButtons()
-    btnLock.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    btnLock.Text = "LockPos: OFF"
-    btnFlag.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    btnFlag.Text = "FlagFarm: OFF"
-    btnAuto.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    btnAuto.Text = "AutoFarm: OFF"
+-- [[ 6. ระบบ Toggle ปุ่ม ]]
+local function updateUI()
+    btnLock.Text = (mode == "Lock") and "LockPos: ON" or "LockPos: OFF"
+    btnLock.BackgroundColor3 = (mode == "Lock") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
+    
+    btnFlag.Text = (mode == "Flag") and "FlagFarm: ON" or "FlagFarm: OFF"
+    btnFlag.BackgroundColor3 = (mode == "Flag") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
+    
+    btnAuto.Text = (mode == "Auto") and "AutoFarm: ON" or "AutoFarm: OFF"
+    btnAuto.BackgroundColor3 = (mode == "Auto") and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(80, 80, 80)
 end
 
 btnLock.MouseButton1Click:Connect(function()
-    if mode == "Lock" then
-        mode = "None"
-        resetButtons()
-    else
+    if mode == "Lock" then mode = "None" else
         mode = "Lock"
         local char = player.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then savedCFrame = root.CFrame end -- จำพิกัดปัจจุบัน
-        resetButtons()
-        btnLock.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-        btnLock.Text = "LockPos: ON"
+        if root then savedCFrame = root.CFrame end
     end
+    updateUI()
 end)
 
 btnFlag.MouseButton1Click:Connect(function()
-    if mode == "Flag" then
-        mode = "None"
-        resetButtons()
-    else
-        mode = "Flag"
-        resetButtons()
-        btnFlag.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-        btnFlag.Text = "FlagFarm: ON"
-    end
+    mode = (mode == "Flag") and "None" or "Flag"
+    updateUI()
 end)
 
 btnAuto.MouseButton1Click:Connect(function()
-    if mode == "Auto" then
-        mode = "None"
-        resetButtons()
-    else
-        mode = "Auto"
-        resetButtons()
-        btnAuto.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-        btnAuto.Text = "AutoFarm: ON"
-    end
+    mode = (mode == "Auto") and "None" or "Auto"
+    updateUI()
 end)
