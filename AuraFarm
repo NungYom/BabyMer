@@ -58,7 +58,7 @@ local function getTarget()
         -- ยกตัวขึ้น 2 Studs เพื่อไม่ให้จมดิน (จากเดิมที่ลดลงไป)
         return flag and (flag.CFrame * CFrame.new(4, -11.2, 0))
     elseif mode == "Auto" then
-        local priorities = {"10XAura", "4XAura", "3XAura", "2XAura"}
+        local priorities = {"10XAura", "5XAura", "4XAura", "3XAura", "2XAura"}
         for _, name in ipairs(priorities) do
             local zone = zones:FindFirstChild(name)
             if zone then
