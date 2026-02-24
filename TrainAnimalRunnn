@@ -1,0 +1,78 @@
+-- LocalScript ใน StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- 1. สร้าง ScreenGui และปุ่มสวิตซ์
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoTeleportGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 200, 0, 50)
+button.Position = UDim2.new(0.5, -100, 0.8, 0)
+button.Text = "AUTO TP: OFF"
+button.BackgroundColor3 = Color3.fromRGB(200, 0, 0) -- สีแดงตอนปิด
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.Font = Enum.Font.SourceSansBold
+button.TextSize = 20
+button.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.Parent = button
+
+---
+
+-- 2. ระบบลูปวาร์ป
+local winGatesFolder = workspace.Areas.Area_1.WinGates
+local isEnabled = false -- สถานะ เปิด/ปิด
+
+button.MouseButton1Click:Connect(function()
+	isEnabled = not isEnabled -- สลับสถานะ (Toggle)
+	
+	if isEnabled then
+		-- ถ้าเปิด (ON)
+		button.Text = "AUTO TP: ON"
+		button.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- สีเขียวตอนเปิด
+		
+		-- เริ่ม Loop การวาร์ป
+		task.spawn(function()
+			while isEnabled do
+				-- นับจำนวน Gate ทั้งหมดในโฟลเดอร์
+				local gates = winGatesFolder:GetChildren()
+				local totalGates = #gates
+				
+				-- วนลูปตามตัวเลข 1 ถึงตัวสุดท้าย
+				for i = 1, totalGates do
+					-- ถ้าผู้เล่นกดปิดระหว่างลูป ให้หยุดทันที
+					if not isEnabled then break end
+					
+					local gateName = "WinGate_" .. i
+					local gateModel = winGatesFolder:FindFirstChild(gateName)
+					
+					if gateModel then
+						local tpPart = gateModel:FindFirstChild("gate")
+						if tpPart and tpPart:IsA("BasePart") then
+							-- วาร์ปตัวละคร
+							rootPart.CFrame = tpPart.CFrame + Vector3.new(0, 3, 0)
+							button.Text = "TP: " .. gateName
+						end
+					end
+					
+					task.wait(0.2) -- รอ 0.2 วินาทีตามที่กำหนด
+				end
+				
+				-- เมื่อจบ loop (ถึง gate สุดท้ายแล้ว) 
+				-- มันจะเริ่มวน i = 1 ใหม่เองเพราะอยู่ใน while isEnabled do
+			end
+		end)
+		
+	else
+		-- ถ้าปิด (OFF)
+		button.Text = "AUTO TP: OFF"
+		button.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+	end
+end)
