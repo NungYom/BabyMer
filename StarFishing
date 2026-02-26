@@ -1,17 +1,51 @@
--- [[ FAST AUTO-FISH v6.1: RELIABLE TURBO ]]
+-- [[ FAST AUTO-FISH v6.3: PERSISTENT GOAL TURBO ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 
 local active = false
+local nextGoal = 0 -- ตัวแปรเป้าหมายรวมที่จะสะสมไปเรื่อยๆ
 
+-- ฟังก์ชันดึง Object ของกระเป๋า
 local function getBackpackObj()
     local char = lp.Character
     return (char and char:FindFirstChild("Backpack")) or lp.Backpack:FindFirstChild("Backpack")
 end
 
+-- UI Setup
+local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
+screenGui.Name = "AutoFishV6.3"
+
+local mainButton = Instance.new("TextButton", screenGui)
+mainButton.Size = UDim2.new(0, 200, 0, 50)
+mainButton.Position = UDim2.new(0.5, -100, 0.1, 0)
+mainButton.Text = "AUTO FISH: OFF"
+mainButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+mainButton.TextColor3 = Color3.new(1, 1, 1)
+mainButton.Font = Enum.Font.SourceSansBold
+mainButton.TextSize = 20
+
+local inputField = Instance.new("TextBox", screenGui)
+inputField.Size = UDim2.new(0, 200, 0, 40)
+inputField.Position = UDim2.new(0.5, -100, 0.1, 55)
+inputField.PlaceholderText = "Step Capacity (เช่น 30)"
+inputField.Text = "30" 
+inputField.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+inputField.TextColor3 = Color3.fromRGB(255, 255, 255)
+inputField.Font = Enum.Font.SourceSans
+inputField.TextSize = 18
+
+local statusLabel = Instance.new("TextLabel", screenGui)
+statusLabel.Size = UDim2.new(0, 200, 0, 25)
+statusLabel.Position = UDim2.new(0.5, -100, 0.1, 100)
+statusLabel.Text = "Waiting for Start..."
+statusLabel.BackgroundColor3 = Color3.new(0,0,0)
+statusLabel.BackgroundTransparency = 0.5
+statusLabel.TextColor3 = Color3.new(1, 1, 1)
+statusLabel.TextSize = 16
+
+-- ฟังก์ชันการเหวี่ยงเบ็ด
 local function castRod()
     if not active then return end
     local char = lp.Character
@@ -30,69 +64,70 @@ local function castRod()
     end
 end
 
+-- ระบบจัดการเมื่อได้รับไอเทม
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if active and success and items then
         local bpObj = getBackpackObj()
         if not bpObj then return end
 
-        -- ใช้ Attribute 'Capacity' จากตัวกระเป๋า (ของคุณคือ 4)
-        local capacityLimit = bpObj:GetAttribute("Capacity") or #items 
-        local startNewItems = bpObj:GetAttribute("NewItems") or 0
-        local goal = startNewItems + capacityLimit
-        
-        warn("⚡ [RELIABLE TURBO]: เป้าหมายคือ " .. goal .. " (รอครบ " .. capacityLimit .. " ชิ้น)")
-
-        -- ใช้ Task.spawn เพื่อไม่ให้ขัดจังหวะการรับ Event อื่นๆ
         task.spawn(function()
             local timeout = 0
-            -- วนลูปจนกว่าค่า NewItems จะขยับขึ้นมาจนครบเป้าหมายจริงๆ
-            while active and timeout < 150 do -- ขยายเวลา Timeout เผื่อ Server หน่วง
+            while active and timeout < 200 do
                 local currentVal = bpObj:GetAttribute("NewItems") or 0
                 
-                -- เงื่อนไขสำคัญ: ต้องเท่ากับหรือมากกว่าเป้าหมายถึงจะหยุด
-                if currentVal >= goal then
-                    warn("✨ [DONE]: ครบแล้ว! (NewItems: " .. currentVal .. ")")
+                -- ตรวจสอบว่าถึงเป้าหมายสะสม (nextGoal) หรือยัง
+                if currentVal >= nextGoal then
+                    -- เมื่อถึงเป้าหมายแล้ว ให้ตั้งเป้าหมายถัดไปทันที (เป้าหมายเดิม + ค่าที่พิมพ์)
+                    local step = tonumber(inputField.Text) or 1
+                    nextGoal = currentVal + step
+                    
+                    statusLabel.Text = "DONE! Next Target: " .. nextGoal
+                    warn("✨ [MATCHED]: ถึง " .. currentVal .. " แล้ว! รอบต่อไปคือ " .. nextGoal)
                     break 
                 end
 
-                -- ส่ง Confirm ทุกตัวในรายการ
+                -- แสดงสถานะ Real-time บนจอ
+                statusLabel.Text = "Progress: " .. currentVal .. " / " .. nextGoal
+
+                -- กดยืนยันไอเทม
                 for _, item in pairs(items) do
                     if item.id then 
                         ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id)
                     end
                 end
                 
-                -- รอจังหวะที่สั้นพอดีเพื่อให้ Server อัปเดตค่าทัน (0.05 - 0.1 วิ)
-                task.wait(0.1) 
+                task.wait(0.05) 
                 timeout = timeout + 1
             end
             
-            -- เมื่อตรวจสอบแล้วว่าเลขครบ 4 ตัว (หรือตาม Capacity) ค่อยดึงเบ็ดและเหวี่ยงใหม่
+            -- ดึงเบ็ดกลับและเหวี่ยงใหม่
             local char = lp.Character
             if char and char:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(char.Humanoid)
             end
             
-            task.wait(0.3) -- พักนิดนึงก่อนเหวี่ยงใหม่เพื่อความเสถียร
+            task.wait(0.5) -- เพิ่มดีเลย์นิดหน่อยเพื่อให้ Server เคลียร์สถานะ
             castRod()
         end)
     end
 end)
 
--- UI Setup
-local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
-local mainButton = Instance.new("TextButton", screenGui)
-mainButton.Size = UDim2.new(0, 200, 0, 60)
-mainButton.Position = UDim2.new(0.5, -100, 0.1, 0)
-mainButton.Text = "AUTO FISH: OFF"
-mainButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-mainButton.TextColor3 = Color3.new(1, 1, 1)
-mainButton.Font = Enum.Font.SourceSansBold
-mainButton.TextSize = 22
-
+-- ปุ่มกด เปิด/ปิด
 mainButton.MouseButton1Click:Connect(function()
     active = not active
     mainButton.Text = active and "AUTO FISH: ON" or "AUTO FISH: OFF"
     mainButton.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    if active then castRod() end
+    
+    if active then 
+        -- เมื่อเริ่มทำงาน ให้คำนวณค่าเริ่มต้นทันที
+        local bpObj = getBackpackObj()
+        local current = bpObj and bpObj:GetAttribute("NewItems") or 0
+        local step = tonumber(inputField.Text) or 1
+        nextGoal = current + step
+        
+        statusLabel.Text = "Started! Target: " .. nextGoal
+        castRod() 
+    else
+        statusLabel.Text = "Stopped"
+    end
 end)
