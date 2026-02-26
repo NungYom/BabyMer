@@ -1,133 +1,150 @@
--- [[ FAST AUTO-FISH v6.3: PERSISTENT GOAL TURBO ]]
+-- [[ FAST AUTO-FISH v32.4: MANUAL GEAR RESET MODE ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local vim = game:GetService("VirtualInputManager")
 local lp = Players.LocalPlayer
 
 local active = false
-local nextGoal = 0 -- ตัวแปรเป้าหมายรวมที่จะสะสมไปเรื่อยๆ
+local FilterSettings = {
+    {name = "Common", color = Color3.fromRGB(160, 160, 160), enabled = false, items = {"Asteroid", "Gold Asteroid", "Comet"}},
+    {name = "Uncommon", color = Color3.fromRGB(80, 220, 80), enabled = true, items = {"Hydrogen Star", "Orange Dwarf", "White Dwarf", "Helium", "Ice Comet"}},
+    {name = "Rare", color = Color3.fromRGB(80, 160, 255), enabled = true, items = {"Blue Straggler", "Preon Star", "Ultraviolet", "Technetium Star"}},
+    {name = "Epic", color = Color3.fromRGB(170, 80, 255), enabled = true, items = {"Collapsar", "X-Rey Binary Star", "Red Giant", "Blue Giant", "Unstable Star", "Quasar Core", "Luminous Blue Variable", "Antares", "Protoplanetary Disk", "Cosmic Dust", "Variable Carbon Star"}},
+    {name = "Legendary", color = Color3.fromRGB(255, 140, 0), enabled = true, items = {"Luhman 16", "Young Binary Star", "Black Hole", "Molecular Cloud", "Blazer Core", "Blue Supergiant", "Red Supergiant"}},
+    {name = "Mythic", color = Color3.fromRGB(255, 0, 100), enabled = true, items = {"The First Light", "Nebula", "Millisecond Pulsar", "Nova Persei 1901", "Przybylski's Star", "Dark Matter"}},
+    {name = "Interstellar", color = Color3.fromRGB(0, 255, 255), enabled = true, items = {"1i Oumuamua", "2i Borisov", "3i ATLAS"}},
+    {name = "Galactic", color = Color3.fromRGB(255, 100, 255), enabled = true, items = {"Supernova", "Prismatic Star", "Neutron Star"}},
+    {name = "Other", color = Color3.fromRGB(255, 255, 255), enabled = true, items = {}}
+}
 
--- ฟังก์ชันดึง Object ของกระเป๋า
-local function getBackpackObj()
-    local char = lp.Character
-    return (char and char:FindFirstChild("Backpack")) or lp.Backpack:FindFirstChild("Backpack")
+local function getRealNewItems()
+    local bp = lp.Character:FindFirstChild("Backpack") or lp.Backpack:FindFirstChild("Backpack")
+    return bp and bp:GetAttribute("NewItems") or 0
 end
 
--- UI Setup
-local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
-screenGui.Name = "AutoFishV6.3"
+local function isTarget(itemName)
+    local n = string.lower(tostring(itemName))
+    for _, cat in ipairs(FilterSettings) do
+        if cat.enabled then
+            for _, t in ipairs(cat.items) do
+                if string.find(n, string.lower(t)) then return true end
+            end
+        end
+    end
+    return false
+end
 
-local mainButton = Instance.new("TextButton", screenGui)
-mainButton.Size = UDim2.new(0, 200, 0, 50)
-mainButton.Position = UDim2.new(0.5, -100, 0.1, 0)
-mainButton.Text = "AUTO FISH: OFF"
-mainButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-mainButton.TextColor3 = Color3.new(1, 1, 1)
-mainButton.Font = Enum.Font.SourceSansBold
-mainButton.TextSize = 20
+-- ฟังก์ชันจำลองการกดเลข 1 (Hotbar Slot 1)
+local function pressSlot1()
+    vim:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+    task.wait(0.05)
+    vim:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+end
 
-local inputField = Instance.new("TextBox", screenGui)
-inputField.Size = UDim2.new(0, 200, 0, 40)
-inputField.Position = UDim2.new(0.5, -100, 0.1, 55)
-inputField.PlaceholderText = "Step Capacity (เช่น 30)"
-inputField.Text = "30" 
-inputField.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-inputField.TextColor3 = Color3.fromRGB(255, 255, 255)
-inputField.Font = Enum.Font.SourceSans
-inputField.TextSize = 18
-
-local statusLabel = Instance.new("TextLabel", screenGui)
-statusLabel.Size = UDim2.new(0, 200, 0, 25)
-statusLabel.Position = UDim2.new(0.5, -100, 0.1, 100)
-statusLabel.Text = "Waiting for Start..."
-statusLabel.BackgroundColor3 = Color3.new(0,0,0)
-statusLabel.BackgroundTransparency = 0.5
-statusLabel.TextColor3 = Color3.new(1, 1, 1)
-statusLabel.TextSize = 16
-
--- ฟังก์ชันการเหวี่ยงเบ็ด
-local function castRod()
+local function performCast()
     if not active then return end
     local char = lp.Character
-    local rod = char and (char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod"))
+    if not char then return end
     
+    local rod = char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod")
     if rod then
+        -- ตรวจสอบว่าถือเบ็ดอยู่ไหม ถ้าไม่ให้กด 1
         if rod.Parent == lp.Backpack then
-            char.Humanoid:EquipTool(rod)
-            task.wait(0.1)
+            pressSlot1()
+            task.wait(0.3)
         end
+        
         local attach = rod:FindFirstChild("Attachment", true)
         local root = char:FindFirstChild("HumanoidRootPart")
         if attach and root then
             ReplicatedStorage.Events.Global.Cast:FireServer(char.Humanoid, root.Position, root.CFrame.LookVector, attach)
+            print("🚀 Cast!")
         end
     end
 end
 
--- ระบบจัดการเมื่อได้รับไอเทม
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
-    if active and success and items then
-        local bpObj = getBackpackObj()
-        if not bpObj then return end
+    if not (active and success and items) then return end
+    
+    task.spawn(function()
+        local hasTarget = false
+        for _, item in pairs(items) do
+            if isTarget(item.name) then hasTarget = true break end
+        end
 
-        task.spawn(function()
+        if hasTarget then
+            -- [[ เจอของ: Collector Mode ]]
+            local baseValue = getRealNewItems()
+            local capacity = tonumber(lp.PlayerGui.ScreenGui.MainFrame.CapInput.Text) or 1
+            local targetGoal = baseValue + capacity
+            
+            print("💎 Target! Collecting until NewItems is " .. targetGoal)
+            
             local timeout = 0
-            while active and timeout < 200 do
-                local currentVal = bpObj:GetAttribute("NewItems") or 0
-                
-                -- ตรวจสอบว่าถึงเป้าหมายสะสม (nextGoal) หรือยัง
-                if currentVal >= nextGoal then
-                    -- เมื่อถึงเป้าหมายแล้ว ให้ตั้งเป้าหมายถัดไปทันที (เป้าหมายเดิม + ค่าที่พิมพ์)
-                    local step = tonumber(inputField.Text) or 1
-                    nextGoal = currentVal + step
-                    
-                    statusLabel.Text = "DONE! Next Target: " .. nextGoal
-                    warn("✨ [MATCHED]: ถึง " .. currentVal .. " แล้ว! รอบต่อไปคือ " .. nextGoal)
-                    break 
-                end
-
-                -- แสดงสถานะ Real-time บนจอ
-                statusLabel.Text = "Progress: " .. currentVal .. " / " .. nextGoal
-
-                -- กดยืนยันไอเทม
+            repeat
                 for _, item in pairs(items) do
-                    if item.id then 
-                        ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id)
-                    end
+                    if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end
                 end
-                
-                task.wait(0.05) 
+                task.wait(0.2)
                 timeout = timeout + 1
-            end
+            until getRealNewItems() >= targetGoal or not active or timeout > 50
             
-            -- ดึงเบ็ดกลับและเหวี่ยงใหม่
-            local char = lp.Character
-            if char and char:FindFirstChild("Humanoid") then
-                ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(char.Humanoid)
+            -- หลังเก็บเสร็จ ให้ถอนเบ็ดออกปกติ
+            if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+                ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
+            task.wait(0.3)
+        else
+            -- [[ ไม่เจอของ: Hard Reset Mode ]]
+            print("🚫 No target. Hard Resetting (Press 1 twice)...")
             
-            task.wait(0.5) -- เพิ่มดีเลย์นิดหน่อยเพื่อให้ Server เคลียร์สถานะ
-            castRod()
-        end)
-    end
+            -- กดปุ่ม 1 สองรอบ ห่างกัน 0.2 วิ ตามโจทย์
+            pressSlot1() -- ครั้งที่ 1 (วางเบ็ด)
+            task.wait(0.2)
+            pressSlot1() -- ครั้งที่ 2 (ถือเบ็ดใหม่)
+            task.wait(0.3) -- พักแป๊บนึงก่อนเหวี่ยง
+        end
+
+        -- เหวี่ยงเบ็ดรอบต่อไป
+        performCast()
+    end)
 end)
 
--- ปุ่มกด เปิด/ปิด
-mainButton.MouseButton1Click:Connect(function()
+-- [[ GUI BUILD ]]
+local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
+screenGui.Name = "ScreenGui"
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 240, 0, 500); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "GEAR RESET v32.4"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+
+local capInput = Instance.new("TextBox", mainFrame)
+capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
+
+local startBtn = Instance.new("TextButton", mainFrame)
+startBtn.Size = UDim2.new(1, -20, 0, 40); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START AUTO"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
+
+local scroll = Instance.new("ScrollingFrame", mainFrame)
+scroll.Size = UDim2.new(1, -20, 0, 360); scroll.Position = UDim2.new(0, 10, 0, 130); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
+
+for _, data in ipairs(FilterSettings) do
+    local btn = Instance.new("TextButton", scroll)
+    btn.Size = UDim2.new(1, -10, 0, 35); btn.Text = data.name .. ": ON"; btn.BackgroundColor3 = data.color; btn.TextColor3 = Color3.new(0,0,0)
+    btn.MouseButton1Click:Connect(function()
+        data.enabled = not data.enabled
+        btn.Text = data.name .. (data.enabled and ": ON" or ": OFF")
+        btn.BackgroundColor3 = data.enabled and data.color or Color3.fromRGB(60, 60, 60)
+    end)
+end
+
+startBtn.MouseButton1Click:Connect(function()
     active = not active
-    mainButton.Text = active and "AUTO FISH: ON" or "AUTO FISH: OFF"
-    mainButton.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    
-    if active then 
-        -- เมื่อเริ่มทำงาน ให้คำนวณค่าเริ่มต้นทันที
-        local bpObj = getBackpackObj()
-        local current = bpObj and bpObj:GetAttribute("NewItems") or 0
-        local step = tonumber(inputField.Text) or 1
-        nextGoal = current + step
-        
-        statusLabel.Text = "Started! Target: " .. nextGoal
-        castRod() 
-    else
-        statusLabel.Text = "Stopped"
-    end
+    startBtn.Text = active and "STOP AUTO" or "START AUTO"
+    startBtn.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    if active then performCast() end
 end)
