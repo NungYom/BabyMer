@@ -1,4 +1,4 @@
--- [[ FAST AUTO-FISH v32.4: MANUAL GEAR RESET MODE ]]
+-- [[ FAST AUTO-FISH v33.1: THEEYE-NEGATIVE + FLOAT STATUS ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,6 +6,8 @@ local vim = game:GetService("VirtualInputManager")
 local lp = Players.LocalPlayer
 
 local active = false
+local theEyeActive = false 
+
 local FilterSettings = {
     {name = "Common", color = Color3.fromRGB(160, 160, 160), enabled = false, items = {"Asteroid", "Gold Asteroid", "Comet"}},
     {name = "Uncommon", color = Color3.fromRGB(80, 220, 80), enabled = true, items = {"Hydrogen Star", "Orange Dwarf", "White Dwarf", "Helium", "Ice Comet"}},
@@ -27,15 +29,12 @@ local function isTarget(itemName)
     local n = string.lower(tostring(itemName))
     for _, cat in ipairs(FilterSettings) do
         if cat.enabled then
-            for _, t in ipairs(cat.items) do
-                if string.find(n, string.lower(t)) then return true end
-            end
+            for _, t in ipairs(cat.items) do if string.find(n, string.lower(t)) then return true end end
         end
     end
     return false
 end
 
--- ฟังก์ชันจำลองการกดเลข 1 (Hotbar Slot 1)
 local function pressSlot1()
     vim:SendKeyEvent(true, Enum.KeyCode.One, false, game)
     task.wait(0.05)
@@ -46,67 +45,74 @@ local function performCast()
     if not active then return end
     local char = lp.Character
     if not char then return end
-    
     local rod = char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod")
     if rod then
-        -- ตรวจสอบว่าถือเบ็ดอยู่ไหม ถ้าไม่ให้กด 1
-        if rod.Parent == lp.Backpack then
-            pressSlot1()
-            task.wait(0.3)
-        end
-        
+        if rod.Parent == lp.Backpack then pressSlot1() task.wait(0.3) end
         local attach = rod:FindFirstChild("Attachment", true)
         local root = char:FindFirstChild("HumanoidRootPart")
         if attach and root then
             ReplicatedStorage.Events.Global.Cast:FireServer(char.Humanoid, root.Position, root.CFrame.LookVector, attach)
-            print("🚀 Cast!")
         end
     end
 end
 
+-- ระบบ TheEye-Negative + Float (Check 1s)
+task.spawn(function()
+    while true do
+        if theEyeActive and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local minute = os.date("!*t").min
+            local root = lp.Character.HumanoidRootPart
+            
+            -- สร้างสถานะ Float (ล็อคตัวกลางอากาศ)
+            local bodyVel = root:FindFirstChild("EyeFloat")
+            if not bodyVel then
+                bodyVel = Instance.new("BodyVelocity")
+                bodyVel.Name = "EyeFloat"
+                bodyVel.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                bodyVel.Velocity = Vector3.new(0, 0, 0)
+                bodyVel.Parent = root
+            end
+
+            -- TP ตามช่วงเวลา
+            if (minute >= 0 and minute < 15) or (minute >= 30 and minute < 45) then
+                root.CFrame = CFrame.lookAt(Vector3.new(206, 35, -302), Vector3.new(241.794388, 35, -312.383881))
+            else
+                root.CFrame = CFrame.lookAt(Vector3.new(370, 49, 137), Vector3.new(398.594147, 49, 144.852356))
+            end
+        else
+            -- ลบสถานะ Float เมื่อปิดการใช้งาน
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                local bodyVel = lp.Character.HumanoidRootPart:FindFirstChild("EyeFloat")
+                if bodyVel then bodyVel:Destroy() end
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+-- ระบบจัดการไอเทม
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if not (active and success and items) then return end
-    
     task.spawn(function()
         local hasTarget = false
-        for _, item in pairs(items) do
-            if isTarget(item.name) then hasTarget = true break end
-        end
+        for _, item in pairs(items) do if isTarget(item.name) then hasTarget = true break end end
 
         if hasTarget then
-            -- [[ เจอของ: Collector Mode ]]
             local baseValue = getRealNewItems()
             local capacity = tonumber(lp.PlayerGui.ScreenGui.MainFrame.CapInput.Text) or 1
             local targetGoal = baseValue + capacity
-            
-            print("💎 Target! Collecting until NewItems is " .. targetGoal)
-            
-            local timeout = 0
             repeat
-                for _, item in pairs(items) do
-                    if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end
-                end
+                for _, item in pairs(items) do if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end end
                 task.wait(0.2)
-                timeout = timeout + 1
-            until getRealNewItems() >= targetGoal or not active or timeout > 50
-            
-            -- หลังเก็บเสร็จ ให้ถอนเบ็ดออกปกติ
+            until getRealNewItems() >= targetGoal or not active
             if lp.Character and lp.Character:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
             task.wait(0.3)
         else
-            -- [[ ไม่เจอของ: Hard Reset Mode ]]
-            print("🚫 No target. Hard Resetting (Press 1 twice)...")
-            
-            -- กดปุ่ม 1 สองรอบ ห่างกัน 0.2 วิ ตามโจทย์
-            pressSlot1() -- ครั้งที่ 1 (วางเบ็ด)
-            task.wait(0.2)
-            pressSlot1() -- ครั้งที่ 2 (ถือเบ็ดใหม่)
-            task.wait(0.3) -- พักแป๊บนึงก่อนเหวี่ยง
+            pressSlot1() task.wait(0.2)
+            pressSlot1() task.wait(0.3)
         end
-
-        -- เหวี่ยงเบ็ดรอบต่อไป
         performCast()
     end)
 end)
@@ -116,11 +122,11 @@ local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
 screenGui.Name = "ScreenGui"
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 240, 0, 500); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0)
+mainFrame.Size = UDim2.new(0, 240, 0, 540); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "GEAR RESET v32.4"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "THEEYE-FLOAT v33.1"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
 
 local capInput = Instance.new("TextBox", mainFrame)
 capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
@@ -128,8 +134,11 @@ capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.P
 local startBtn = Instance.new("TextButton", mainFrame)
 startBtn.Size = UDim2.new(1, -20, 0, 40); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START AUTO"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
 
+local eyeBtn = Instance.new("TextButton", mainFrame)
+eyeBtn.Size = UDim2.new(1, -20, 0, 40); eyeBtn.Position = UDim2.new(0, 10, 0, 125); eyeBtn.Text = "TheEye-Negative: OFF"; eyeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); eyeBtn.TextColor3 = Color3.new(1, 1, 1)
+
 local scroll = Instance.new("ScrollingFrame", mainFrame)
-scroll.Size = UDim2.new(1, -20, 0, 360); scroll.Position = UDim2.new(0, 10, 0, 130); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+scroll.Size = UDim2.new(1, -20, 0, 320); scroll.Position = UDim2.new(0, 10, 0, 175); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
 
 for _, data in ipairs(FilterSettings) do
@@ -147,4 +156,10 @@ startBtn.MouseButton1Click:Connect(function()
     startBtn.Text = active and "STOP AUTO" or "START AUTO"
     startBtn.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
     if active then performCast() end
+end)
+
+eyeBtn.MouseButton1Click:Connect(function()
+    theEyeActive = not theEyeActive
+    eyeBtn.Text = theEyeActive and "TheEye-Negative: ON" or "TheEye-Negative: OFF"
+    eyeBtn.BackgroundColor3 = theEyeActive and Color3.fromRGB(0, 80, 150) or Color3.fromRGB(50, 50, 50)
 end)
