@@ -1,12 +1,13 @@
--- [[ FAST AUTO-FISH v27.0: PERSISTENT HUNTING & GOAL SYNC ]]
+-- [[ FAST AUTO-FISH v33.3: DUAL EYE (NEGATIVE & SPORE) ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local vim = game:GetService("VirtualInputManager")
 local lp = Players.LocalPlayer
 
 local active = false
-local farmMode = "FILTER" -- เริ่มต้นที่โหมดกรองไอเทม
-local targetGoal = 0 
+local currentEye = "None" -- "Negative", "Spore", หรือ "None"
+local isTeleporting = false
 
 local FilterSettings = {
     {name = "Common", color = Color3.fromRGB(160, 160, 160), enabled = false, items = {"Asteroid", "Gold Asteroid", "Comet"}},
@@ -20,39 +21,34 @@ local FilterSettings = {
     {name = "Other", color = Color3.fromRGB(255, 255, 255), enabled = true, items = {}}
 }
 
-local function getBackpackValue()
+local function getRealNewItems()
     local bp = lp.Character:FindFirstChild("Backpack") or lp.Backpack:FindFirstChild("Backpack")
     return bp and bp:GetAttribute("NewItems") or 0
 end
 
-local function isTargetItem(itemName)
-    if farmMode == "ALL" then return true end
-    local name = tostring(itemName)
-    if name == "The First Light" then return true end
+local function isTarget(itemName)
+    local n = string.lower(tostring(itemName))
     for _, cat in ipairs(FilterSettings) do
         if cat.enabled then
-            for _, target in ipairs(cat.items) do
-                if string.find(string.lower(name), string.lower(target)) then return true end
-            end
+            for _, t in ipairs(cat.items) do if string.find(n, string.lower(t)) then return true end end
         end
     end
     return false
 end
 
-local function castRod()
-    if not active then return end
-    
-    -- เช็คว่าเก็บครบตามเป้าหมาย (Capacity) หรือยัง
-    if getBackpackValue() >= targetGoal then
-        active = false
-        warn("🏁 COMPLETE: Reached target goal!")
-        return
-    end
+local function pressSlot1()
+    vim:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+    task.wait(0.05)
+    vim:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+end
 
+local function performCast()
+    if not active or isTeleporting then return end
     local char = lp.Character
-    local rod = char and (char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod"))
+    if not char then return end
+    local rod = char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod")
     if rod then
-        if rod.Parent == lp.Backpack then char.Humanoid:EquipTool(rod) task.wait(0.2) end
+        if rod.Parent == lp.Backpack then pressSlot1() task.wait(0.3) end
         local attach = rod:FindFirstChild("Attachment", true)
         local root = char:FindFirstChild("HumanoidRootPart")
         if attach and root then
@@ -61,91 +57,124 @@ local function castRod()
     end
 end
 
+-- ระบบ Dual Eye Control (Check 1s)
+task.spawn(function()
+    while true do
+        if currentEye ~= "None" and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local minute = os.date("!*t").min
+            local root = lp.Character.HumanoidRootPart
+            
+            -- Float Status
+            local bodyVel = root:FindFirstChild("EyeFloat")
+            if not bodyVel then
+                bodyVel = Instance.new("BodyVelocity")
+                bodyVel.Name = "EyeFloat"
+                bodyVel.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                bodyVel.Velocity = Vector3.new(0, 0, 0)
+                bodyVel.Parent = root
+            end
+
+            local targetPos, lookAtPos
+            if (minute >= 0 and minute < 15) or (minute >= 30 and minute < 45) then
+                targetPos = Vector3.new(206, 35, -302)
+                lookAtPos = Vector3.new(241.794388, 35, -312.383881)
+            else
+                if currentEye == "Negative" then
+                    targetPos = Vector3.new(370, 49, 137)
+                    lookAtPos = Vector3.new(398.594147, 49, 144.852356)
+                else -- "Spore"
+                    targetPos = Vector3.new(-49, 5, 30266)
+                    lookAtPos = Vector3.new(-48.8923225, 5, 30287.5039)
+                end
+            end
+
+            -- Safe TP Logic
+            if (root.Position - targetPos).Magnitude > 5 then
+                isTeleporting = true
+                repeat task.wait(0.5) until not workspace:FindFirstChild("Bobber") or not active
+                root.CFrame = CFrame.lookAt(targetPos, lookAtPos)
+                task.wait(1)
+                isTeleporting = false
+                if active then performCast() end
+            end
+        else
+            -- Clean Float
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                local b = lp.Character.HumanoidRootPart:FindFirstChild("EyeFloat")
+                if b then b:Destroy() end
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+-- รับของ & Gear Reset (Choice B Logic)
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if not (active and success and items) then return end
-    
     task.spawn(function()
-        local found = false
-        for _, item in pairs(items) do
-            if isTargetItem(item.name) then
-                found = true
-                break
-            end
-        end
+        local hasTarget = false
+        for _, item in pairs(items) do if isTarget(item.name) then hasTarget = true break end end
 
-        if found then
-            -- เจอของที่ต้องการ: เก็บและนับแต้ม
-            print("💎 TARGET FOUND: Collecting items...")
-            for i = 1, 2 do
-                for _, item in pairs(items) do
-                    if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end
-                end
-                task.wait(0.1)
+        if hasTarget then
+            local baseValue = getRealNewItems()
+            local cap = tonumber(lp.PlayerGui.ScreenGui.MainFrame.CapInput.Text) or 1
+            local targetGoal = baseValue + cap
+            repeat
+                for _, item in pairs(items) do if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end end
+                task.wait(0.2)
+            until getRealNewItems() >= targetGoal or not active
+            if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+                ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
-            task.wait(0.5) -- รอ Attribute อัปเดต
+            task.wait(0.3)
         else
-            -- ไม่เจอของ: สั่งตกใหม่ทันที (Persistent Loop)
-            print("🚫 Not target. Retrying immediately...")
+            pressSlot1() task.wait(0.2)
+            pressSlot1() task.wait(0.3)
         end
-
-        -- ดึงเบ็ดกลับเพื่อเริ่มรอบใหม่
-        if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-            ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
-        end
-        
-        task.wait(0.2)
-        castRod()
+        if not isTeleporting then performCast() end
     end)
 end)
 
--- UI Setup (เน้นไปที่เป้าหมายจำนวนที่ต้องการเพิ่ม)
+-- [[ GUI BUILD ]]
 local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
+screenGui.Name = "ScreenGui"
 local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 260, 0, 560); mainFrame.Position = UDim2.new(0.5, -130, 0.15, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25); mainFrame.Draggable = true; mainFrame.Active = true
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 240, 0, 580); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "PERSISTENT HUNT v27"; title.BackgroundColor3 = Color3.fromRGB(80, 0, 150); title.TextColor3 = Color3.new(1,1,1)
-
-local capLabel = Instance.new("TextLabel", mainFrame)
-capLabel.Size = UDim2.new(0.5, 0, 0, 30); capLabel.Position = UDim2.new(0, 10, 0, 45); capLabel.Text = "ADD QUANTITY:"; capLabel.TextColor3 = Color3.new(1,1,1); capLabel.BackgroundTransparency = 1; capLabel.TextXAlignment = Enum.TextXAlignment.Left
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "DUAL EYE v33.3"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
 
 local capInput = Instance.new("TextBox", mainFrame)
-capInput.Size = UDim2.new(0.4, 0, 0, 30); capInput.Position = UDim2.new(0.5, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
+capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
 
 local startBtn = Instance.new("TextButton", mainFrame)
-startBtn.Size = UDim2.new(1, -20, 0, 45); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START HUNT"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
+startBtn.Size = UDim2.new(1, -20, 0, 40); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START AUTO"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
 
-local modeBtn = Instance.new("TextButton", mainFrame)
-modeBtn.Size = UDim2.new(1, -20, 0, 35); modeBtn.Position = UDim2.new(0, 10, 0, 130); modeBtn.Text = "MODE: FILTER"; modeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); modeBtn.TextColor3 = Color3.new(1, 1, 1)
+local negBtn = Instance.new("TextButton", mainFrame)
+negBtn.Size = UDim2.new(1, -20, 0, 35); negBtn.Position = UDim2.new(0, 10, 0, 125); negBtn.Text = "TheEye-Negative: OFF"; negBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); negBtn.TextColor3 = Color3.new(1,1,1)
+
+local sporeBtn = Instance.new("TextButton", mainFrame)
+sporeBtn.Size = UDim2.new(1, -20, 0, 35); sporeBtn.Position = UDim2.new(0, 10, 0, 165); sporeBtn.Text = "TheEye-Spore: OFF"; sporeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); sporeBtn.TextColor3 = Color3.new(1,1,1)
 
 local scroll = Instance.new("ScrollingFrame", mainFrame)
-scroll.Size = UDim2.new(1, -20, 0, 370); scroll.Position = UDim2.new(0, 10, 0, 170); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+scroll.Size = UDim2.new(1, -20, 0, 330); scroll.Position = UDim2.new(0, 10, 0, 210); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
 
 for _, data in ipairs(FilterSettings) do
-    local btn = Instance.new("TextButton", scroll)
-    btn.Size = UDim2.new(1, -10, 0, 38); btn.Text = data.name .. ": ON"; btn.BackgroundColor3 = data.color; btn.TextColor3 = Color3.new(0,0,0)
-    btn.MouseButton1Click:Connect(function()
-        data.enabled = not data.enabled
-        btn.Text = data.name .. (data.enabled and ": ON" or ": OFF")
-        btn.BackgroundColor3 = data.enabled and data.color or Color3.fromRGB(60, 60, 60)
-    end)
+    local b = Instance.new("TextButton", scroll)
+    b.Size = UDim2.new(1, -10, 0, 35); b.Text = data.name .. ": ON"; b.BackgroundColor3 = data.color; b.TextColor3 = Color3.new(0,0,0)
+    b.MouseButton1Click:Connect(function() data.enabled = not data.enabled; b.Text = data.name .. (data.enabled and ": ON" or ": OFF"); b.BackgroundColor3 = data.enabled and data.color or Color3.fromRGB(60, 60, 60) end)
 end
 
-startBtn.MouseButton1Click:Connect(function()
-    active = not active
-    if active then
-        -- กำหนดจุดหยุด: ค่าปัจจุบัน + จำนวนที่กรอก
-        targetGoal = getBackpackValue() + (tonumber(capInput.Text) or 1)
-        print("🎯 Goal Set to: " .. targetGoal)
-        castRod()
-    end
-    startBtn.Text = active and "STOP" or "START HUNT"
-    startBtn.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-end)
+local function updateEyeButtons()
+    negBtn.Text = "TheEye-Negative: " .. (currentEye == "Negative" and "ON" or "OFF")
+    negBtn.BackgroundColor3 = (currentEye == "Negative" and Color3.fromRGB(0, 80, 150) or Color3.fromRGB(50, 50, 50))
+    sporeBtn.Text = "TheEye-Spore: " .. (currentEye == "Spore" and "ON" or "OFF")
+    sporeBtn.BackgroundColor3 = (currentEye == "Spore" and Color3.fromRGB(0, 120, 80) or Color3.fromRGB(50, 50, 50))
+end
 
-modeBtn.MouseButton1Click:Connect(function()
-    farmMode = (farmMode == "ALL") and "FILTER" or "ALL"
-    modeBtn.Text = "MODE: " .. (farmMode == "ALL" and "ALL" or "FILTER")
-end)
+negBtn.MouseButton1Click:Connect(function() currentEye = (currentEye == "Negative" and "None" or "Negative"); updateEyeButtons() end)
+sporeBtn.MouseButton1Click:Connect(function() currentEye = (currentEye == "Spore" and "None" or "Spore"); updateEyeButtons() end)
+startBtn.MouseButton1Click:Connect(function() active = not active; startBtn.Text = active and "STOP AUTO" or "START AUTO"; startBtn.BackgroundColor3 = active and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0); if active and not isTeleporting then performCast() end end)
