@@ -1,4 +1,4 @@
--- [[ FAST AUTO-FISH v34.0: TURBO DOUBLE-PRESS STABLE ]]
+-- [[ FAST AUTO-FISH v33.5: TURBO PULL & PRO OPTIMIZED ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,6 +28,7 @@ local FilterSettings = {
     {name = "Other", color = Color3.fromRGB(255, 255, 255), enabled = true, items = {}}
 }
 
+-- ฟังก์ชันหา Backpack ที่แม่นยำ (จาก v6.1)
 local function getBackpackObj()
     local char = lp.Character
     return (char and char:FindFirstChild("Backpack")) or lp.Backpack:FindFirstChild("Backpack")
@@ -43,10 +44,9 @@ local function isTarget(itemName)
     return false
 end
 
--- ฟังก์ชันกดเลข 1 แบบรวดเร็ว
 local function pressSlot1()
     vim:SendKeyEvent(true, Enum.KeyCode.One, false, game)
-    task.wait(0.02) -- เร่งความเร็วการกด
+    task.wait(0.05)
     vim:SendKeyEvent(false, Enum.KeyCode.One, false, game)
 end
 
@@ -56,7 +56,7 @@ local function performCast()
     if not char then return end
     local rod = char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod")
     if rod then
-        if rod.Parent == lp.Backpack then pressSlot1() task.wait(0.2) end
+        if rod.Parent == lp.Backpack then pressSlot1() task.wait(0.3) end
         local attach = rod:FindFirstChild("Attachment", true)
         local root = char:FindFirstChild("HumanoidRootPart")
         if attach and root then
@@ -82,7 +82,7 @@ task.spawn(function()
                 if currentEye == "Negative" then
                     targetPos = Vector3.new(370, 49, 137)
                     lookAtPos = Vector3.new(398.594147, 49, 144.852356)
-                else
+                else -- Spore
                     targetPos = Vector3.new(-49, 5, 30266)
                     lookAtPos = Vector3.new(-48.8923225, 5, 30287.5039)
                 end
@@ -90,6 +90,7 @@ task.spawn(function()
 
             if (root.Position - targetPos).Magnitude > 5 then
                 isTeleporting = true
+                -- รอให้ดึงเบ็ดก่อนย้าย (Safe TP)
                 repeat task.wait(0.5) until not workspace:FindFirstChild("Bobber") or not active
                 root.CFrame = CFrame.lookAt(targetPos, lookAtPos)
                 task.wait(1)
@@ -103,7 +104,7 @@ task.spawn(function()
     end
 end)
 
--- [[ EVENT: RECEIVE ITEMS ]]
+-- [[ EVENT: RECEIVE ITEMS (TURBO PULL LOGIC) ]]
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if not (active and success and items) then return end
     
@@ -116,39 +117,44 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
         local bpObj = getBackpackObj()
 
         if hasTarget and bpObj then
+            -- [[ PHASE: TURBO COLLECT ]]
             local capacityLimit = tonumber(lp.PlayerGui.FishingProGUI.MainFrame.CapInput.Text) or 1
             local startNewItems = bpObj:GetAttribute("NewItems") or 0
             local goal = startNewItems + capacityLimit
             
+            warn("💎 [TARGET FOUND]: ดึงจนกว่าจะครบ " .. goal)
+
             local timeout = 0
             while active and timeout < 150 do
                 local currentVal = bpObj:GetAttribute("NewItems") or 0
                 if currentVal >= goal then break end
 
+                -- ส่งสัญญาณเก็บรัวๆ แบบ v6.1
                 for _, item in pairs(items) do
-                    if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end
+                    if item.id then 
+                        ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) 
+                    end
                 end
                 task.wait(0.1)
                 timeout = timeout + 1
             end
 
+            -- เมื่อครบแล้ว ดึงเบ็ดขึ้น
             if lp.Character and lp.Character:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
-            task.wait(0.3)
+            task.wait(0.3) -- พักจังหวะแบบ v6.1
         else
-            -- [[ PHASE: TURBO DOUBLE RESET ]]
-            pressSlot1() -- กดครั้งที่ 1 (ถอดเบ็ดออก)
-            task.wait(0.08) -- รอจังหวะสั้นๆ
-            pressSlot1() -- กดครั้งที่ 2 (ใส่เบ็ดกลับ)
-            task.wait(0.15)
+            -- [[ PHASE: GEAR RESET (NO TARGET) ]]
+            pressSlot1() task.wait(0.2)
+            pressSlot1() task.wait(0.3)
         end
 
         if not isTeleporting then performCast() end
     end)
 end)
 
--- GUI BUILD (v33.5 Style)
+-- [[ GUI BUILD ]]
 local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
 screenGui.Name = "FishingProGUI"; screenGui.ResetOnSpawn = false
 
@@ -162,7 +168,7 @@ mainFrame.Size = UDim2.new(0, 240, 0, 620); mainFrame.Position = UDim2.new(0.5, 
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true; mainFrame.ZIndex = 1
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "AUTO FISH v34.0"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "TURBO FISH v33.5"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
 
 local capInput = Instance.new("TextBox", mainFrame)
 capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
