@@ -1,4 +1,4 @@
--- [[ FAST AUTO-FISH v33.5: TURBO PULL & PRO OPTIMIZED ]]
+-- [[ FAST AUTO-FISH v33.9: STABLE & SINGLE-PRESS RESET ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,7 +28,6 @@ local FilterSettings = {
     {name = "Other", color = Color3.fromRGB(255, 255, 255), enabled = true, items = {}}
 }
 
--- ฟังก์ชันหา Backpack ที่แม่นยำ (จาก v6.1)
 local function getBackpackObj()
     local char = lp.Character
     return (char and char:FindFirstChild("Backpack")) or lp.Backpack:FindFirstChild("Backpack")
@@ -90,7 +89,6 @@ task.spawn(function()
 
             if (root.Position - targetPos).Magnitude > 5 then
                 isTeleporting = true
-                -- รอให้ดึงเบ็ดก่อนย้าย (Safe TP)
                 repeat task.wait(0.5) until not workspace:FindFirstChild("Bobber") or not active
                 root.CFrame = CFrame.lookAt(targetPos, lookAtPos)
                 task.wait(1)
@@ -104,7 +102,7 @@ task.spawn(function()
     end
 end)
 
--- [[ EVENT: RECEIVE ITEMS (TURBO PULL LOGIC) ]]
+-- [[ EVENT: RECEIVE ITEMS (STABLE TURBO PULL) ]]
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if not (active and success and items) then return end
     
@@ -122,14 +120,13 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
             local startNewItems = bpObj:GetAttribute("NewItems") or 0
             local goal = startNewItems + capacityLimit
             
-            warn("💎 [TARGET FOUND]: ดึงจนกว่าจะครบ " .. goal)
+            warn("💎 [TARGET FOUND]: Collecting to " .. goal)
 
             local timeout = 0
             while active and timeout < 150 do
                 local currentVal = bpObj:GetAttribute("NewItems") or 0
                 if currentVal >= goal then break end
 
-                -- ส่งสัญญาณเก็บรัวๆ แบบ v6.1
                 for _, item in pairs(items) do
                     if item.id then 
                         ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) 
@@ -139,15 +136,14 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
                 timeout = timeout + 1
             end
 
-            -- เมื่อครบแล้ว ดึงเบ็ดขึ้น
             if lp.Character and lp.Character:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
-            task.wait(0.3) -- พักจังหวะแบบ v6.1
+            task.wait(0.3)
         else
-            -- [[ PHASE: GEAR RESET (NO TARGET) ]]
-            pressSlot1() task.wait(0.2)
-            pressSlot1() task.wait(0.3)
+            -- [[ PHASE: FAST RESET (SINGLE PRESS) ]]
+            pressSlot1() -- ลดจาก 2 รอบเหลือ 1 รอบตามที่สั่ง
+            task.wait(0.2)
         end
 
         if not isTeleporting then performCast() end
@@ -168,7 +164,7 @@ mainFrame.Size = UDim2.new(0, 240, 0, 620); mainFrame.Position = UDim2.new(0.5, 
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true; mainFrame.ZIndex = 1
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "TURBO FISH v33.5"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "AUTO FISH v33.9"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
 
 local capInput = Instance.new("TextBox", mainFrame)
 capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
