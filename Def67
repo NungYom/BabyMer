@@ -1,0 +1,129 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- พิกัดเป้าหมายสำหรับตรวจหาฐาน (รองรับทั้งสองแบบ)
+local targetShortL = Vector3.new(96, 7.64700079, 28.4999847)
+local targetLongL = Vector3.new(96, 7.64700079, 51.9999847)
+
+local basesFolder = workspace:FindFirstChild("Bases")
+
+-- ข้อมูล Unit และราคา (อัปเดต Turret10)
+local farmCost = 90
+local turretCost = 3500 
+local turretName = "Turret10"
+
+-- พิกัดป้อมแยกประเภท
+local turretPositionsL_San = {
+    Vector3.new(105.700012, 1.64700103, 18.4499817),
+    Vector3.new(125.900024, 1.64700103, -21.9500122),
+    Vector3.new(125.900024, 1.64700103, -1.75001526),
+    Vector3.new(125.900024, 1.64700103, -11.8500137)
+}
+local turretPositionsL_Yao = {
+    Vector3.new(126, 1.64700103, -18.6500244),
+    Vector3.new(126, 1.64700103, -8.55001831),
+    Vector3.new(126, 1.64700103, 1.54998779),
+    Vector3.new(126, 1.64700103, 11.6499786)
+}
+
+local function getCurrency()
+    return LocalPlayer:GetAttribute("currency") or 0
+end
+
+local function isClose(pos1, pos2, tolerance)
+    return (pos1 - pos2).Magnitude <= (tolerance or 1.5)
+end
+
+local function isTurretTile(pos, currentList)
+    for _, tPos in ipairs(currentList) do
+        if isClose(pos, tPos) then return true end
+    end
+    return false
+end
+
+if basesFolder then
+    for _, base in ipairs(basesFolder:GetChildren()) do
+        local zonesFolder = base:FindFirstChild("Zones")
+        if zonesFolder then
+            local zones = {}
+            for _, child in ipairs(zonesFolder:GetChildren()) do
+                if child.Name == "Zone" then table.insert(zones, child) end
+            end
+            
+            if #zones >= 2 then
+                local pos1, pos2 = zones[1].Position, zones[2].Position
+                local currentTurretList = nil
+                local baseType = ""
+
+                -- ตรวจสอบว่าเป็น Lสั้น หรือ Lยาว โดยเช็คพิกัด Zone ทั้งคู่
+                if isClose(pos1, targetShortL) or isClose(pos2, targetShortL) then
+                    baseType = "Lสั้น"
+                    currentTurretList = turretPositionsL_San
+                elseif isClose(pos1, targetLongL) or isClose(pos2, targetLongL) then
+                    baseType = "Lยาว"
+                    currentTurretList = turretPositionsL_Yao
+                end
+                
+                -- หากพบฐานที่ตรงกับพิกัดใดพิกัดหนึ่ง
+                if currentTurretList then
+                    print("✅ ตรวจพบฐานเป้าหมายประเภท: " .. baseType)
+                    
+                    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                    local hrp = char:WaitForChild("HumanoidRootPart")
+                    local door = base:FindFirstChild("Door")
+
+                    -- 1. Claim ฐาน (Touch Hitbox)
+                    if door then
+                        local hitbox = door:FindFirstChild("Hitbox")
+                        local spawnPoint = door:FindFirstChild("Spawn")
+                        hrp.CFrame = hitbox.CFrame 
+                        task.wait(0.7) -- เพิ่มเวลา Claim อีกนิดให้มั่นใจ
+                        hrp.CFrame = spawnPoint.CFrame + Vector3.new(0, 3, 0)
+                        print("🚀 Claim " .. baseType .. " สำเร็จ!")
+                    end
+
+                    -- 2. ระบบวางยูนิต
+                    task.spawn(function()
+                        local hotbarRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Hotbar")
+                        local tilesFolder = base:FindFirstChild("Tiles")
+                        
+                        local farmTiles, turretTiles = {}, {}
+                        for _, tile in ipairs(tilesFolder:GetChildren()) do
+                            -- รองรับ Tile, Tutorial, Starter
+                            if tile.Name == "Tile" or tile.Name == "Tutorial" or tile.Name == "Starter" then
+                                if isTurretTile(tile.Position, currentTurretList) then
+                                    table.insert(turretTiles, tile)
+                                else
+                                    table.insert(farmTiles, tile)
+                                end
+                            end
+                        end
+
+                        -- วาง Farm8 (90)
+                        for _, tile in ipairs(farmTiles) do
+                            while getCurrency() < farmCost do task.wait(0.1) end
+                            hrp.CFrame = tile.CFrame + Vector3.new(0, 3, 0)
+                            task.wait(0.05)
+                            hotbarRemote:FireServer("buy", "Farm8", tile)
+                            task.wait(0.1) 
+                        end
+
+                        -- วาง Turret10 (3500)
+                        print("💰 ฟาร์มครบแล้ว รอสะสมเงินวาง " .. turretName)
+                        for _, tile in ipairs(turretTiles) do
+                            while getCurrency() < turretCost do task.wait(0.4) end
+                            hrp.CFrame = tile.CFrame + Vector3.new(0, 3, 0)
+                            task.wait(0.05)
+                            hotbarRemote:FireServer("buy", turretName, tile)
+                            print("🔫 วาง " .. turretName .. " ที่ " .. tostring(tile.Position))
+                            task.wait(0.15)
+                        end
+                        print("🎯 ทำงานเสร็จสิ้นทั้้งระบบบนฐาน " .. baseType)
+                    end)
+                    break
+                end
+            end
+        end
+    end
+end
