@@ -1,0 +1,66 @@
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+-- ตั้งค่าตำแหน่งพิกัดเดิมที่คุณระบุ
+local startCFrame = CFrame.new(0.5, 37.5, -340, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+local targetCFrame = CFrame.new(0.5, 37.5, -60.5, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+
+-- ปรับขนาดใหม่ตามที่ขอ: 375, 85, 40
+local partSize = Vector3.new(375, 85, 40)
+
+local isProcessing = false
+
+local function spawnAndMegaPush()
+	if isProcessing then return end
+	isProcessing = true
+	
+	-- 1. สร้าง Part ยักษ์
+	local wall = Instance.new("Part")
+	wall.Name = "MegaPushWall"
+	wall.Size = partSize
+	wall.CFrame = startCFrame
+	wall.Anchored = true
+	wall.CanCollide = true
+	wall.Color = Color3.fromRGB(255, 255, 255) -- สีขาวสว่าง
+	wall.Material = Enum.Material.Neon -- แสงจ้าเพื่อให้ดูมีพลัง
+	wall.Parent = workspace
+	
+	-- 2. ปรับความเร็ว (Duration ยิ่งน้อย ยิ่งวิ่งไวและแรงถีบสูง)
+	local duration = 0.8 -- ปรับเหลือ 0.8 วินาที (ไวมาก!)
+	local distance = (targetCFrame.Position - startCFrame.Position).Magnitude
+	local speed = distance / duration
+	local direction = (targetCFrame.Position - startCFrame.Position).Unit
+	
+	-- ตั้งค่าแรงส่งฟิสิกส์ (LinearVelocity)
+	wall.AssemblyLinearVelocity = direction * speed
+	
+	-- 3. เริ่มการเคลื่อนที่
+	local startTime = tick()
+	local connection
+	
+	connection = RunService.Heartbeat:Connect(function()
+		local elapsed = tick() - startTime
+		local alpha = math.min(elapsed / duration, 1)
+		
+		-- อัปเดตตำแหน่ง
+		wall.CFrame = startCFrame:Lerp(targetCFrame, alpha)
+		
+		-- คงแรงผลักไว้
+		if alpha < 1 then
+			wall.AssemblyLinearVelocity = direction * speed
+		else
+			-- จบการทำงาน
+			connection:Disconnect()
+			wall:Destroy()
+			isProcessing = false
+		end
+	end)
+end
+
+-- ตรวจจับการกดปุ่ม Q
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.Q then
+		spawnAndMegaPush()
+	end
+end)
