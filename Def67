@@ -42,11 +42,8 @@ local function startBossMonitor()
     end)
 end
 
--- ระบบ Lobby (เพิ่มดีเลย์ตอนเริ่ม 5 วิ และเช็คทุก 3 วิ)
+-- ระบบ Lobby (เช็คทุก 3 วิ)
 local function handleLobby()
-    print("🏠 เข้า Lobby แล้ว! รอโหลดข้อมูล 5 วินาที...")
-    task.wait(5) -- เพิ่มดีเลย์ 5 วินาทีตามที่สั่ง
-    
     print("🏠 เริ่มระบบ Lobby Automator (Loop 3s Check)...")
     
     task.spawn(function()
@@ -59,7 +56,6 @@ local function handleLobby()
             
             for i, room in ipairs(queueData) do
                 local isOccupied = false
-                -- ตรวจเช็คผู้เล่นคนอื่น
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                         if (p.Character.HumanoidRootPart.Position - room.spawn).Magnitude < 15 then
@@ -73,7 +69,6 @@ local function handleLobby()
                     print("🚪 ห้อง " .. i .. " ว่าง! พยายามเข้าห้อง...")
                     hrp.CFrame = CFrame.new(room.enter)
                     task.wait(0.5)
-                    -- ส่งคำสั่งสร้างห้อง
                     ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Queue"):FireServer("create", "Map4", 1, "Hard")
                     break 
                 end
@@ -82,17 +77,17 @@ local function handleLobby()
     end)
 end
 
--- ระบบ Farm (ดีเลย์ 3 วิ ตอนเริ่ม)
+-- ระบบ Farm (เพิ่มดีเลย์ 3 วิ ตอนเริ่ม)
 local function handleFarm()
     print("🚜 เข้าแมพแล้ว! รอ 3 วินาทีเพื่อให้ Assets โหลด...")
-    task.wait(3) 
+    task.wait(3) -- ดีเลย์ 3 วินาทีตามที่สั่ง
     
     startBossMonitor()
     local bases = workspace:WaitForChild("Bases", 30)
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     
-    -- รอให้ค่าเงินโหลดเสร็จ
+    -- รอให้ค่าเงินโหลด
     while not LocalPlayer:GetAttribute("currency") do task.wait(1) end
 
     for _, base in ipairs(bases:GetChildren()) do
@@ -102,7 +97,6 @@ local function handleFarm()
             local z1, z2 = zones:GetChildren()[1], zones:GetChildren()[2]
             local currentTurretList = nil
             
-            -- ตรวจสอบตำแหน่ง Zone
             if (z1 and (z1.Position - targetShortL).Magnitude < 2) or (z2 and (z2.Position - targetShortL).Magnitude < 2) then
                 currentTurretList = turretPositionsL_San
             elseif (z1 and (z1.Position - targetLongL).Magnitude < 2) or (z2 and (z2.Position - targetLongL).Magnitude < 2) then
@@ -115,7 +109,7 @@ local function handleFarm()
                 task.wait(0.8)
                 hrp.CFrame = door:WaitForChild("Spawn").CFrame + Vector3.new(0,3,0)
                 
-                -- คัดแยกกระเบื้อง (รวม Tutorial)
+                -- แยกประเภทกระเบื้อง
                 local tiles = base:WaitForChild("Tiles")
                 local farmTiles, turretTiles = {}, {}
                 for _, tile in ipairs(tiles:GetChildren()) do
@@ -128,7 +122,6 @@ local function handleFarm()
                     end
                 end
 
-                -- เริ่มวางยูนิต
                 task.spawn(function()
                     local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Hotbar")
                     for _, tile in ipairs(farmTiles) do
@@ -152,7 +145,7 @@ local function handleFarm()
     end
 end
 
--- ลอจิกเริ่มต้น
+-- ตรวจสอบจุดเริ่ม
 if PlaceId == LOBBY_ID then
     handleLobby()
 else
