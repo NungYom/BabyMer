@@ -42,19 +42,17 @@ local function startBossMonitor()
     end)
 end
 
--- ระบบ Lobby (เพิ่มตรวจสอบทุก 3 วิ)
+-- ระบบ Lobby (เช็คทุก 3 วิ)
 local function handleLobby()
-    print("🏠 เริ่มระบบ Lobby Automator...")
+    print("🏠 เริ่มระบบ Lobby Automator (Loop 3s Check)...")
     
     task.spawn(function()
-        while task.wait(3) do -- ตรวจสอบทุก 3 วินาทีตามที่สั่ง
-            if game.PlaceId ~= LOBBY_ID then break end -- ถ้าไม่ได้อยู่ Lobby ให้หยุด Loop นี้
+        while task.wait(3) do
+            if game.PlaceId ~= LOBBY_ID then break end
             
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
-            
-            print("⏳ กำลังตรวจสอบห้องว่าง (Lobby Status)...")
             
             for i, room in ipairs(queueData) do
                 local isOccupied = false
@@ -72,7 +70,6 @@ local function handleLobby()
                     hrp.CFrame = CFrame.new(room.enter)
                     task.wait(0.5)
                     ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Queue"):FireServer("create", "Map4", 1, "Hard")
-                    -- ไม่ต้องใส่ return เพื่อให้มันวนมาเช็คใหม่ใน 3 วิถ้ายังไม่โดนวาร์ปไปแมพฟาร์ม
                     break 
                 end
             end
@@ -80,14 +77,17 @@ local function handleLobby()
     end)
 end
 
--- ระบบ Farm (รองรับ Lสั้น/ยาว)
+-- ระบบ Farm (เพิ่มดีเลย์ 3 วิ ตอนเริ่ม)
 local function handleFarm()
+    print("🚜 เข้าแมพแล้ว! รอ 3 วินาทีเพื่อให้ Assets โหลด...")
+    task.wait(3) -- ดีเลย์ 3 วินาทีตามที่สั่ง
+    
     startBossMonitor()
     local bases = workspace:WaitForChild("Bases", 30)
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     
-    -- รอให้ค่าเงินโหลดเสร็จ
+    -- รอให้ค่าเงินโหลด
     while not LocalPlayer:GetAttribute("currency") do task.wait(1) end
 
     for _, base in ipairs(bases:GetChildren()) do
@@ -109,7 +109,7 @@ local function handleFarm()
                 task.wait(0.8)
                 hrp.CFrame = door:WaitForChild("Spawn").CFrame + Vector3.new(0,3,0)
                 
-                -- วางยูนิต
+                -- แยกประเภทกระเบื้อง
                 local tiles = base:WaitForChild("Tiles")
                 local farmTiles, turretTiles = {}, {}
                 for _, tile in ipairs(tiles:GetChildren()) do
@@ -145,7 +145,7 @@ local function handleFarm()
     end
 end
 
--- เริ่มการทำงาน
+-- ตรวจสอบจุดเริ่ม
 if PlaceId == LOBBY_ID then
     handleLobby()
 else
