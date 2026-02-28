@@ -1,4 +1,4 @@
--- [[ FAST AUTO-FISH v34.4: V33.5 BASE + INTEGRATED AUTO-SELL ]]
+-- [[ FAST AUTO-FISH v34.5: ANTI-BUG TP & SELL ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,6 +8,7 @@ local lp = Players.LocalPlayer
 local active = false
 local currentEye = "None" 
 local isTeleporting = false
+local isSelling = false -- เพิ่มสถานะการขาย
 local blackScreenActive = false
 
 -- Object Pooling สำหรับระบบลอยตัว
@@ -28,7 +29,6 @@ local FilterSettings = {
     {name = "Other", color = Color3.fromRGB(255, 255, 255), enabled = true, items = {}}
 }
 
--- ฟังก์ชันหา Backpack ที่แม่นยำ (จาก v6.1)
 local function getBackpackObj()
     local char = lp.Character
     return (char and char:FindFirstChild("Backpack")) or lp.Backpack:FindFirstChild("Backpack")
@@ -51,7 +51,9 @@ local function pressSlot1()
 end
 
 local function performCast()
-    if not active or isTeleporting then return end
+    -- ป้องกันการเหวี่ยงเบ็ดถ้ากำลัง TP หรือ กำลังขายของ
+    if not active or isTeleporting or isSelling then return end
+    
     local char = lp.Character
     if not char then return end
     local rod = char:FindFirstChild("Rod") or lp.Backpack:FindFirstChild("Rod")
@@ -68,7 +70,8 @@ end
 -- [[ SYSTEM: DUAL EYE + POOLED FLOAT ]]
 task.spawn(function()
     while true do
-        if currentEye ~= "None" and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        -- จะย้ายที่ได้ต่อเมื่อ "ไม่ได้กำลังขายของ" เท่านั้น
+        if currentEye ~= "None" and not isSelling and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
             local minute = os.date("!*t").min
             local root = lp.Character.HumanoidRootPart
             floatObject.Parent = root
@@ -82,7 +85,7 @@ task.spawn(function()
                 if currentEye == "Negative" then
                     targetPos = Vector3.new(370, 49, 137)
                     lookAtPos = Vector3.new(398.594147, 49, 144.852356)
-                else -- Spore
+                else
                     targetPos = Vector3.new(-49, 5, 30266)
                     lookAtPos = Vector3.new(-48.8923225, 5, 30287.5039)
                 end
@@ -90,9 +93,10 @@ task.spawn(function()
 
             if (root.Position - targetPos).Magnitude > 5 then
                 isTeleporting = true
+                -- รอเบ็ดเก็บก่อน TP
                 repeat task.wait(0.5) until not workspace:FindFirstChild("Bobber") or not active
                 root.CFrame = CFrame.lookAt(targetPos, lookAtPos)
-                task.wait(1)
+                task.wait(1.5) -- เพิ่มเวลาให้โหลด Map นิดนึง
                 isTeleporting = false
                 if active then performCast() end
             end
@@ -103,7 +107,7 @@ task.spawn(function()
     end
 end)
 
--- [[ EVENT: RECEIVE ITEMS (TURBO PULL LOGIC) ]]
+-- [[ EVENT: RECEIVE ITEMS ]]
 ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(function(success, p1, p2, items)
     if not (active and success and items) then return end
     
@@ -116,118 +120,77 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
         local bpObj = getBackpackObj()
 
         if hasTarget and bpObj then
-            -- [[ PHASE: TURBO COLLECT ]]
+            -- 1. เก็บของเป้าหมายให้ครบก่อน
             local capacityLimit = tonumber(lp.PlayerGui.FishingProGUI.MainFrame.CapInput.Text) or 1
             local startNewItems = bpObj:GetAttribute("NewItems") or 0
             local goal = startNewItems + capacityLimit
             
-            warn("💎 [TARGET FOUND]: ดึงจนกว่าจะครบ " .. goal)
-
             local timeout = 0
             while active and timeout < 150 do
                 local currentVal = bpObj:GetAttribute("NewItems") or 0
                 if currentVal >= goal then break end
-
                 for _, item in pairs(items) do
-                    if item.id then 
-                        ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) 
-                    end
+                    if item.id then ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) end
                 end
                 task.wait(0.1)
                 timeout = timeout + 1
             end
 
-            -- เมื่อครบแล้ว ดึงเบ็ดขึ้น
+            -- 2. ดึงเบ็ดขึ้น
             if lp.Character and lp.Character:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
-            task.wait(0.3) 
+            task.wait(0.4)
 
-            -- [[ PHASE: SELL UNWANTED (NEW ADDITION) ]]
-            -- ทำงานหลังจากดึงของเสร็จเรียบรือยแล้วเท่านั้น
+            -- 3. เข้าสู่ช่วงขายของ (ล็อคไม่ให้ TP แทรก)
+            isSelling = true
             for _, item in ipairs(items) do
                 if not isTarget(item.name) then
-                    -- 1. ถือไอเทมขยะ
                     ReplicatedStorage.Events.Global.ClientEquipStar:FireServer(item)
-                    task.wait(0.1)
-                    
-                    -- 2. ยิง Remote ขาย
-                    local sellArgs = {
-                        {
-                            id = "sell-current",
-                            text = "Sell this star.",
-                            npc = "Star Merchant"
-                        }
-                    }
+                    task.wait(0.15)
+                    local sellArgs = {{id = "sell-current", text = "Sell this star.", npc = "Star Merchant"}}
                     ReplicatedStorage.Dialogue.Events.Global.ClientChoosesDialogueOption:FireServer(unpack(sellArgs))
                     task.wait(0.1)
                 end
             end
-            task.wait(0.2) -- เคลียร์ช่องเสร็จแล้วค่อยไปต่อ
+            isSelling = false -- ปลดล็อคเมื่อขายจบ
+            task.wait(0.2)
         else
-            -- [[ PHASE: GEAR RESET (NO TARGET) ]]
+            -- กรณีไม่เจอของเป้าหมาย (Reset Gear ปกติ)
             pressSlot1() task.wait(0.2)
             pressSlot1() task.wait(0.3)
         end
 
+        -- ตรวจสอบอีกครั้งว่าย้ายที่เสร็จหรือยังก่อนเหวี่ยงใหม่
         if not isTeleporting then performCast() end
     end)
 end)
 
--- [[ GUI BUILD ]]
-local screenGui = Instance.new("ScreenGui", lp.PlayerGui)
-screenGui.Name = "FishingProGUI"; screenGui.ResetOnSpawn = false
-
-local blackFrame = Instance.new("Frame", screenGui)
-blackFrame.Size = UDim2.new(1.5, 0, 1.5, 0); blackFrame.Position = UDim2.new(-0.25, 0, -0.25, 0)
-blackFrame.BackgroundColor3 = Color3.new(0,0,0); blackFrame.Visible = false; blackFrame.ZIndex = 0
-
-local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 240, 0, 620); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true; mainFrame.ZIndex = 1
-
-local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "TURBO FISH v34.4"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
-
-local capInput = Instance.new("TextBox", mainFrame)
-capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
-
-local startBtn = Instance.new("TextButton", mainFrame)
-startBtn.Size = UDim2.new(1, -20, 0, 40); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START AUTO"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
-
-local negBtn = Instance.new("TextButton", mainFrame)
-negBtn.Size = UDim2.new(1, -20, 0, 35); negBtn.Position = UDim2.new(0, 10, 0, 125); negBtn.Text = "TheEye-Negative: OFF"; negBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); negBtn.TextColor3 = Color3.new(1,1,1)
-
-local sporeBtn = Instance.new("TextButton", mainFrame)
-sporeBtn.Size = UDim2.new(1, -20, 0, 35); sporeBtn.Position = UDim2.new(0, 10, 0, 165); sporeBtn.Text = "TheEye-Spore: OFF"; sporeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); sporeBtn.TextColor3 = Color3.new(1,1,1)
-
-local blackBtn = Instance.new("TextButton", mainFrame)
-blackBtn.Size = UDim2.new(1, -20, 0, 35); blackBtn.Position = UDim2.new(0, 10, 0, 205); blackBtn.Text = "BLACK SCREEN: OFF"; blackBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30); blackBtn.TextColor3 = Color3.new(1,1,1)
-
-local scroll = Instance.new("ScrollingFrame", mainFrame)
-scroll.Size = UDim2.new(1, -20, 0, 320); scroll.Position = UDim2.new(0, 10, 0, 250); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+-- [[ GUI BUILD (v33.5 Style) ]]
+local screenGui = Instance.new("ScreenGui", lp.PlayerGui); screenGui.Name = "FishingProGUI"; screenGui.ResetOnSpawn = false
+local mainFrame = Instance.new("Frame", screenGui); mainFrame.Size = UDim2.new(0, 240, 0, 620); mainFrame.Position = UDim2.new(0.5, -120, 0.2, 0); mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true
+local title = Instance.new("TextLabel", mainFrame); title.Size = UDim2.new(1, 0, 0, 40); title.Text = "AUTO FISH v34.5 (STABLE)"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+local capInput = Instance.new("TextBox", mainFrame); capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
+local startBtn = Instance.new("TextButton", mainFrame); startBtn.Size = UDim2.new(1, -20, 0, 40); startBtn.Position = UDim2.new(0, 10, 0, 80); startBtn.Text = "START AUTO"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); startBtn.TextColor3 = Color3.new(1, 1, 1)
+local negBtn = Instance.new("TextButton", mainFrame); negBtn.Size = UDim2.new(1, -20, 0, 35); negBtn.Position = UDim2.new(0, 10, 0, 125); negBtn.Text = "Negative: OFF"; negBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); negBtn.TextColor3 = Color3.new(1,1,1)
+local sporeBtn = Instance.new("TextButton", mainFrame); sporeBtn.Size = UDim2.new(1, -20, 0, 35); sporeBtn.Position = UDim2.new(0, 10, 0, 165); sporeBtn.Text = "Spore: OFF"; sporeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); sporeBtn.TextColor3 = Color3.new(1,1,1)
+local scroll = Instance.new("ScrollingFrame", mainFrame); scroll.Size = UDim2.new(1, -20, 0, 320); scroll.Position = UDim2.new(0, 10, 0, 210); scroll.CanvasSize = UDim2.new(0,0,0,650); scroll.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
 
 for _, data in ipairs(FilterSettings) do
-    local b = Instance.new("TextButton", scroll)
-    b.Size = UDim2.new(1, -10, 0, 35); b.Text = data.name .. ": ON"; b.BackgroundColor3 = data.color; b.TextColor3 = Color3.new(0,0,0)
+    local b = Instance.new("TextButton", scroll); b.Size = UDim2.new(1, -10, 0, 35); b.Text = data.name .. ": ON"; b.BackgroundColor3 = data.color; b.TextColor3 = Color3.new(0,0,0)
     b.MouseButton1Click:Connect(function() data.enabled = not data.enabled; b.Text = data.name .. (data.enabled and ": ON" or ": OFF"); b.BackgroundColor3 = data.enabled and data.color or Color3.fromRGB(60, 60, 60) end)
 end
 
 local function updateButtons()
-    negBtn.Text = "TheEye-Negative: " .. (currentEye == "Negative" and "ON" or "OFF")
+    negBtn.Text = "Negative: " .. (currentEye == "Negative" and "ON" or "OFF")
     negBtn.BackgroundColor3 = (currentEye == "Negative" and Color3.fromRGB(0, 80, 150) or Color3.fromRGB(50, 50, 50))
-    sporeBtn.Text = "TheEye-Spore: " .. (currentEye == "Spore" and "ON" or "OFF")
+    sporeBtn.Text = "Spore: " .. (currentEye == "Spore" and "ON" or "OFF")
     sporeBtn.BackgroundColor3 = (currentEye == "Spore" and Color3.fromRGB(0, 120, 80) or Color3.fromRGB(50, 50, 50))
-    blackBtn.Text = "BLACK SCREEN: " .. (blackScreenActive and "ON" or "OFF")
-    blackBtn.BackgroundColor3 = (blackScreenActive and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(30, 30, 30))
-    blackFrame.Visible = blackScreenActive
 end
 
 negBtn.MouseButton1Click:Connect(function() currentEye = (currentEye == "Negative" and "None" or "Negative"); updateButtons() end)
 sporeBtn.MouseButton1Click:Connect(function() currentEye = (currentEye == "Spore" and "None" or "Spore"); updateButtons() end)
-blackBtn.MouseButton1Click:Connect(function() blackScreenActive = not blackScreenActive; updateButtons() end)
 startBtn.MouseButton1Click:Connect(function() 
     active = not active
     startBtn.Text = active and "STOP AUTO" or "START AUTO"
