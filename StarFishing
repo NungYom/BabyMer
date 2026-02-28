@@ -1,4 +1,4 @@
--- [[ FAST AUTO-FISH v33.5: TURBO PULL & PRO OPTIMIZED ]]
+-- [[ FAST AUTO-FISH v34.4: V33.5 BASE + INTEGRATED AUTO-SELL ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -90,7 +90,6 @@ task.spawn(function()
 
             if (root.Position - targetPos).Magnitude > 5 then
                 isTeleporting = true
-                -- รอให้ดึงเบ็ดก่อนย้าย (Safe TP)
                 repeat task.wait(0.5) until not workspace:FindFirstChild("Bobber") or not active
                 root.CFrame = CFrame.lookAt(targetPos, lookAtPos)
                 task.wait(1)
@@ -129,7 +128,6 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
                 local currentVal = bpObj:GetAttribute("NewItems") or 0
                 if currentVal >= goal then break end
 
-                -- ส่งสัญญาณเก็บรัวๆ แบบ v6.1
                 for _, item in pairs(items) do
                     if item.id then 
                         ReplicatedStorage.Events.Global.ClientItemConfirm:FireServer(item.id) 
@@ -143,7 +141,29 @@ ReplicatedStorage.Events.Global.ClientRecieveItems.OnClientEvent:Connect(functio
             if lp.Character and lp.Character:FindFirstChild("Humanoid") then
                 ReplicatedStorage.Events.Global.WithdrawBobber:FireServer(lp.Character.Humanoid)
             end
-            task.wait(0.3) -- พักจังหวะแบบ v6.1
+            task.wait(0.3) 
+
+            -- [[ PHASE: SELL UNWANTED (NEW ADDITION) ]]
+            -- ทำงานหลังจากดึงของเสร็จเรียบรือยแล้วเท่านั้น
+            for _, item in ipairs(items) do
+                if not isTarget(item.name) then
+                    -- 1. ถือไอเทมขยะ
+                    ReplicatedStorage.Events.Global.ClientEquipStar:FireServer(item)
+                    task.wait(0.1)
+                    
+                    -- 2. ยิง Remote ขาย
+                    local sellArgs = {
+                        {
+                            id = "sell-current",
+                            text = "Sell this star.",
+                            npc = "Star Merchant"
+                        }
+                    }
+                    ReplicatedStorage.Dialogue.Events.Global.ClientChoosesDialogueOption:FireServer(unpack(sellArgs))
+                    task.wait(0.1)
+                end
+            end
+            task.wait(0.2) -- เคลียร์ช่องเสร็จแล้วค่อยไปต่อ
         else
             -- [[ PHASE: GEAR RESET (NO TARGET) ]]
             pressSlot1() task.wait(0.2)
@@ -168,7 +188,7 @@ mainFrame.Size = UDim2.new(0, 240, 0, 620); mainFrame.Position = UDim2.new(0.5, 
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20); mainFrame.Draggable = true; mainFrame.Active = true; mainFrame.ZIndex = 1
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "TURBO FISH v33.5"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "TURBO FISH v34.4"; title.BackgroundColor3 = Color3.fromRGB(40, 0, 80); title.TextColor3 = Color3.new(1,1,1)
 
 local capInput = Instance.new("TextBox", mainFrame)
 capInput.Name = "CapInput"; capInput.Size = UDim2.new(0.3, 0, 0, 30); capInput.Position = UDim2.new(0.6, 0, 0, 45); capInput.Text = "1"; capInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45); capInput.TextColor3 = Color3.new(0, 255, 0)
