@@ -4,8 +4,9 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PlaceId = game.PlaceId
 
--- ข้อมูลสำหรับ Lobby
 local LOBBY_ID = 102669100769936
+
+-- ข้อมูลสำหรับ Lobby
 local queueData = {
     {spawn = Vector3.new(41.5500336, 4.58946705, -76.0190353), enter = Vector3.new(28.5500259, 16.5894661, -76.0190277)},
     {spawn = Vector3.new(41.5500298, 4.48946095, -42.8414574), enter = Vector3.new(28.5500298, 16.48946, -42.841465)},
@@ -23,27 +24,15 @@ local turretName = "Turret10"
 local turretPositionsL_San = {Vector3.new(105.7, 1.647, 18.45), Vector3.new(125.9, 1.647, -21.95), Vector3.new(125.9, 1.647, -1.75), Vector3.new(125.9, 1.647, -11.85)}
 local turretPositionsL_Yao = {Vector3.new(126, 1.647, -18.65), Vector3.new(126, 1.647, -8.55), Vector3.new(126, 1.647, 1.55), Vector3.new(126, 1.647, 11.65)}
 
--- Helper: รอตัวละครและค่าเงินโหลด
-local function waitForFullLoad()
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    char:WaitForChild("HumanoidRootPart")
-    char:WaitForChild("Humanoid")
-    -- รอจนกว่า Attribute currency จะพร้อมใช้งานเพื่อกัน Error
-    while not LocalPlayer:GetAttribute("currency") do task.wait(0.5) end
-    return char, char.HumanoidRootPart
-end
-
--- ระบบเช็คบอสตายเพื่อกลับ Lobby
+-- ระบบตรวจสอบบอสตาย
 local function startBossMonitor()
     task.spawn(function()
-        print("🔍 เริ่มการตรวจสอบสถานะบอส...")
-        while task.wait(2) do
+        while task.wait(3) do
             local monster = workspace:FindFirstChild("Monster")
             if monster then
                 local health = monster:GetAttribute("health")
                 if health and health <= 0 then
-                    print("💀 บอสตายแล้ว! เตรียมกลับ Lobby ใน 3 วินาที...")
+                    print("💀 บอสตายแล้ว! กลับ Lobby ใน 3 วิ...")
                     task.wait(3)
                     TeleportService:Teleport(LOBBY_ID, LocalPlayer)
                     break
@@ -53,100 +42,104 @@ local function startBossMonitor()
     end)
 end
 
--- ระบบ Lobby
+-- ระบบ Lobby (เพิ่มตรวจสอบทุก 3 วิ)
 local function handleLobby()
-    print("🏠 อยู่ใน Lobby กำลังหาห้องว่าง...")
-    local _, hrp = waitForFullLoad()
+    print("🏠 เริ่มระบบ Lobby Automator...")
     
-    while PlaceId == LOBBY_ID do
-        for i, room in ipairs(queueData) do
-            local isOccupied = false
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    if (player.Character.HumanoidRootPart.Position - room.spawn).Magnitude < 15 then
-                        isOccupied = true
-                        break
+    task.spawn(function()
+        while task.wait(3) do -- ตรวจสอบทุก 3 วินาทีตามที่สั่ง
+            if game.PlaceId ~= LOBBY_ID then break end -- ถ้าไม่ได้อยู่ Lobby ให้หยุด Loop นี้
+            
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            
+            print("⏳ กำลังตรวจสอบห้องว่าง (Lobby Status)...")
+            
+            for i, room in ipairs(queueData) do
+                local isOccupied = false
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        if (p.Character.HumanoidRootPart.Position - room.spawn).Magnitude < 15 then
+                            isOccupied = true
+                            break
+                        end
                     end
                 end
-            end
-            
-            if not isOccupied then
-                print("🚪 ห้องที่ " .. i .. " ว่าง! กำลังเข้าห้อง...")
-                hrp.CFrame = CFrame.new(room.enter)
-                task.wait(0.5)
-                ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Queue"):FireServer("create", "Map4", 1, "Hard")
-                return
+                
+                if not isOccupied then
+                    print("🚪 ห้อง " .. i .. " ว่าง! พยายามเข้าห้อง...")
+                    hrp.CFrame = CFrame.new(room.enter)
+                    task.wait(0.5)
+                    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Queue"):FireServer("create", "Map4", 1, "Hard")
+                    -- ไม่ต้องใส่ return เพื่อให้มันวนมาเช็คใหม่ใน 3 วิถ้ายังไม่โดนวาร์ปไปแมพฟาร์ม
+                    break 
+                end
             end
         end
-        task.wait(1)
-    end
+    end)
 end
 
--- ระบบ Farm
+-- ระบบ Farm (รองรับ Lสั้น/ยาว)
 local function handleFarm()
-    print("🚜 เข้าแมพแล้ว รอโหลด Assets...")
-    startBossMonitor() -- เริ่มเช็คบอสทันที
-    
+    startBossMonitor()
     local bases = workspace:WaitForChild("Bases", 30)
-    local _, hrp = waitForFullLoad()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
     
+    -- รอให้ค่าเงินโหลดเสร็จ
+    while not LocalPlayer:GetAttribute("currency") do task.wait(1) end
+
     for _, base in ipairs(bases:GetChildren()) do
         local zones = base:WaitForChild("Zones", 15)
         local door = base:WaitForChild("Door", 15)
         if zones and door then
-            local zChildren = zones:GetChildren()
-            if #zChildren >= 2 then
-                local z1, z2 = zChildren[1], zChildren[2]
-                local currentTurretList = nil
+            local z1, z2 = zones:GetChildren()[1], zones:GetChildren()[2]
+            local currentTurretList = nil
+            
+            if (z1 and (z1.Position - targetShortL).Magnitude < 2) or (z2 and (z2.Position - targetShortL).Magnitude < 2) then
+                currentTurretList = turretPositionsL_San
+            elseif (z1 and (z1.Position - targetLongL).Magnitude < 2) or (z2 and (z2.Position - targetLongL).Magnitude < 2) then
+                currentTurretList = turretPositionsL_Yao
+            end
+
+            if currentTurretList then
+                -- Claim ฐาน
+                hrp.CFrame = door:WaitForChild("Hitbox").CFrame
+                task.wait(0.8)
+                hrp.CFrame = door:WaitForChild("Spawn").CFrame + Vector3.new(0,3,0)
                 
-                if (z1 and (z1.Position - targetShortL).Magnitude < 2) or (z2 and (z2.Position - targetShortL).Magnitude < 2) then
-                    currentTurretList = turretPositionsL_San
-                    print("✅ ตรวจพบฐานเป้าหมาย: Lสั้น")
-                elseif (z1 and (z1.Position - targetLongL).Magnitude < 2) or (z2 and (z2.Position - targetLongL).Magnitude < 2) then
-                    currentTurretList = turretPositionsL_Yao
-                    print("✅ ตรวจพบฐานเป้าหมาย: Lยาว")
-                end
-
-                if currentTurretList then
-                    -- Claim ฐาน
-                    hrp.CFrame = door:WaitForChild("Hitbox").CFrame
-                    task.wait(0.8)
-                    hrp.CFrame = door:WaitForChild("Spawn").CFrame + Vector3.new(0,3,0)
-                    
-                    -- คัดแยกกระเบื้อง (รองรับ Tutorial/Starter)
-                    local tiles = base:WaitForChild("Tiles")
-                    local farmTiles, turretTiles = {}, {}
-                    for _, tile in ipairs(tiles:GetChildren()) do
-                        if tile.Name == "Tile" or tile.Name == "Tutorial" or tile.Name == "Starter" then
-                            local isTurret = false
-                            for _, tPos in ipairs(currentTurretList) do
-                                if (tile.Position - tPos).Magnitude < 1.5 then isTurret = true break end
-                            end
-                            table.insert(isTurret and turretTiles or farmTiles, tile)
+                -- วางยูนิต
+                local tiles = base:WaitForChild("Tiles")
+                local farmTiles, turretTiles = {}, {}
+                for _, tile in ipairs(tiles:GetChildren()) do
+                    if tile.Name == "Tile" or tile.Name == "Tutorial" or tile.Name == "Starter" then
+                        local isTurret = false
+                        for _, tPos in ipairs(currentTurretList) do
+                            if (tile.Position - tPos).Magnitude < 1.5 then isTurret = true break end
                         end
+                        table.insert(isTurret and turretTiles or farmTiles, tile)
                     end
-
-                    -- เริ่มการซื้อยูนิต
-                    task.spawn(function()
-                        local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Hotbar")
-                        for _, tile in ipairs(farmTiles) do
-                            while LocalPlayer:GetAttribute("currency") < farmCost do task.wait(0.2) end
-                            hrp.CFrame = tile.CFrame + Vector3.new(0,3,0)
-                            task.wait(0.05)
-                            remote:FireServer("buy", "Farm8", tile)
-                            task.wait(0.1)
-                        end
-                        print("🌱 วางฟาร์มครบแล้ว รอเงินวาง " .. turretName)
-                        for _, tile in ipairs(turretTiles) do
-                            while LocalPlayer:GetAttribute("currency") < turretCost do task.wait(0.5) end
-                            hrp.CFrame = tile.CFrame + Vector3.new(0,3,0)
-                            task.wait(0.05)
-                            remote:FireServer("buy", turretName, tile)
-                            task.wait(0.15)
-                        end
-                    end)
-                    break
                 end
+
+                task.spawn(function()
+                    local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Hotbar")
+                    for _, tile in ipairs(farmTiles) do
+                        while LocalPlayer:GetAttribute("currency") < farmCost do task.wait(0.2) end
+                        hrp.CFrame = tile.CFrame + Vector3.new(0,3,0)
+                        task.wait(0.05)
+                        remote:FireServer("buy", "Farm8", tile)
+                        task.wait(0.1)
+                    end
+                    for _, tile in ipairs(turretTiles) do
+                        while LocalPlayer:GetAttribute("currency") < turretCost do task.wait(0.5) end
+                        hrp.CFrame = tile.CFrame + Vector3.new(0,3,0)
+                        task.wait(0.05)
+                        remote:FireServer("buy", turretName, tile)
+                        task.wait(0.15)
+                    end
+                end)
+                break
             end
         end
     end
