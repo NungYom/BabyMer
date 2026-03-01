@@ -1,0 +1,134 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "BabeMer AutoFarm <3",
+   LoadingTitle = "Loading NaJaa...",
+   LoadingSubtitle = "by BabeArm & Friend",
+   ConfigurationSaving = {
+      Enabled = false
+   }
+})
+
+-- Services และตำแหน่ง Remote
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Player = game:GetService("Players").LocalPlayer
+local NetworkRemote = ReplicatedStorage:WaitForChild("_GAME"):WaitForChild("MODULES"):WaitForChild("NetworkUtility"):WaitForChild("ByteNetMax"):WaitForChild("system"):WaitForChild("ByteNetReliable")
+
+-- ตัวแปรควบคุม
+_G.AutoObby = false
+_G.AutoCollect = false
+_G.AutoSell = false
+
+local MainTab = Window:CreateTab("ฟาร์มหลัก", 4483362458)
+
+-- [1] Auto Obby Section (ปรับปรุง: ล็อคจุดเดิม 2 วิ)
+MainTab:CreateToggle({
+   Name = "Auto Obby (150s)",
+   CurrentValue = false,
+   Flag = "ToggleObby",
+   Callback = function(Value)
+      _G.AutoObby = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoObby do
+                local char = Player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
+                
+                if root and obbyWin then
+                    local oldPos = root.CFrame -- จำพิกัดก่อนไป
+                    
+                    -- ขาไป: TP ไปจุดชนะ
+                    root.CFrame = obbyWin.CFrame
+                    task.wait(1)
+                    
+                    -- ขากลับ: TP กลับจุดเดิมและล็อคตำแหน่งไว้ 2 วินาที
+                    local startTime = tick()
+                    while tick() - startTime < 2 do
+                        root.CFrame = oldPos -- วนลูปล็อค CFrame ไว้ที่จุดเดิม
+                        task.wait() -- รันให้เร็วที่สุดเพื่อไม่ให้ตัวละครขยับ
+                    end
+                end
+                
+                -- รอ 150 วิ (เช็คทุกวินาทีเพื่อให้ปิด Toggle ได้ทันที)
+                for i = 1, 150 do
+                    if not _G.AutoObby then break end
+                    task.wait(1)
+                end
+            end
+         end)
+      end
+   end,
+})
+
+-- [2] Auto Collect Section (Stable Mode)
+MainTab:CreateToggle({
+   Name = "Auto Collect Economy (Stable)",
+   CurrentValue = false,
+   Flag = "ToggleCollect",
+   Callback = function(Value)
+      _G.AutoCollect = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoCollect do
+                local economyFolder = workspace:FindFirstChild("Buildings") 
+                    and workspace.Buildings:FindFirstChild("A11Star_TrashBuildings") 
+                    and workspace.Buildings.A11Star_TrashBuildings:FindFirstChild("Economy")
+
+                if economyFolder then
+                    for _, building in pairs(economyFolder:GetChildren()) do
+                        if not _G.AutoCollect then break end
+                        
+                        local prompt = building:FindFirstChild("CollectPrompt", true)
+                        if prompt and prompt.ObjectText ~= "" then
+                            local amountStr, itemName = prompt.ObjectText:match("(%d+)%s+(.+)")
+                            if amountStr and tonumber(amountStr) > 0 then
+                                local args = {
+                                    buffer.fromstring("\018\001"),
+                                    {{ building.Name, itemName, tonumber(amountStr) }}
+                                }
+                                pcall(function()
+                                    NetworkRemote:FireServer(unpack(args))
+                                end)
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                end
+                task.wait(2)
+            end
+         end)
+      end
+   end,
+})
+
+-- [3] Auto Sell Section (Every 5s)
+MainTab:CreateToggle({
+   Name = "Auto Sell (Every 5s)",
+   CurrentValue = false,
+   Flag = "ToggleSell",
+   Callback = function(Value)
+      _G.AutoSell = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoSell do
+                local sellArgs = {
+                    buffer.fromstring("\022\001"),
+                    {{}}
+                }
+                pcall(function()
+                    NetworkRemote:FireServer(unpack(sellArgs))
+                end)
+                task.wait(5)
+            end
+         end)
+      end
+   end,
+})
+
+Rayfield:Notify({
+   Title = "BabeMer Hub Loaded",
+   Content = "ปรับปรุงระบบล็อคตำแหน่ง Obby แล้ว <3",
+   Duration = 5,
+   Image = 4483362458,
+})
