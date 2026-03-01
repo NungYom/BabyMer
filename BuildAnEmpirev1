@@ -1,0 +1,140 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "BabeMer's Farm",
+   LoadingTitle = "Loading...",
+   LoadingSubtitle = "by Doctor",
+   ConfigurationSaving = { Enabled = false }
+})
+
+-- Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Player = game:GetService("Players").LocalPlayer
+local NetworkRemote = ReplicatedStorage:WaitForChild("_GAME"):WaitForChild("MODULES"):WaitForChild("NetworkUtility"):WaitForChild("ByteNetMax"):WaitForChild("system"):WaitForChild("ByteNetReliable")
+
+-- ตัวแปรควบคุม
+_G.AutoObby = false
+_G.AutoCollect = false
+_G.AutoSell = false
+
+local MainTab = Window:CreateTab("ฟาร์มหลัก", 4483362458)
+
+-------------------------------------------------------
+-- [ ฟังก์ชันค้นหาโฟลเดอร์ Economy ของผู้เล่น ]
+-------------------------------------------------------
+local function getMyEconomy()
+    -- ค้นหาโฟลเดอร์ที่ชื่อว่า "ชื่อผู้เล่นBuildings" โดยอัตโนมัติ
+    local myBuildingFolder = workspace:FindFirstChild("Buildings") and workspace.Buildings:FindFirstChild(Player.Name .. "Buildings")
+    if myBuildingFolder then
+        return myBuildingFolder:FindFirstChild("Economy")
+    end
+    return nil
+end
+
+-------------------------------------------------------
+-- [1] Auto Obby Section (TP กลับแล้วล็อคตำแหน่ง 2 วิ)
+-------------------------------------------------------
+MainTab:CreateToggle({
+   Name = "Auto Obby (150s)",
+   CurrentValue = false,
+   Flag = "ToggleObby",
+   Callback = function(Value)
+      _G.AutoObby = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoObby do
+                local char = Player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                -- หาจุด ObbyWin จาก Workspace
+                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
+                
+                if root and obbyWin then
+                    local oldPos = root.CFrame 
+                    root.CFrame = obbyWin.CFrame -- TP ไป
+                    task.wait(1)
+                    
+                    -- ขากลับ: ล็อค CFrame ไว้ที่จุดเดิมค้างไว้ 2 วินาที
+                    local startTime = tick()
+                    while tick() - startTime < 2 do
+                        root.CFrame = oldPos 
+                        task.wait() 
+                    end
+                end
+                
+                for i = 1, 150 do
+                    if not _G.AutoObby then break end
+                    task.wait(1)
+                end
+            end
+         end)
+      end
+   end,
+})
+
+-------------------------------------------------------
+-- [2] Auto Collect Section (Dynamic & Stable)
+-------------------------------------------------------
+MainTab:CreateToggle({
+   Name = "Auto Collect Economy",
+   CurrentValue = false,
+   Flag = "ToggleCollect",
+   Callback = function(Value)
+      _G.AutoCollect = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoCollect do
+                local economy = getMyEconomy() -- ใช้ฟังก์ชันค้นหาโฟลเดอร์ที่ปรับปรุงใหม่
+
+                if economy then
+                    for _, building in pairs(economy:GetChildren()) do
+                        if not _G.AutoCollect then break end
+                        
+                        local prompt = building:FindFirstChild("CollectPrompt", true)
+                        -- อ่านค่า ObjectText ล่าสุด เช่น "72 Sword" หรือ "328 Carrot"
+                        if prompt and prompt.ObjectText ~= "" then
+                            local amountStr, itemName = prompt.ObjectText:match("(%d+)%s+(.+)")
+                            if amountStr and tonumber(amountStr) > 0 then
+                                local args = {
+                                    buffer.fromstring("\018\001"),
+                                    {{ building.Name, itemName, tonumber(amountStr) }}
+                                }
+                                pcall(function()
+                                    NetworkRemote:FireServer(unpack(args))
+                                end)
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                end
+                task.wait(2)
+            end
+         end)
+      end
+   end,
+})
+
+-------------------------------------------------------
+-- [3] Auto Sell Section (Every 5s)
+-------------------------------------------------------
+MainTab:CreateToggle({
+   Name = "Auto Sell",
+   CurrentValue = false,
+   Flag = "ToggleSell",
+   Callback = function(Value)
+      _G.AutoSell = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoSell do
+                local sellArgs = {
+                    buffer.fromstring("\022\001"),
+                    {{}}
+                }
+                pcall(function()
+                    NetworkRemote:FireServer(unpack(sellArgs))
+                end)
+                task.wait(5)
+            end
+         end)
+      end
+   end,
+})
