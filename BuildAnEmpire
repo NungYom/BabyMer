@@ -1,15 +1,13 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "BabeMer AutoFarm <3",
-   LoadingTitle = "Loading NaJaa...",
-   LoadingSubtitle = "by BabeArm & Friend",
-   ConfigurationSaving = {
-      Enabled = false
-   }
+   Name = "BabeMer AutoFarm v1.1",
+   LoadingTitle = "AutoFarm...",
+   LoadingSubtitle = "By Doctor",
+   ConfigurationSaving = { Enabled = false }
 })
 
--- Services และตำแหน่ง Remote
+-- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Player = game:GetService("Players").LocalPlayer
 local NetworkRemote = ReplicatedStorage:WaitForChild("_GAME"):WaitForChild("MODULES"):WaitForChild("NetworkUtility"):WaitForChild("ByteNetMax"):WaitForChild("system"):WaitForChild("ByteNetReliable")
@@ -21,7 +19,21 @@ _G.AutoSell = false
 
 local MainTab = Window:CreateTab("ฟาร์มหลัก", 4483362458)
 
--- [1] Auto Obby Section (ปรับปรุง: ล็อคจุดเดิม 2 วิ)
+-------------------------------------------------------
+-- [ ฟังก์ชันค้นหาโฟลเดอร์ Economy ของผู้เล่น ]
+-------------------------------------------------------
+local function getMyEconomy()
+    -- ค้นหาโฟลเดอร์ที่ชื่อว่า "ชื่อผู้เล่นBuildings" โดยอัตโนมัติ
+    local myBuildingFolder = workspace:FindFirstChild("Buildings") and workspace.Buildings:FindFirstChild(Player.Name .. "Buildings")
+    if myBuildingFolder then
+        return myBuildingFolder:FindFirstChild("Economy")
+    end
+    return nil
+end
+
+-------------------------------------------------------
+-- [1] Auto Obby Section (TP กลับแล้วล็อคตำแหน่ง 2 วิ)
+-------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Obby (150s)",
    CurrentValue = false,
@@ -33,24 +45,22 @@ MainTab:CreateToggle({
             while _G.AutoObby do
                 local char = Player.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
+                -- หาจุด ObbyWin จาก Workspace
                 local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
                 
                 if root and obbyWin then
-                    local oldPos = root.CFrame -- จำพิกัดก่อนไป
-                    
-                    -- ขาไป: TP ไปจุดชนะ
-                    root.CFrame = obbyWin.CFrame
+                    local oldPos = root.CFrame 
+                    root.CFrame = obbyWin.CFrame -- TP ไป
                     task.wait(1)
                     
-                    -- ขากลับ: TP กลับจุดเดิมและล็อคตำแหน่งไว้ 2 วินาที
+                    -- ขากลับ: ล็อค CFrame ไว้ที่จุดเดิมค้างไว้ 2 วินาที
                     local startTime = tick()
                     while tick() - startTime < 2 do
-                        root.CFrame = oldPos -- วนลูปล็อค CFrame ไว้ที่จุดเดิม
-                        task.wait() -- รันให้เร็วที่สุดเพื่อไม่ให้ตัวละครขยับ
+                        root.CFrame = oldPos 
+                        task.wait() 
                     end
                 end
                 
-                -- รอ 150 วิ (เช็คทุกวินาทีเพื่อให้ปิด Toggle ได้ทันที)
                 for i = 1, 150 do
                     if not _G.AutoObby then break end
                     task.wait(1)
@@ -61,9 +71,11 @@ MainTab:CreateToggle({
    end,
 })
 
--- [2] Auto Collect Section (Stable Mode)
+-------------------------------------------------------
+-- [2] Auto Collect Section (Dynamic & Stable)
+-------------------------------------------------------
 MainTab:CreateToggle({
-   Name = "Auto Collect Economy (Stable)",
+   Name = "Auto Collect Economy",
    CurrentValue = false,
    Flag = "ToggleCollect",
    Callback = function(Value)
@@ -71,15 +83,14 @@ MainTab:CreateToggle({
       if Value then
          task.spawn(function()
             while _G.AutoCollect do
-                local economyFolder = workspace:FindFirstChild("Buildings") 
-                    and workspace.Buildings:FindFirstChild("A11Star_TrashBuildings") 
-                    and workspace.Buildings.A11Star_TrashBuildings:FindFirstChild("Economy")
+                local economy = getMyEconomy() -- ใช้ฟังก์ชันค้นหาโฟลเดอร์ที่ปรับปรุงใหม่
 
-                if economyFolder then
-                    for _, building in pairs(economyFolder:GetChildren()) do
+                if economy then
+                    for _, building in pairs(economy:GetChildren()) do
                         if not _G.AutoCollect then break end
                         
                         local prompt = building:FindFirstChild("CollectPrompt", true)
+                        -- อ่านค่า ObjectText ล่าสุด เช่น "72 Sword" หรือ "328 Carrot"
                         if prompt and prompt.ObjectText ~= "" then
                             local amountStr, itemName = prompt.ObjectText:match("(%d+)%s+(.+)")
                             if amountStr and tonumber(amountStr) > 0 then
@@ -102,9 +113,11 @@ MainTab:CreateToggle({
    end,
 })
 
+-------------------------------------------------------
 -- [3] Auto Sell Section (Every 5s)
+-------------------------------------------------------
 MainTab:CreateToggle({
-   Name = "Auto Sell (Every 5s)",
+   Name = "Auto Sell",
    CurrentValue = false,
    Flag = "ToggleSell",
    Callback = function(Value)
@@ -124,11 +137,4 @@ MainTab:CreateToggle({
          end)
       end
    end,
-})
-
-Rayfield:Notify({
-   Title = "BabeMer Hub Loaded",
-   Content = "ปรับปรุงระบบล็อคตำแหน่ง Obby แล้ว <3",
-   Duration = 5,
-   Image = 4483362458,
 })
