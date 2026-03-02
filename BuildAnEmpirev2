@@ -28,6 +28,7 @@ local BuildingMap = {
     ["Library"] = "Economy",
     ["Gold Mine"] = "Economy",
     ["Diamond Mine"] = "Economy",
+    ["War Castle"] = "Utility",
     ["Workshop"] = "Utility",
     ["Royal Castle"] = "Utility",
     ["Giant Cave"] = "Utility",
