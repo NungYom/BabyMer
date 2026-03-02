@@ -19,7 +19,7 @@ _G.AutoObby = false
 _G.AutoCollect = false
 _G.AutoSell = false
 _G.AutoBuy = false
-_G.CPUSaver = false
+_G.BlackScreen = false
 _G.SelectedBuildings = {}
 
 -- ตารางคู่ ชื่อ-หมวดหมู่
@@ -33,31 +33,42 @@ local MainTab = Window:CreateTab("ฟาร์มหลัก", 4483362458)
 local BuyTab = Window:CreateTab("Auto Buy", 4483362458)
 local SettingTab = Window:CreateTab("ตั้งค่าระบบ", 4483362458)
 
--- ฟังก์ชันค้นหา Economy
-local function getMyEconomy()
-    local myFolder = workspace:FindFirstChild("Buildings") and workspace.Buildings:FindFirstChild(Player.Name .. "Buildings")
-    return myFolder and myFolder:FindFirstChild("Economy")
-end
-
 -------------------------------------------------------
--- [1] ระบบ Auto Rejoin (เมื่อโดนเตะจะเข้าใหม่ทันที)
+-- [1] ระบบ Auto Rejoin & Auto Clean RAM
 -------------------------------------------------------
+-- Auto Rejoin เมื่อหลุด
 game:GetService("GuiService").ErrorMessageChanged:Connect(function()
     task.wait(5)
     TeleportService:Teleport(game.PlaceId, Player)
 end)
 
+-- Auto ล้างขยะในแรมทุก 5 นาที (300 วินาที)
+task.spawn(function()
+    while true do
+        task.wait(300)
+        collectgarbage("collect")
+        warn("BabeMer System: ขยะในหน่วยความจำถูกล้างแล้ว (Auto GC)")
+    end
+end)
+
 -------------------------------------------------------
--- [2] ฟีเจอร์ประหยัดทรัพยากร (CPU/GPU Saver)
+-- [2] ระบบหน้าจอสีดำ (Black Screen Mode)
 -------------------------------------------------------
+local BlackFrame = Instance.new("Frame")
+BlackFrame.Size = UDim2.new(1, 0, 1, 0)
+BlackFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlackFrame.Visible = false
+BlackFrame.Parent = game:GetService("CoreGui"):FindFirstChild("RobloxGui") or Player:WaitForChild("PlayerGui")
+
 SettingTab:CreateToggle({
-   Name = "โหมดประหยัดพลังงาน (CPU Saver)",
+   Name = "เปิดโหมดหน้าจอสีดำ (ถนอมสายตา/ประหยัดไฟ)",
    CurrentValue = false,
    Callback = function(Value)
-      _G.CPUSaver = Value
+      _G.BlackScreen = Value
+      BlackFrame.Visible = Value
       if Value then
-         RunService:Set3dRenderingEnabled(false) -- ปิดการวาดภาพ 3D
-         setfpscap(10) -- ลด FPS เหลือ 10
+         RunService:Set3dRenderingEnabled(false)
+         setfpscap(10)
       else
          RunService:Set3dRenderingEnabled(true)
          setfpscap(60)
@@ -65,16 +76,8 @@ SettingTab:CreateToggle({
    end,
 })
 
-SettingTab:CreateButton({
-   Name = "ล้างขยะในแรมทันที (Manual GC)",
-   Callback = function()
-      collectgarbage("collect")
-      Rayfield:Notify({Title = "System", Content = "ล้างหน่วยความจำเรียบร้อย", Duration = 2})
-   end,
-})
-
 -------------------------------------------------------
--- [3] Auto Obby (150s + ล็อค 2 วิ)
+-- [3] Auto Obby (ล็อค 2 วิขากลับ)
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Obby",
@@ -86,7 +89,8 @@ MainTab:CreateToggle({
             while _G.AutoObby do
                 local char = Player.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
+                local obbyWin = workspace.Obby.ObbyWin -- เข้าถึงตรงๆ ไม่ผ่านเงื่อนไขเช็ค
+                
                 if root and obbyWin then
                     local oldPos = root.CFrame 
                     root.CFrame = obbyWin.CFrame
@@ -95,7 +99,6 @@ MainTab:CreateToggle({
                     while tick() - startTime < 2 do root.CFrame = oldPos task.wait() end
                 end
                 for i = 1, 150 do if not _G.AutoObby then break end task.wait(1) end
-                collectgarbage("collect")
             end
          end)
       end
@@ -103,7 +106,7 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [4] Auto Collect (อัปเดตค่า Real-time)
+-- [4] Auto Collect (รันตรงไปที่ Folder เลย ไม่เช็คเยอะ)
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Collect Economy",
@@ -113,22 +116,24 @@ MainTab:CreateToggle({
       if Value then
          task.spawn(function()
             while _G.AutoCollect do
-                local economy = getMyEconomy()
-                if economy then
-                    for _, b in pairs(economy:GetChildren()) do
-                        if not _G.AutoCollect then break end
-                        local prompt = b:FindFirstChild("CollectPrompt", true)
-                        if prompt and prompt.ObjectText ~= "" then
-                            local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
-                            if amnt and tonumber(amnt) > 0 then
-                                pcall(function() NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }}) end)
-                                task.wait(0.2)
-                            end
+                -- เข้าถึง Path ตรงๆ ตามที่คุณแจ้ง (ชื่อผู้เล่น + Buildings)
+                local economy = workspace.Buildings[Player.Name .. "Buildings"].Economy
+                
+                for _, b in pairs(economy:GetChildren()) do
+                    if not _G.AutoCollect then break end
+                    local prompt = b:FindFirstChild("CollectPrompt", true)
+                    
+                    if prompt and prompt.ObjectText ~= "" then
+                        local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
+                        if amnt and tonumber(amnt) > 0 then
+                            pcall(function() 
+                                NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }}) 
+                            end)
+                            task.wait(0.2)
                         end
                     end
                 end
                 task.wait(2)
-                collectgarbage("collect")
             end
          end)
       end
