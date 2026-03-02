@@ -19,7 +19,7 @@ _G.AutoSell = false
 _G.AutoBuy = false
 _G.SelectedBuildings = {}
 
--- ตารางคู่ ชื่อ-หมวดหมู่
+-- ตารางคู่ ชื่อ-หมวดหมู่ (อัปเดต War Castle แล้ว)
 local BuildingMap = {
     ["Small Cube"] = "Housing",
     ["Apartments"] = "Housing",
@@ -28,9 +28,9 @@ local BuildingMap = {
     ["Library"] = "Economy",
     ["Gold Mine"] = "Economy",
     ["Diamond Mine"] = "Economy",
-    ["War Castle"] = "Utility",
     ["Workshop"] = "Utility",
     ["Royal Castle"] = "Utility",
+    ["War Castle"] = "Utility", -- เพิ่มรายการใหม่ตรงนี้ครับ
     ["Giant Cave"] = "Utility",
     ["Training Camp"] = "Utility",
     ["Mines Booster"] = "Utility",
@@ -40,11 +40,13 @@ local BuildingMap = {
 }
 
 local MainTab = Window:CreateTab("ฟาร์มหลัก", 4483362458)
+local BuyTab = Window:CreateTab("Auto Buy Settings", 4483362458)
 
 -------------------------------------------------------
--- [ ฟังก์ชันค้นหาโฟลเดอร์ Economy ]
+-- [ ฟังก์ชันค้นหาโฟลเดอร์ Economy แบบ Dynamic ]
 -------------------------------------------------------
 local function getMyEconomy()
+    -- ค้นหา Buildings > [ชื่อผู้เล่น]Buildings > Economy
     local myBuildingFolder = workspace:FindFirstChild("Buildings") and workspace.Buildings:FindFirstChild(Player.Name .. "Buildings")
     if myBuildingFolder then
         return myBuildingFolder:FindFirstChild("Economy")
@@ -53,7 +55,7 @@ local function getMyEconomy()
 end
 
 -------------------------------------------------------
--- [1] Auto Obby
+-- [1] Auto Obby (TP ไป ObbyWin และกลับมาล็อคตำแหน่ง 2 วิ)
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Obby (150s)",
@@ -65,11 +67,14 @@ MainTab:CreateToggle({
             while _G.AutoObby do
                 local char = Player.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
+                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin") --
+                
                 if root and obbyWin then
                     local oldPos = root.CFrame 
                     root.CFrame = obbyWin.CFrame
                     task.wait(1)
+                    
+                    -- ล็อคตำแหน่งขากลับ 2 วินาที
                     local startTime = tick()
                     while tick() - startTime < 2 do
                         root.CFrame = oldPos 
@@ -84,10 +89,10 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [2] Auto Collect
+-- [2] Auto Collect (อัปเดตค่า Real-time จาก ObjectText)
 -------------------------------------------------------
 MainTab:CreateToggle({
-   Name = "Auto Collect Economy",
+   Name = "Auto Collect Economy (Stable)",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoCollect = Value
@@ -99,18 +104,19 @@ MainTab:CreateToggle({
                     for _, building in pairs(economy:GetChildren()) do
                         if not _G.AutoCollect then break end
                         local prompt = building:FindFirstChild("CollectPrompt", true)
+                        -- แกะค่าจาก ObjectText เช่น "328 Carrot"
                         if prompt and prompt.ObjectText ~= "" then
                             local amountStr, itemName = prompt.ObjectText:match("(%d+)%s+(.+)")
                             if amountStr and tonumber(amountStr) > 0 then
                                 pcall(function()
                                     NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ building.Name, itemName, tonumber(amountStr) }})
                                 end)
-                                task.wait(0.2)
+                                task.wait(0.2) -- พักหายใจ
                             end
                         end
                     end
                 end
-                task.wait(2)
+                task.wait(2) -- พักรอบใหญ่
             end
          end)
       end
@@ -118,10 +124,10 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [3] Auto Sell
+-- [3] Auto Sell (ทุก 5 วินาที)
 -------------------------------------------------------
 MainTab:CreateToggle({
-   Name = "Auto Sell (5s)",
+   Name = "Auto Sell (Every 5s)",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoSell = Value
@@ -137,13 +143,11 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [4] Auto Buy (New!)
+-- [4] Auto Buy (เลือกสิ่งปลูกสร้างได้หลายรายการ)
 -------------------------------------------------------
-local BuyTab = Window:CreateTab("Auto Buy Settings", 4483362458)
-
 BuyTab:CreateDropdown({
-   Name = "เลือกสิ่งปลูกสร้างที่จะซื้อคับผม",
-   Options = {"Small Cube", "Apartments", "Copper Mine", "Small Lake", "Library", "Gold Mine", "Diamond Mine", "Workshop", "Royal Castle", "Giant Cave", "Training Camp", "Mines Booster", "Clock", "Time Machine", "Unit Hut"},
+   Name = "เลือกสิ่งปลูกสร้างที่จะซื้อ",
+   Options = {"Small Cube", "Apartments", "Copper Mine", "Small Lake", "Library", "Gold Mine", "Diamond Mine", "Workshop", "Royal Castle", "War Castle", "Giant Cave", "Training Camp", "Mines Booster", "Clock", "Time Machine", "Unit Hut"},
    CurrentOption = {},
    MultipleOptions = true,
    Callback = function(Options)
@@ -152,7 +156,7 @@ BuyTab:CreateDropdown({
 })
 
 BuyTab:CreateToggle({
-   Name = "เปิดระบบออโต้ค้าบ",
+   Name = "เปิดระบบ Auto Buy (5s)",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoBuy = Value
@@ -163,14 +167,10 @@ BuyTab:CreateToggle({
                     for _, bName in pairs(_G.SelectedBuildings) do
                         local bCategory = BuildingMap[bName]
                         if bCategory then
-                            local buyArgs = {
-                                buffer.fromstring("\020\001"),
-                                {{ bName, bCategory }}
-                            }
                             pcall(function()
-                                NetworkRemote:FireServer(unpack(buyArgs))
+                                NetworkRemote:FireServer(buffer.fromstring("\020\001"), {{ bName, bCategory }})
                             end)
-                            task.wait(0.1) -- พักเล็กน้อยระหว่างซื้อแต่ละชิ้น
+                            task.wait(0.1)
                         end
                     end
                 end
@@ -179,11 +179,4 @@ BuyTab:CreateToggle({
          end)
       end
    end,
-})
-
-Rayfield:Notify({
-   Title = "BabeMer Loaded",
-   Content = "เลือกของที่จะซื้อได้เลยค้าบบ <3",
-   Duration = 5,
-   Image = 4483362458,
 })
