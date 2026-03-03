@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "BabeMer AutoFarm <3 (Stable 24/7)",
-   LoadingTitle = "กำลังเปิดระบบ...",
-   LoadingSubtitle = "Doctorr",
+   Name = "My BabeMer AutoFarm <3",
+   LoadingTitle = "กำลังเริ่มระบบ...",
+   LoadingSubtitle = "luv u naa :D",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -19,12 +19,13 @@ _G.AutoObby = false
 _G.AutoCollect = false
 _G.AutoSell = false
 _G.AutoBuy = false
+_G.AutoGC = false
 _G.BlackScreen = false
 _G.SelectedBuildings = {}
 
 -- ตารางคู่ ชื่อ-หมวดหมู่
 local BuildingMap = {
-    ["Small Cube"] = "Housing", ["Apartments"] = "Housing",
+    ["Small Cube"] = "Housing", ["Apartments"] = "Housing", ["Fortress"] = "Housing",
     ["Copper Mine"] = "Economy", ["Small Lake"] = "Economy", ["Library"] = "Economy", ["Gold Mine"] = "Economy", ["Diamond Mine"] = "Economy",
     ["Workshop"] = "Utility", ["Royal Castle"] = "Utility", ["War Castle"] = "Utility", ["Giant Cave"] = "Utility", ["Training Camp"] = "Utility", ["Mines Booster"] = "Utility", ["Clock"] = "Utility", ["Time Machine"] = "Utility", ["Unit Hut"] = "Utility"
 }
@@ -34,50 +35,54 @@ local BuyTab = Window:CreateTab("Auto Buy", 4483362458)
 local SettingTab = Window:CreateTab("ตั้งค่าระบบ", 4483362458)
 
 -------------------------------------------------------
--- [1] ระบบ Auto Rejoin & Auto Clean RAM
+-- [1] ระบบ Auto Rejoin & Custom Auto GC
 -------------------------------------------------------
--- Auto Rejoin เมื่อหลุด
 game:GetService("GuiService").ErrorMessageChanged:Connect(function()
     task.wait(5)
     TeleportService:Teleport(game.PlaceId, Player)
 end)
 
--- Auto ล้างขยะในแรมทุก 5 นาที (300 วินาที)
-task.spawn(function()
-    while true do
-        task.wait(300)
-        collectgarbage("collect")
-        warn("BabeMer System: ขยะในหน่วยความจำถูกล้างแล้ว (Auto GC)")
-    end
-end)
-
--------------------------------------------------------
--- [2] ระบบหน้าจอสีดำ (Black Screen Mode)
--------------------------------------------------------
-local BlackFrame = Instance.new("Frame")
-BlackFrame.Size = UDim2.new(1, 0, 1, 0)
-BlackFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-BlackFrame.Visible = false
-BlackFrame.Parent = game:GetService("CoreGui"):FindFirstChild("RobloxGui") or Player:WaitForChild("PlayerGui")
-
+-- ปุ่มเปิด-ปิด Auto ล้างขยะในแรม
 SettingTab:CreateToggle({
-   Name = "เปิดโหมดหน้าจอสีดำ (ถนอมสายตา/ประหยัดไฟ)",
+   Name = "Auto ล้างขยะในหน่วยความจำ (ทุก 5 นาที)",
    CurrentValue = false,
    Callback = function(Value)
-      _G.BlackScreen = Value
-      BlackFrame.Visible = Value
+      _G.AutoGC = Value
       if Value then
-         RunService:Set3dRenderingEnabled(false)
-         setfpscap(10)
-      else
-         RunService:Set3dRenderingEnabled(true)
-         setfpscap(60)
+         task.spawn(function()
+            while _G.AutoGC do
+                task.wait(300) -- รอ 5 นาที
+                if not _G.AutoGC then break end
+                collectgarbage("collect")
+                Rayfield:Notify({Title = "System", Content = "ล้างขยะในแรมอัตโนมัติเรียบร้อย", Duration = 3})
+            end
+         end)
       end
    end,
 })
 
 -------------------------------------------------------
--- [3] Auto Obby (ล็อค 2 วิขากลับ)
+-- [2] Black Screen Mode
+-------------------------------------------------------
+local BlackFrame = Instance.new("Frame")
+BlackFrame.Size = UDim2.new(1, 0, 1, 0)
+BlackFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlackFrame.ZIndex = 999999
+BlackFrame.Visible = false
+BlackFrame.Parent = game:GetService("CoreGui"):FindFirstChild("RobloxGui") or Player:WaitForChild("PlayerGui")
+
+SettingTab:CreateToggle({
+   Name = "เปิดโหมดหน้าจอสีดำ",
+   CurrentValue = false,
+   Callback = function(Value)
+      _G.BlackScreen = Value
+      BlackFrame.Visible = Value
+      if Value then RunService:Set3dRenderingEnabled(false) setfpscap(10) else RunService:Set3dRenderingEnabled(true) setfpscap(60) end
+   end,
+})
+
+-------------------------------------------------------
+-- [3] Auto Obby (Fix Logic)
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Obby",
@@ -89,16 +94,24 @@ MainTab:CreateToggle({
             while _G.AutoObby do
                 local char = Player.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
-                local obbyWin = workspace.Obby.ObbyWin -- เข้าถึงตรงๆ ไม่ผ่านเงื่อนไขเช็ค
+                local obbyWin = workspace:FindFirstChild("Obby") and workspace.Obby:FindFirstChild("ObbyWin")
                 
                 if root and obbyWin then
-                    local oldPos = root.CFrame 
+                    local oldPos = root.CFrame
                     root.CFrame = obbyWin.CFrame
                     task.wait(1)
+                    
                     local startTime = tick()
-                    while tick() - startTime < 2 do root.CFrame = oldPos task.wait() end
+                    while tick() - startTime < 2 do
+                        root.CFrame = oldPos
+                        task.wait()
+                    end
                 end
-                for i = 1, 150 do if not _G.AutoObby then break end task.wait(1) end
+                
+                for i = 1, 150 do
+                    if not _G.AutoObby then break end
+                    task.wait(1)
+                end
             end
          end)
       end
@@ -106,7 +119,7 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [4] Auto Collect (รันตรงไปที่ Folder เลย ไม่เช็คเยอะ)
+-- [4] Auto Collect Economy
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Collect Economy",
@@ -116,23 +129,20 @@ MainTab:CreateToggle({
       if Value then
          task.spawn(function()
             while _G.AutoCollect do
-                -- เข้าถึง Path ตรงๆ ตามที่คุณแจ้ง (ชื่อผู้เล่น + Buildings)
-                local economy = workspace.Buildings[Player.Name .. "Buildings"].Economy
-                
-                for _, b in pairs(economy:GetChildren()) do
-                    if not _G.AutoCollect then break end
-                    local prompt = b:FindFirstChild("CollectPrompt", true)
-                    
-                    if prompt and prompt.ObjectText ~= "" then
-                        local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
-                        if amnt and tonumber(amnt) > 0 then
-                            pcall(function() 
-                                NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }}) 
-                            end)
-                            task.wait(0.2)
+                pcall(function()
+                    local economy = workspace.Buildings[Player.Name .. "Buildings"].Economy
+                    for _, b in pairs(economy:GetChildren()) do
+                        if not _G.AutoCollect then break end
+                        local prompt = b:FindFirstChild("CollectPrompt", true)
+                        if prompt and prompt.ObjectText ~= "" then
+                            local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
+                            if amnt and tonumber(amnt) > 0 then
+                                NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }})
+                                task.wait(0.2)
+                            end
                         end
                     end
-                end
+                end)
                 task.wait(2)
             end
          end)
@@ -161,7 +171,7 @@ MainTab:CreateToggle({
 
 BuyTab:CreateDropdown({
    Name = "เลือกของที่จะซื้อ",
-   Options = {"Small Cube", "Apartments", "Copper Mine", "Small Lake", "Library", "Gold Mine", "Diamond Mine", "Workshop", "Royal Castle", "War Castle", "Giant Cave", "Training Camp", "Mines Booster", "Clock", "Time Machine", "Unit Hut"},
+   Options = {"Small Cube", "Apartments", "Fortress", "Copper Mine", "Small Lake", "Library", "Gold Mine", "Diamond Mine", "Workshop", "Royal Castle", "War Castle", "Giant Cave", "Training Camp", "Mines Booster", "Clock", "Time Machine", "Unit Hut"},
    MultipleOptions = true,
    Callback = function(Opts) _G.SelectedBuildings = Opts end,
 })
