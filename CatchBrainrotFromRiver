@@ -1,16 +1,14 @@
--- ==========================================
--- 🎣 PERFECT CATCH ASSIST V9 (FIXED UNPACK HOOK)
--- ==========================================
-
+-- [[ 1. UI SETUP: ปรับปรุงให้รองรับ Mouse Click บน PC (Xeno) ]]
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AutoFishingGui"
+ScreenGui.Name = "FishingAssist_PC_Fix"
 ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.DisplayOrder = 999 -- ดันให้อยู่บนสุดเพื่อรับคลิกได้แน่นอน
 
 local Frame = Instance.new("Frame")
 Frame.Size = UDim2.new(0, 200, 0, 100)
 Frame.Position = UDim2.new(0.05, 0, 0.4, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.Active = true
+Frame.Active = true -- ต้องเป็น True เพื่อให้ Draggable ทำงาน
 Frame.Draggable = true
 Frame.Parent = ScreenGui
 
@@ -21,6 +19,7 @@ ToggleBtn.Text = "AUTO REEL: OFF"
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleBtn.TextScaled = true
+ToggleBtn.AutoButtonColor = true -- เพิ่มเพื่อให้เห็นว่ามีการกด
 ToggleBtn.Parent = Frame
 
 local StatusText = Instance.new("TextLabel")
@@ -32,7 +31,7 @@ StatusText.BackgroundTransparency = 1
 StatusText.TextScaled = true
 StatusText.Parent = Frame
 
--- [[ SERVICES & VARIABLES ]]
+-- [[ 2. SERVICES & LOGIC (คงเดิมจาก v9 ที่ทำงานได้ดี) ]]
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local fishRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Knit"):WaitForChild("Services"):WaitForChild("FishingService"):WaitForChild("RE"):WaitForChild("remote")
@@ -41,85 +40,52 @@ getgenv().AutoReel = false
 getgenv().CastPos = nil
 getgenv().TargetUUID = nil
 
--- [[ HOOK: ดักจับพิกัดแบบ 1 ชั้น (แก้บัค unpack) ]]
+-- Hook สำหรับจับพิกัด
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
-
     if not checkcaller() and self == fishRemote and method == "FireServer" then
-        local data = args[1] -- รับข้อมูลแบบ 1 ชั้นที่ถูก unpack มาแล้ว
-        
-        if type(data) == "table" then
-            if data.kind == "requestCast" and type(data.targetPosition) == "table" then
-                local pos = data.targetPosition
-                if pos.X and pos.Y and pos.Z then
-                    getgenv().CastPos = Vector3.new(pos.X, pos.Y, pos.Z)
-                    getgenv().TargetUUID = nil -- รีเซ็ตเป้าหมาย
-                    StatusText.Text = "Cast Pos Captured!"
-                end
-            end
+        local data = args[1]
+        if type(data) == "table" and data.kind == "requestCast" and data.targetPosition then
+            getgenv().CastPos = Vector3.new(data.targetPosition.X, data.targetPosition.Y, data.targetPosition.Z)
+            getgenv().TargetUUID = nil
+            StatusText.Text = "Cast Pos Captured!"
         end
     end
     return oldNamecall(self, ...)
 end)
 
--- [[ MAIN LOOP: หา Mesh CFrame แล้ว Spam ดึง ]]
+-- Main Loop
 task.spawn(function()
     while task.wait(0.05) do
         if getgenv().AutoReel and getgenv().CastPos then
-            
-            -- 1. หา Mesh ที่ CFrame ใกล้ทุ่นที่สุด
             if not getgenv().TargetUUID then
                 local closestDist = 40
-                local foundUUID = nil
-
                 for _, obj in ipairs(Workspace:GetChildren()) do
-                    -- หาชื่อ Model แม่ที่เป็น UUID
                     local extractedUUID = string.match(obj.Name, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x")
-                    
                     if extractedUUID then
-                        -- เข้าถึง Mesh ย่อย
                         local mesh = obj:FindFirstChild("Mesh")
                         if mesh and mesh:IsA("BasePart") then
-                            local meshPos = mesh.CFrame.Position
-                            local dist = (meshPos - getgenv().CastPos).Magnitude
-                            
+                            local dist = (mesh.CFrame.Position - getgenv().CastPos).Magnitude
                             if dist < closestDist then
                                 closestDist = dist
-                                foundUUID = extractedUUID
+                                getgenv().TargetUUID = extractedUUID
                             end
                         end
                     end
                 end
-
-                if foundUUID then
-                    getgenv().TargetUUID = foundUUID
-                    StatusText.Text = "Pulling: " .. string.sub(foundUUID, 1, 6) .. "!"
-                end
+            else
+                -- Spam Remote ตามโครงสร้างที่คุณต้องการ
+                fishRemote:FireServer({kind = "requestReel", uuid = getgenv().TargetUUID})
+                fishRemote:FireServer({kind = "requestCriticalReel", uuid = getgenv().TargetUUID})
             end
-
-            -- 2. Spam Remote ดึงเบ็ด (ใช้ Table ชั้นเดียวตามรูปแบบ unpack)
-            if getgenv().TargetUUID then
-                -- ยิงแบบ Normal
-                fishRemote:FireServer({
-                    kind = "requestReel",
-                    uuid = getgenv().TargetUUID
-                })
-                
-                -- ยิงแบบ Critical
-                fishRemote:FireServer({
-                    kind = "requestCriticalReel",
-                    uuid = getgenv().TargetUUID
-                })
-            end
-            
         end
     end
 end)
 
--- [[ UI TOGGLE ]]
-ToggleBtn.MouseButton1Click:Connect(function()
+-- [[ 3. IMPROVED CLICK LOGIC: ใช้ MouseButton1Down แทน Click เพื่อความชัวร์บน PC ]]
+ToggleBtn.MouseButton1Down:Connect(function()
     getgenv().AutoReel = not getgenv().AutoReel
     if getgenv().AutoReel then
         ToggleBtn.Text = "AUTO REEL: ON"
