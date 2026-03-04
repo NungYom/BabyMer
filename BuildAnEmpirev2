@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "My BabeMer AutoFarm <3",
+   Name = "My BabeMer AutoFarm <3 (Optimized)",
    LoadingTitle = "กำลังเริ่มระบบ...",
-   LoadingSubtitle = "luv u naa :D",
+   LoadingSubtitle = "Luv U Naa",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -19,7 +19,6 @@ _G.AutoObby = false
 _G.AutoCollect = false
 _G.AutoSell = false
 _G.AutoBuy = false
-_G.AutoGC = false
 _G.BlackScreen = false
 _G.SelectedBuildings = {}
 
@@ -35,34 +34,15 @@ local BuyTab = Window:CreateTab("Auto Buy", 4483362458)
 local SettingTab = Window:CreateTab("ตั้งค่าระบบ", 4483362458)
 
 -------------------------------------------------------
--- [1] ระบบ Auto Rejoin & Custom Auto GC
+-- [1] ระบบ Auto Rejoin
 -------------------------------------------------------
 game:GetService("GuiService").ErrorMessageChanged:Connect(function()
     task.wait(5)
     TeleportService:Teleport(game.PlaceId, Player)
 end)
 
--- ปุ่มเปิด-ปิด Auto ล้างขยะในแรม
-SettingTab:CreateToggle({
-   Name = "Auto ล้างขยะในหน่วยความจำ (ทุก 5 นาที)",
-   CurrentValue = false,
-   Callback = function(Value)
-      _G.AutoGC = Value
-      if Value then
-         task.spawn(function()
-            while _G.AutoGC do
-                task.wait(300) -- รอ 5 นาที
-                if not _G.AutoGC then break end
-                collectgarbage("collect")
-                Rayfield:Notify({Title = "System", Content = "ล้างขยะในแรมอัตโนมัติเรียบร้อย", Duration = 3})
-            end
-         end)
-      end
-   end,
-})
-
 -------------------------------------------------------
--- [2] Black Screen Mode
+-- [2] Black Screen Mode (ปรับปรุงเรื่อง FPS Cap)
 -------------------------------------------------------
 local BlackFrame = Instance.new("Frame")
 BlackFrame.Size = UDim2.new(1, 0, 1, 0)
@@ -72,17 +52,23 @@ BlackFrame.Visible = false
 BlackFrame.Parent = game:GetService("CoreGui"):FindFirstChild("RobloxGui") or Player:WaitForChild("PlayerGui")
 
 SettingTab:CreateToggle({
-   Name = "เปิดโหมดหน้าจอสีดำ",
+   Name = "เปิดโหมดหน้าจอสีดำ (ประหยัดทรัพยากร)",
    CurrentValue = false,
    Callback = function(Value)
       _G.BlackScreen = Value
       BlackFrame.Visible = Value
-      if Value then RunService:Set3dRenderingEnabled(false) setfpscap(10) else RunService:Set3dRenderingEnabled(true) setfpscap(60) end
+      if Value then 
+          RunService:Set3dRenderingEnabled(false) 
+          setfpscap(10) 
+      else 
+          RunService:Set3dRenderingEnabled(true) 
+          setfpscap(60) 
+      end
    end,
 })
 
 -------------------------------------------------------
--- [3] Auto Obby (Fix Logic)
+-- [3] Auto Obby
 -------------------------------------------------------
 MainTab:CreateToggle({
    Name = "Auto Obby",
@@ -108,6 +94,7 @@ MainTab:CreateToggle({
                     end
                 end
                 
+                -- รอ 150 วินาที เพื่อป้องกันการโดนเตะ
                 for i = 1, 150 do
                     if not _G.AutoObby then break end
                     task.wait(1)
@@ -119,10 +106,10 @@ MainTab:CreateToggle({
 })
 
 -------------------------------------------------------
--- [4] Auto Collect Economy
+-- [4] Auto Collect Economy (Optimized: 10s Delay)
 -------------------------------------------------------
 MainTab:CreateToggle({
-   Name = "Auto Collect Economy",
+   Name = "Auto Collect Economy (10s)",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoCollect = Value
@@ -130,20 +117,26 @@ MainTab:CreateToggle({
          task.spawn(function()
             while _G.AutoCollect do
                 pcall(function()
-                    local economy = workspace.Buildings[Player.Name .. "Buildings"].Economy
-                    for _, b in pairs(economy:GetChildren()) do
-                        if not _G.AutoCollect then break end
-                        local prompt = b:FindFirstChild("CollectPrompt", true)
-                        if prompt and prompt.ObjectText ~= "" then
-                            local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
-                            if amnt and tonumber(amnt) > 0 then
-                                NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }})
-                                task.wait(0.2)
+                    local buildings = workspace.Buildings:FindFirstChild(Player.Name .. "Buildings")
+                    local economy = buildings and buildings:FindFirstChild("Economy")
+                    
+                    if economy then
+                        for _, b in pairs(economy:GetChildren()) do
+                            if not _G.AutoCollect then break end
+                            local prompt = b:FindFirstChild("CollectPrompt", true)
+                            if prompt and prompt.ObjectText ~= "" then
+                                local amnt, item = prompt.ObjectText:match("(%d+)%s+(.+)")
+                                if amnt and tonumber(amnt) > 0 then
+                                    NetworkRemote:FireServer(buffer.fromstring("\018\001"), {{ b.Name, item, tonumber(amnt) }})
+                                    -- เพิ่ม wait เล็กน้อยใน loop ซ้อนเพื่อไม่ให้ CPU Spike
+                                    task.wait(0.2) 
+                                end
                             end
                         end
                     end
                 end)
-                task.wait(2)
+                -- รอ 10 วินาทีตามที่นายต้องการ เพื่อลดภาระเครื่อง
+                task.wait(10)
             end
          end)
       end
@@ -185,10 +178,12 @@ BuyTab:CreateToggle({
          task.spawn(function()
             while _G.AutoBuy do
                 for _, name in pairs(_G.SelectedBuildings) do
+                    if not _G.AutoBuy then break end
                     local cat = BuildingMap[name]
                     if cat then 
                         pcall(function() NetworkRemote:FireServer(buffer.fromstring("\020\001"), {{ name, cat }}) end)
-                        task.wait(0.1)
+                        -- เพิ่ม wait ใน loop ซ้อน ป้องกันการส่ง Data ถี่เกินไป
+                        task.wait(0.5) 
                     end
                 end
                 task.wait(5)
