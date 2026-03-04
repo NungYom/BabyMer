@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "🅇 BabeMer AutoFarm <3 (Smart Collect)",
-   LoadingTitle = "กำลังเริ่มระบบดึงปุ่มเก็บของ...",
+   Name = "🅇 BabeMer AutoFarm <3 (Smart Detect)",
+   LoadingTitle = "กำลังค้นหา Plot และตรวจสอบเจ้าของ...",
    LoadingSubtitle = "by Gemini AI",
    ConfigurationSaving = { Enabled = false }
 })
@@ -12,8 +12,49 @@ local Player = game:GetService("Players").LocalPlayer
 
 _G.AutoCollect = false
 
+-- ฟังก์ชันค้นหา Plot ของเรา (เช็คจาก OwnerId และระยะห่าง)
+local function getMyPlot()
+    local myUserId = Player.UserId
+    local char = Player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    
+    local targetPlot = nil
+    local shortestDistance = math.huge
+
+    -- 1. พยายามหาจาก OwnerId ก่อน (แม่นยำที่สุด)
+    for _, plot in pairs(workspace.Plots:GetChildren()) do
+        -- เช็ค Attributes "OwnerId" ตามภาพที่คุณส่งมา
+        local ownerIdAttr = plot:GetAttribute("OwnerId") 
+        -- หรือถ้าอยู่ในตึก ให้เช็คที่ตัวตึกแรกที่เจอ
+        local buildings = plot:FindFirstChild("Buildings")
+        if buildings then
+            local firstBuilding = buildings:GetChildren()[1]
+            if firstBuilding and firstBuilding:GetAttribute("OwnerId") == myUserId then
+                return plot
+            end
+        end
+
+        if ownerIdAttr == myUserId then
+            return plot
+        end
+    end
+
+    -- 2. ถ้าหาจาก ID ไม่เจอ ให้หา Plot ที่อยู่ใกล้ผู้เล่นมากที่สุด
+    if root then
+        for _, plot in pairs(workspace.Plots:GetChildren()) do
+            local distance = (root.Position - plot:GetModelCFrame().Position).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                targetPlot = plot
+            end
+        end
+    end
+    
+    return targetPlot
+end
+
 MainTab:CreateToggle({
-   Name = "Auto Collect (ดึงปุ่มมาหาตัว)",
+   Name = "Auto Collect (Owner & Plot Detect)",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoCollect = Value
@@ -21,38 +62,40 @@ MainTab:CreateToggle({
          task.spawn(function()
             while _G.AutoCollect do
                pcall(function()
+                  local myPlot = getMyPlot()
                   local char = Player.Character
                   local root = char and char:FindFirstChild("HumanoidRootPart")
-                  -- เข้าถึง Path: workspace.Plots.Plot3.Buildings
-                  local buildings = workspace.Plots.Plot3.Buildings
                   
-                  if root and buildings then
-                     for _, building in pairs(buildings:GetChildren()) do
-                        if not _G.AutoCollect then break end
-                        
-                        -- หา CollectPrompt (ซึ่งอยู่ใน Floor หรือส่วนอื่นๆ ของ Building)
-                        local prompt = building:FindFirstChild("CollectPrompt", true)
-                        local promptParent = prompt and prompt.Parent -- ปกติจะเป็น Floor
-                        
-                        -- เงื่อนไข: พร้อมกด และ มีของให้เก็บ (ObjectText ไม่ว่าง)
-                        if prompt and prompt.Enabled and prompt.ObjectText ~= "" and promptParent:IsA("BasePart") then
-                           local originalCFrame = promptParent.CFrame -- จำตำแหน่งเดิม
+                  if myPlot and root then
+                     local buildings = myPlot:FindFirstChild("Buildings")
+                     if buildings then
+                        for _, building in pairs(buildings:GetChildren()) do
+                           if not _G.AutoCollect then break end
                            
-                           -- 1. ดึง Part มาที่ตัวผู้เล่น
-                           promptParent.CFrame = root.CFrame
-                           task.wait(0.1) -- รอให้ Engine รับรู้ว่าปุ่มอยู่ใกล้เราแล้ว
+                           -- ค้นหา CollectPrompt
+                           local prompt = building:FindFirstChild("CollectPrompt", true)
+                           local promptParent = prompt and prompt.Parent 
                            
-                           -- 2. สั่งกด E (Fire Prompt)
-                           fireproximityprompt(prompt)
-                           
-                           -- 3. ส่ง Part กลับที่เดิมทันที
-                           promptParent.CFrame = originalCFrame
-                           task.wait(0.1)
+                           -- เงื่อนไข: พร้อมกด และ มีของให้เก็บ
+                           if prompt and prompt.Enabled and prompt.ObjectText ~= "" and promptParent:IsA("BasePart") then
+                              local originalCFrame = promptParent.CFrame
+                              
+                              -- 1. ดึงปุ่มมาหาตัว (เพื่อให้ผ่านระยะ 10 หน่วย)
+                              promptParent.CFrame = root.CFrame
+                              task.wait(0.1)
+                              
+                              -- 2. สั่งกด E
+                              fireproximityprompt(prompt)
+                              
+                              -- 3. ส่งกลับที่เดิม
+                              promptParent.CFrame = originalCFrame
+                              task.wait(0.1)
+                           end
                         end
                      end
                   end
                end)
-               task.wait(2) -- พัก 2 วินาทีก่อนเริ่มวนลูปใหม่
+               task.wait(2) -- วนลูปทุก 2 วินาทีเพื่อให้รันได้ยาวๆ
             end
          end)
       end
