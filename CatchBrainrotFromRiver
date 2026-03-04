@@ -1,100 +1,104 @@
--- [[ 1. UI SETUP: ปรับปรุงให้รองรับ Mouse Click บน PC (Xeno) ]]
+-- [[ 1. UI SETUP: ปรับปรุงให้รองรับ PC อย่างเต็มรูปแบบ ]]
+local UserInputService = game:GetService("UserInputService")
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FishingAssist_PC_Fix"
+ScreenGui.Name = "FishingAssist_Xeno"
 ScreenGui.Parent = game:GetService("CoreGui")
-ScreenGui.DisplayOrder = 999 -- ดันให้อยู่บนสุดเพื่อรับคลิกได้แน่นอน
+ScreenGui.DisplayOrder = 99999 -- ดันให้อยู่บนที่สุด
 
 local Frame = Instance.new("Frame")
 Frame.Size = UDim2.new(0, 200, 0, 100)
-Frame.Position = UDim2.new(0.05, 0, 0.4, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.Active = true -- ต้องเป็น True เพื่อให้ Draggable ทำงาน
+Frame.Position = UDim2.new(0.05, 0, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Frame.BorderSizePixel = 2
+Frame.Active = true
 Frame.Draggable = true
 Frame.Parent = ScreenGui
 
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0.9, 0, 0.5, 0)
 ToggleBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
-ToggleBtn.Text = "AUTO REEL: OFF"
+ToggleBtn.Text = "AUTO REEL: OFF [K]"
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
 ToggleBtn.TextScaled = true
-ToggleBtn.AutoButtonColor = true -- เพิ่มเพื่อให้เห็นว่ามีการกด
 ToggleBtn.Parent = Frame
 
 local StatusText = Instance.new("TextLabel")
 StatusText.Size = UDim2.new(0.9, 0, 0.3, 0)
 StatusText.Position = UDim2.new(0.05, 0, 0.65, 0)
 StatusText.Text = "Waiting for Cast..."
-StatusText.TextColor3 = Color3.fromRGB(200, 200, 200)
+StatusText.TextColor3 = Color3.new(0.8, 0.8, 0.8)
 StatusText.BackgroundTransparency = 1
 StatusText.TextScaled = true
 StatusText.Parent = Frame
 
--- [[ 2. SERVICES & LOGIC (คงเดิมจาก v9 ที่ทำงานได้ดี) ]]
+-- [[ 2. LOGIC: ดักจับ unpack(args) และหาระยะ CFrame ]]
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local fishRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Knit"):WaitForChild("Services"):WaitForChild("FishingService"):WaitForChild("RE"):WaitForChild("remote")
 
 getgenv().AutoReel = false
 getgenv().CastPos = nil
-getgenv().TargetUUID = nil
 
--- Hook สำหรับจับพิกัด
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+-- Function สำหรับสลับสถานะ (ใช้ได้ทั้งคลิกและปุ่มกด)
+local function ToggleFunction()
+    getgenv().AutoReel = not getgenv().AutoReel
+    if getgenv().AutoReel then
+        ToggleBtn.Text = "AUTO REEL: ON [K]"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    else
+        ToggleBtn.Text = "AUTO REEL: OFF [K]"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+        getgenv().CastPos = nil
+        StatusText.Text = "Waiting for Cast..."
+    end
+end
+
+-- Hook พิกัด (ดัก unpack แบบปลอดภัย)
+local old
+old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     if not checkcaller() and self == fishRemote and method == "FireServer" then
-        local data = args[1]
-        if type(data) == "table" and data.kind == "requestCast" and data.targetPosition then
-            getgenv().CastPos = Vector3.new(data.targetPosition.X, data.targetPosition.Y, data.targetPosition.Z)
-            getgenv().TargetUUID = nil
-            StatusText.Text = "Cast Pos Captured!"
+        if args[1] and args[1].kind == "requestCast" and args[1].targetPosition then
+            local p = args[1].targetPosition
+            getgenv().CastPos = Vector3.new(p.X, p.Y, p.Z)
+            StatusText.Text = "Cast Locked!"
         end
     end
-    return oldNamecall(self, ...)
+    return old(self, ...)
 end)
 
--- Main Loop
+-- Main Loop: ค้นหา Mesh UUID
 task.spawn(function()
     while task.wait(0.05) do
         if getgenv().AutoReel and getgenv().CastPos then
-            if not getgenv().TargetUUID then
-                local closestDist = 40
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    local extractedUUID = string.match(obj.Name, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x")
-                    if extractedUUID then
-                        local mesh = obj:FindFirstChild("Mesh")
-                        if mesh and mesh:IsA("BasePart") then
-                            local dist = (mesh.CFrame.Position - getgenv().CastPos).Magnitude
-                            if dist < closestDist then
-                                closestDist = dist
-                                getgenv().TargetUUID = extractedUUID
-                            end
+            for _, obj in ipairs(Workspace:GetChildren()) do
+                local uuid = string.match(obj.Name, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x")
+                if uuid then
+                    local mesh = obj:FindFirstChild("Mesh")
+                    if mesh and mesh:IsA("BasePart") then
+                        -- ตรวจระยะจาก CFrame Position
+                        if (mesh.CFrame.Position - getgenv().CastPos).Magnitude < 30 then
+                            StatusText.Text = "Reeling UUID..."
+                            fishRemote:FireServer({kind = "requestReel", uuid = uuid})
+                            fishRemote:FireServer({kind = "requestCriticalReel", uuid = uuid})
                         end
                     end
                 end
-            else
-                -- Spam Remote ตามโครงสร้างที่คุณต้องการ
-                fishRemote:FireServer({kind = "requestReel", uuid = getgenv().TargetUUID})
-                fishRemote:FireServer({kind = "requestCriticalReel", uuid = getgenv().TargetUUID})
             end
         end
     end
 end)
 
--- [[ 3. IMPROVED CLICK LOGIC: ใช้ MouseButton1Down แทน Click เพื่อความชัวร์บน PC ]]
-ToggleBtn.MouseButton1Down:Connect(function()
-    getgenv().AutoReel = not getgenv().AutoReel
-    if getgenv().AutoReel then
-        ToggleBtn.Text = "AUTO REEL: ON"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-    else
-        ToggleBtn.Text = "AUTO REEL: OFF"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        getgenv().CastPos = nil
-        getgenv().TargetUUID = nil
-        StatusText.Text = "Waiting for Cast..."
+-- [[ 3. INPUT CONTROL ]]
+-- รองรับการคลิก (ลองหลาย Event)
+ToggleBtn.MouseButton1Click:Connect(ToggleFunction)
+ToggleBtn.Activated:Connect(ToggleFunction)
+
+-- รองรับปุ่มกด Hotkey "K" สำหรับ PC
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.K then
+        ToggleFunction()
     end
 end)
