@@ -1,267 +1,244 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
 --==================================================
--- SERVICES
+-- SERVICES & REMOTES
 --==================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-
 local LocalPlayer = Players.LocalPlayer
 
---==================================================
--- REMOTES
---==================================================
-local SkillRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SkillRE")
-local ToolRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ToolRE")
-local SendFishRF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SendFishRF")
-local FireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
-local FishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local SkillRE = Remotes:WaitForChild("SkillRE")
+local ToolRE = Remotes:WaitForChild("ToolRE")
+local FireRE = Remotes:WaitForChild("FireRE")
+local FishRE = Remotes:WaitForChild("FishRE")
+local SendFishRF = Remotes:WaitForChild("SendFishRF")
 
 --==================================================
--- PLAYER & STATE
+-- STATE VARIABLES
 --==================================================
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP = character:WaitForChild("HumanoidRootPart")
-
-local coinCount = 50
-local gemCount = 50
+local coinCount, gemCount = 50, 50
 local trading = false
-local targetIndex = 0
 local targetPlayer = nil
+local targetIndex = 0
+
 local autoAttack = false
 local autoSkill = false
-local skillBusy = false
+local huntDragon = false -- Boss07
+local huntAlien = false  -- Boss08
 local currentTarget = nil
+local skillBusy = false
 
 --==================================================
--- GUI ROOT
---==================================================
-local gui = Instance.new("ScreenGui")
-gui.Name = "FishingHub_V3"
-gui.ResetOnSpawn = false
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-local main = Instance.new("Frame", gui)
-main.AnchorPoint = Vector2.new(1,1)
-main.Position = UDim2.fromScale(0.98,0.98)
-main.Size = UDim2.fromScale(0.22,0.52)
-main.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-Instance.new("UICorner", main).CornerRadius = UDim.new(0,14)
-
---==================================================
--- UI HELPERS
---==================================================
-local function button(text,pos,color)
-    local b = Instance.new("TextButton", main)
-    b.Size = UDim2.fromScale(0.9,0.06)
-    b.Position = pos
-    b.Text = text
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 13
-    b.TextColor3 = Color3.new(1,1,1)
-    b.BackgroundColor3 = color
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0,10)
-    return b
-end
-
-local function label(text,pos)
-    local l = Instance.new("TextLabel", main)
-    l.Size = UDim2.fromScale(0.9,0.045)
-    l.Position = pos
-    l.Text = text
-    l.Font = Enum.Font.Gotham
-    l.TextSize = 12
-    l.TextColor3 = Color3.fromRGB(220,220,220)
-    l.BackgroundColor3 = Color3.fromRGB(50,50,55)
-    Instance.new("UICorner", l).CornerRadius = UDim.new(0,8)
-    return l
-end
-
-local function createSlider(yPos, defaultValue, onChange)
-    local bar = Instance.new("Frame", main)
-    bar.Size = UDim2.fromScale(0.9,0.02)
-    bar.Position = UDim2.fromScale(0.05,yPos)
-    bar.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    local fill = Instance.new("Frame", bar)
-    fill.BackgroundColor3 = Color3.fromRGB(200,200,200)
-    fill.Size = UDim2.fromScale(defaultValue/100,1)
-    local knob = Instance.new("Frame", bar)
-    knob.Size = UDim2.fromScale(0.04,1.8)
-    knob.Position = UDim2.fromScale(defaultValue/100, -0.4)
-    knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    
-    local dragging = false
-    local function update(x)
-        local pct = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-        local value = math.clamp(math.floor(pct*100),1,100)
-        fill.Size = UDim2.fromScale(value/100,1)
-        knob.Position = UDim2.fromScale(value/100, -0.4)
-        onChange(value)
-    end
-    knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
-    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-    UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then update(i.Position.X) end end)
-end
-
---==================================================
--- LOGIC FUNCTIONS
+-- CORE LOGIC
 --==================================================
 
 local function getWeapon()
-    for _,v in ipairs(character:GetChildren()) do
-        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
+    local weapon = character:FindFirstChildOfClass("Tool")
+    if not weapon or not (weapon.Name:match("^Gun") or weapon.Name:match("^Harpoon")) then
+        for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if v.Name:match("^Gun") or v.Name:match("^Harpoon") then return v end
+        end
     end
-    for _,v in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
-    end
+    return weapon
 end
 
--- ฟังก์ชันหาเป้าหมายที่แก้ไขตามโครงสร้างจริง
-local function findNewTarget()
-    local nearest, dist = nil, math.huge
-    
-    -- 1. หาใน WorldSea (WorldSea -> SeaX -> FishX -> Model -> Root)
-    local seaFolder = workspace:FindFirstChild("WorldSea")
-    if seaFolder then
-        for _, sea in ipairs(seaFolder:GetChildren()) do
-            for _, fish in ipairs(sea:GetChildren()) do
-                local model = fish:FindFirstChild("Model")
-                if model then
-                    local root = model:FindFirstChild("Root")
-                    if root and root:IsA("BasePart") then
+local function findTargetLogic()
+    if huntDragon then
+        local bossFolder = workspace:FindFirstChild("WorldBoss")
+        if bossFolder then
+            for _, point in ipairs(bossFolder:GetChildren()) do
+                local boss = point:FindFirstChild("Boss07")
+                if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then return boss end
+            end
+        end
+    elseif huntAlien then
+        local bossFolder = workspace:FindFirstChild("WorldBoss")
+        if bossFolder then
+            for _, point in ipairs(bossFolder:GetChildren()) do
+                local boss = point:FindFirstChild("Boss08")
+                if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then return boss end
+            end
+        end
+    elseif autoAttack then
+        local nearest, dist = nil, math.huge
+        local worldSea = workspace:FindFirstChild("WorldSea")
+        if worldSea then
+            for _, sea in ipairs(worldSea:GetChildren()) do
+                for _, fish in ipairs(sea:GetChildren()) do
+                    local root = fish:FindFirstChild("Model") and fish.Model:FindFirstChild("Root")
+                    if root then
                         local d = (HRP.Position - root.Position).Magnitude
-                        if d < dist then
-                            dist = d
-                            nearest = fish -- เก็บตัว Fish (เช่น Fish501)
-                        end
+                        if d < dist then dist = d nearest = fish end
                     end
                 end
             end
         end
+        return nearest
     end
-
-    -- 2. หาใน WorldBoss (WorldBoss -> PointX -> BossX -> Model -> Root)
-    local bossFolder = workspace:FindFirstChild("WorldBoss")
-    if bossFolder then
-        for _, point in ipairs(bossFolder:GetChildren()) do
-            for _, boss in ipairs(point:GetChildren()) do
-                local model = boss:FindFirstChild("Model")
-                if model then
-                    local root = model:FindFirstChild("Root")
-                    if root and root:IsA("BasePart") then
-                        local d = (HRP.Position - root.Position).Magnitude
-                        if d < dist then
-                            dist = d
-                            nearest = boss -- เก็บตัว Boss (เช่น Boss03)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return nearest
+    return nil
 end
 
--- ระบบสกิล 01-14 (Delay 0.15)
-local function castSkill()
+-- ฟังก์ชันวาร์ปไปพิกัด Vector3
+local function tpToCoord(x, y, z)
+    HRP.CFrame = CFrame.new(x, y + 3, z)
+end
+
+-- ฟังก์ชันวาร์ปไปตามชื่อ Point (ใช้กับบอส)
+local function tpToPoint(pointName)
+    local worldBoss = workspace:FindFirstChild("WorldBoss")
+    if worldBoss then
+        local targetPoint = worldBoss:FindFirstChild(pointName)
+        if targetPoint then
+            HRP.CFrame = (targetPoint:IsA("BasePart") and targetPoint.CFrame or targetPoint.PrimaryPart.CFrame) * CFrame.new(0, 5, 0)
+        end
+    end
+end
+
+local function castSkillLoop()
     if skillBusy then return end
     skillBusy = true
     for i=1, 14 do
-        if not autoSkill then break end
+        if not (autoSkill or huntDragon or huntAlien) then break end
         FishRE:FireServer("Skill", {ID = string.format("Skill%02d", i)})
-        task.wait(0.15) 
+        task.wait(0.15)
     end
     skillBusy = false
 end
 
 --==================================================
--- BUTTON ACTIONS
+-- UI CREATION
 --==================================================
+local Window = Rayfield:CreateWindow({
+   Name = "👑 Fishing Hub | V11",
+   LoadingTitle = "Loading New Map Data...",
+   LoadingSubtitle = "by Gemini Developer",
+   ConfigurationSaving = { Enabled = false } -- ระบบ Save ถูกถอนออกถาวร
+})
 
-local coinBtn = button("สุ่มด้วยเงิน", UDim2.fromScale(0.05,0.05), Color3.fromRGB(255,200,70))
-local coinLabel = label("Count : 50", UDim2.fromScale(0.05,0.11))
-createSlider(0.16,50,function(v) coinCount = v coinLabel.Text = "Count : "..v end)
-coinBtn.MouseButton1Click:Connect(function() SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount}) end)
+-- --- TAB: MAIN FARM ---
+local TabFarm = Window:CreateTab("Main Farm", 4483362458)
+TabFarm:CreateSection("Auto Hunting")
+TabFarm:CreateToggle({
+   Name = "โจมตีอัตโนมัติ (Nearest)",
+   CurrentValue = false,
+   Callback = function(Value)
+      autoAttack = Value
+      if Value then huntDragon, huntAlien, currentTarget = false, false, nil end
+   end,
+})
+TabFarm:CreateToggle({
+   Name = "🎯 ล่า Guardian Dragon (Boss07)",
+   CurrentValue = false,
+   Callback = function(Value)
+      huntDragon = Value
+      if Value then autoAttack, huntAlien, currentTarget = false, false, nil end
+   end,
+})
+TabFarm:CreateToggle({
+   Name = "🎯 ล่า Alien Shark (Boss08)",
+   CurrentValue = false,
+   Callback = function(Value)
+      huntAlien = Value
+      if Value then autoAttack, huntDragon, currentTarget = false, false, nil end
+   end,
+})
+TabFarm:CreateToggle({
+   Name = "ออโต้สกิล (01-14)",
+   CurrentValue = false,
+   Callback = function(Value) autoSkill = Value end,
+})
 
-local gemBtn = button("สุ่มด้วยเพชร", UDim2.fromScale(0.05,0.21), Color3.fromRGB(160,130,255))
-local gemLabel = label("Count : 50", UDim2.fromScale(0.05,0.27))
-createSlider(0.32,50,function(v) gemCount = v gemLabel.Text = "Count : "..v end)
-gemBtn.MouseButton1Click:Connect(function() SkillRE:FireServer("SkillGacha",{Key="Gems",Count=gemCount}) end)
+TabFarm:CreateSection("Boss Point TP")
+TabFarm:CreateButton({ Name = "วาร์ปไปจุดเกิด Guardian Dragon", Callback = function() tpToPoint("Point6") end })
+TabFarm:CreateButton({ Name = "วาร์ปไปจุดเกิด Alien Shark", Callback = function() tpToPoint("Point7") end })
 
-local tradeBtn = button("สถานะ : ยังไม่ได้เทรด", UDim2.fromScale(0.05,0.38), Color3.fromRGB(80,80,80))
-tradeBtn.MouseButton1Click:Connect(function()
-    if not targetPlayer then return end
-    trading = not trading
-    tradeBtn.Text = trading and "สถานะ : กำลังเทรด" or "สถานะ : ยังไม่ได้เทรด"
-    if trading then
-        task.spawn(function()
-            while trading and targetPlayer do
-                ToolRE:FireServer("Switch",{index=3})
-                SendFishRF:InvokeServer(targetPlayer)
-                task.wait(0.5)
-            end
-        end)
-    end
-end)
+-- --- TAB: TELEPORT LOCATIONS (หมวดใหม่!) ---
+local TabTP = Window:CreateTab("Teleport", 4483362458)
+TabTP:CreateSection("Island & Sea Teleports")
 
-local targetLabel = label("เป้าหมาย : ยังไม่มี", UDim2.fromScale(0.05,0.44))
-local nextBtn = button("ถัดไป", UDim2.fromScale(0.05,0.50), Color3.fromRGB(100,120,140))
-nextBtn.MouseButton1Click:Connect(function()
-    local list = {}
-    for _,p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list,p) end end
-    if #list == 0 then return end
-    targetIndex = (targetIndex % #list) + 1
-    targetPlayer = list[targetIndex]
-    targetLabel.Text = "เป้าหมาย : "..targetPlayer.Name
-end)
+TabTP:CreateButton({
+   Name = "Island Center Lake",
+   Callback = function() tpToCoord(1265, 87, -271) end,
+})
 
-local attackBtn = button("โจมตี : ปิด", UDim2.fromScale(0.05,0.58), Color3.fromRGB(150,90,90))
-attackBtn.MouseButton1Click:Connect(function()
-    autoAttack = not autoAttack
-    attackBtn.Text = autoAttack and "โจมตี : เปิด" or "โจมตี : ปิด"
-    attackBtn.BackgroundColor3 = autoAttack and Color3.fromRGB(90,150,90) or Color3.fromRGB(150,90,90)
-    if not autoAttack then currentTarget = nil end
-end)
+TabTP:CreateButton({
+   Name = "Nether Island",
+   Callback = function() tpToCoord(356, 86, -1077) end,
+})
 
-local skillBtn = button("ออโต้สกิล : ปิด", UDim2.fromScale(0.05,0.64), Color3.fromRGB(120,90,150))
-skillBtn.MouseButton1Click:Connect(function()
-    autoSkill = not autoSkill
-    skillBtn.Text = autoSkill and "ออโต้สกิล : เปิด" or "ออโต้สกิล : ปิด"
-    skillBtn.BackgroundColor3 = autoSkill and Color3.fromRGB(90,140,150) or Color3.fromRGB(120,90,150)
-end)
+TabTP:CreateButton({
+   Name = "Under Water",
+   Callback = function() tpToCoord(1192, -1136, 3878) end,
+})
+
+TabTP:CreateButton({
+   Name = "Lost Sea Ruins",
+   Callback = function() tpToCoord(1222, -1115, 2976) end,
+})
+
+-- --- TAB: GACHA ---
+local TabGacha = Window:CreateTab("Gacha", 4483362458)
+TabGacha:CreateSlider({
+   Name = "จำนวนสุ่ม", Range = {1, 100}, Increment = 1, Suffix = "ครั้ง", CurrentValue = 50,
+   Callback = function(Value) coinCount = Value gemCount = Value end,
+})
+TabGacha:CreateButton({ Name = "สุ่มด้วยเงิน (Coins)", Callback = function() SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount}) end })
+TabGacha:CreateButton({ Name = "สุ่มด้วยเพชร (Gems)", Callback = function() SkillRE:FireServer("SkillGacha",{Key="Gems",Count=gemCount}) end })
+
+-- --- TAB: TRADE SYSTEM ---
+local TabTrade = Window:CreateTab("Trade System", 4483362458)
+local PlayerLabel = TabTrade:CreateLabel("เป้าหมาย : ยังไม่ได้เลือก")
+TabTrade:CreateButton({
+   Name = "เลือกผู้เล่นคนถัดไป",
+   Callback = function()
+      local list = {}
+      for _,p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list,p) end end
+      if #list == 0 then return end
+      targetIndex = (targetIndex % #list) + 1
+      targetPlayer = list[targetIndex]
+      PlayerLabel:Set("เป้าหมาย : "..targetPlayer.Name)
+   end,
+})
+TabTrade:CreateToggle({
+   Name = "เริ่มเทรดอัตโนมัติ (0.5s Delay)",
+   CurrentValue = false,
+   Callback = function(Value)
+      trading = Value
+      if trading and targetPlayer then
+          task.spawn(function()
+              while trading and targetPlayer do
+                  ToolRE:FireServer("Switch",{index=3})
+                  SendFishRF:InvokeServer(targetPlayer)
+                  task.wait(0.5)
+              end
+          end)
+      end
+   end,
+})
 
 --==================================================
--- MAIN LOOPS
+-- MAIN LOOP
 --==================================================
-
 task.spawn(function()
     while true do
-        if autoAttack then
-            -- เช็คว่าเป้าหมายเดิมตาย/หายไปหรือยัง
-            if not currentTarget or not currentTarget.Parent or not currentTarget:FindFirstChild("Model") then
-                currentTarget = findNewTarget()
+        local weapon = getWeapon()
+        if not currentTarget or not currentTarget.Parent or not currentTarget:FindFirstChild("Model") then
+            currentTarget = findTargetLogic()
+        end
+        if currentTarget and weapon then
+            local root = currentTarget.Model:FindFirstChild("Root")
+            if root then
+                FireRE:FireServer("Hit", {fishInstance = currentTarget, HitPos = root.Position, toolInstance = weapon})
+                if autoSkill or huntDragon or huntAlien then task.spawn(castSkillLoop) end
             end
-
-            if currentTarget then
-                local root = currentTarget.Model:FindFirstChild("Root")
-                local weapon = getWeapon()
-                
-                if root and weapon then
-                    FireRE:FireServer("Hit", {
-                        fishInstance = currentTarget,
-                        HitPos = root.Position,
-                        toolInstance = weapon
-                    })
-                end
-                
-                -- เอาเรื่องสกิลมารันต่อเมื่อมีเป้าหมายเท่านั้น
-                if autoSkill then task.spawn(castSkill) end
-            else
-                -- **กันเหนียว:** เผื่อหาปลาไม่เจอ แต่เปิดออโต้สกิลไว้ ก็ให้ใช้สกิลไปพรางๆ
-                if autoSkill then task.spawn(castSkill) end
-            end
+        elseif autoSkill and not (huntDragon or huntAlien) then
+            task.spawn(castSkillLoop)
         end
         task.wait(0.2)
     end
 end)
+
+Rayfield:Notify({Title = "V11 Ready!", Content = "เพิ่มจุดวาร์ปและถอนระบบ Save ออกเรียบร้อยครับ!", Duration = 5})
