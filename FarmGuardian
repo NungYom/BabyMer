@@ -1,0 +1,178 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+--==================================================
+-- SERVICES & REMOTES
+--==================================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local SkillRE = Remotes:WaitForChild("SkillRE")
+local ToolRE = Remotes:WaitForChild("ToolRE")
+local FireRE = Remotes:WaitForChild("FireRE")
+local FishRE = Remotes:WaitForChild("FishRE")
+local SendFishRF = Remotes:WaitForChild("SendFishRF")
+
+--==================================================
+-- STATE VARIABLES (SET DEFAULT FOR AUTO-EXECUTE)
+--==================================================
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HRP = character:WaitForChild("HumanoidRootPart")
+
+local autoAttack = false
+local autoSkill = true   -- [DEFAULT ON]
+local huntDragon = true  -- [DEFAULT ON] Boss07
+local huntAlien = false  
+local currentTarget = nil
+local skillBusy = false
+
+local coinCount, gemCount = 50, 50
+local trading = false
+local targetPlayer = nil
+local targetIndex = 0
+
+--==================================================
+-- CORE LOGIC
+--==================================================
+
+local function getWeapon()
+    local weapon = character:FindFirstChildOfClass("Tool")
+    if not weapon or not (weapon.Name:match("^Gun") or weapon.Name:match("^Harpoon")) then
+        for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            if v.Name:match("^Gun") or v.Name:match("^Harpoon") then return v end
+        end
+    end
+    return weapon
+end
+
+local function tpToPoint(pointName)
+    local worldBoss = workspace:FindFirstChild("WorldBoss")
+    if worldBoss then
+        local targetPoint = worldBoss:FindFirstChild(pointName)
+        if targetPoint then
+            HRP.CFrame = (targetPoint:IsA("BasePart") and targetPoint.CFrame or targetPoint.PrimaryPart.CFrame) * CFrame.new(0, 5, 0)
+        end
+    end
+end
+
+local function findTargetLogic()
+    if huntDragon then
+        local worldBoss = workspace:FindFirstChild("WorldBoss")
+        if worldBoss then
+            for _, point in ipairs(worldBoss:GetChildren()) do
+                local boss = point:FindFirstChild("Boss07")
+                if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then return boss end
+            end
+        end
+    elseif autoAttack then
+        local nearest, dist = nil, math.huge
+        local worldSea = workspace:FindFirstChild("WorldSea")
+        if worldSea then
+            for _, sea in ipairs(worldSea:GetChildren()) do
+                for _, fish in ipairs(sea:GetChildren()) do
+                    local root = fish:FindFirstChild("Model") and fish.Model:FindFirstChild("Root")
+                    if root then
+                        local d = (HRP.Position - root.Position).Magnitude
+                        if d < dist then dist = d nearest = fish end
+                    end
+                end
+            end
+        end
+        return nearest
+    end
+    return nil
+end
+
+local function castSkillLoop()
+    if skillBusy then return end
+    skillBusy = true
+    for i=1, 14 do
+        if not (autoSkill or huntDragon) then break end
+        FishRE:FireServer("Skill", {ID = string.format("Skill%02d", i)})
+        task.wait(0.15)
+    end
+    skillBusy = false
+end
+
+--==================================================
+-- STARTUP TELEPORT LOOP (5 SECONDS)
+--==================================================
+task.spawn(function()
+    local startTime = tick()
+    while tick() - startTime < 5 do -- วนลูปวาร์ปไปจุดมังกรเป็นเวลา 5 วินาที
+        tpToPoint("Point6")
+        task.wait(1)
+    end
+end)
+
+--==================================================
+-- UI CREATION
+--==================================================
+local Window = Rayfield:CreateWindow({
+   Name = "👑 Fishing Hub | V12 DRAGON FARM",
+   LoadingTitle = "Preparing Guardian Farm...",
+   LoadingSubtitle = "Auto-Execute Mode Enabled",
+   ConfigurationSaving = { Enabled = false }
+})
+
+local TabFarm = Window:CreateTab("Main Farm", 4483362458)
+TabFarm:CreateSection("Boss Hunter (Guardian Focused)")
+
+TabFarm:CreateToggle({
+   Name = "🎯 ล่า Guardian Dragon (Boss07)",
+   CurrentValue = true, -- [START ON]
+   Callback = function(Value)
+      huntDragon = Value
+      if Value then autoAttack, huntAlien, currentTarget = false, false, nil end
+   end,
+})
+
+TabFarm:CreateToggle({
+   Name = "ออโต้สกิล (01-14)",
+   CurrentValue = true, -- [START ON]
+   Callback = function(Value) autoSkill = Value end,
+})
+
+TabFarm:CreateToggle({
+   Name = "โจมตีอัตโนมัติ (Nearest)",
+   CurrentValue = false,
+   Callback = function(Value)
+      autoAttack = Value
+      if Value then huntDragon, huntAlien, currentTarget = false, false, nil end
+   end,
+})
+
+TabFarm:CreateSection("Controls & TP")
+TabFarm:CreateButton({ Name = "วาร์ปไปจุดเกิด Guardian Dragon", Callback = function() tpToPoint("Point6") end })
+
+-- [รวมหมวด TP อื่นๆ ไว้เหมือนเดิม]
+local TabTP = Window:CreateTab("Teleport", 4483362458)
+TabTP:CreateButton({ Name = "Island Center Lake", Callback = function() HRP.CFrame = CFrame.new(1265, 90, -271) end })
+TabTP:CreateButton({ Name = "Nether Island", Callback = function() HRP.CFrame = CFrame.new(356, 89, -1077) end })
+TabTP:CreateButton({ Name = "Under Water", Callback = function() HRP.CFrame = CFrame.new(1192, -1133, 3878) end })
+TabTP:CreateButton({ Name = "Lost Sea Ruins", Callback = function() HRP.CFrame = CFrame.new(1222, -1112, 2976) end })
+
+--==================================================
+-- MAIN LOOP
+--==================================================
+task.spawn(function()
+    while true do
+        local weapon = getWeapon()
+        if not currentTarget or not currentTarget.Parent or not currentTarget:FindFirstChild("Model") then
+            currentTarget = findTargetLogic()
+        end
+        if currentTarget and weapon then
+            local root = currentTarget.Model:FindFirstChild("Root")
+            if root then
+                FireRE:FireServer("Hit", {fishInstance = currentTarget, HitPos = root.Position, toolInstance = weapon})
+                if autoSkill or huntDragon then task.spawn(castSkillLoop) end
+            end
+        elseif autoSkill then
+            task.spawn(castSkillLoop)
+        end
+        task.wait(0.2)
+    end
+end)
+
+Rayfield:Notify({Title = "Dragon Farm Ready!", Content = "เปิดระบบล่ามังกรและสกิลอัตโนมัติแล้ว!", Duration = 5})
