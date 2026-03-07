@@ -18,30 +18,26 @@ local FireRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FireRE")
 local FishRE = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FishRE")
 
 --==================================================
--- PLAYER
+-- PLAYER & STATE
 --==================================================
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP = character:WaitForChild("HumanoidRootPart")
 
---==================================================
--- STATE
---==================================================
 local coinCount = 50
 local gemCount = 50
-
 local trading = false
 local targetIndex = 0
 local targetPlayer = nil
-
 local autoAttack = false
 local autoSkill = false
 local skillBusy = false
+local currentTarget = nil
 
 --==================================================
 -- GUI ROOT
 --==================================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "SkillGachaGui"
+gui.Name = "FishingHub_V3"
 gui.ResetOnSpawn = false
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -49,260 +45,223 @@ local main = Instance.new("Frame", gui)
 main.AnchorPoint = Vector2.new(1,1)
 main.Position = UDim2.fromScale(0.98,0.98)
 main.Size = UDim2.fromScale(0.22,0.52)
-main.BackgroundColor3 = Color3.fromRGB(35,35,40)
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 Instance.new("UICorner", main).CornerRadius = UDim.new(0,14)
 
 --==================================================
 -- UI HELPERS
 --==================================================
 local function button(text,pos,color)
-	local b = Instance.new("TextButton", main)
-	b.Size = UDim2.fromScale(0.9,0.06)
-	b.Position = pos
-	b.Text = text
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 13
-	b.TextColor3 = Color3.new(1,1,1)
-	b.BackgroundColor3 = color
-	Instance.new("UICorner", b).CornerRadius = UDim.new(0,10)
-	return b
+    local b = Instance.new("TextButton", main)
+    b.Size = UDim2.fromScale(0.9,0.06)
+    b.Position = pos
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.TextColor3 = Color3.new(1,1,1)
+    b.BackgroundColor3 = color
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,10)
+    return b
 end
 
 local function label(text,pos)
-	local l = Instance.new("TextLabel", main)
-	l.Size = UDim2.fromScale(0.9,0.045)
-	l.Position = pos
-	l.Text = text
-	l.Font = Enum.Font.Gotham
-	l.TextSize = 12
-	l.TextColor3 = Color3.fromRGB(220,220,220)
-	l.BackgroundColor3 = Color3.fromRGB(70,70,70)
-	Instance.new("UICorner", l).CornerRadius = UDim.new(0,8)
-	return l
+    local l = Instance.new("TextLabel", main)
+    l.Size = UDim2.fromScale(0.9,0.045)
+    l.Position = pos
+    l.Text = text
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 12
+    l.TextColor3 = Color3.fromRGB(220,220,220)
+    l.BackgroundColor3 = Color3.fromRGB(50,50,55)
+    Instance.new("UICorner", l).CornerRadius = UDim.new(0,8)
+    return l
 end
 
---==================================================
--- SLIDER
---==================================================
 local function createSlider(yPos, defaultValue, onChange)
-	local bar = Instance.new("Frame", main)
-	bar.Size = UDim2.fromScale(0.9,0.025)
-	bar.Position = UDim2.fromScale(0.05,yPos)
-	bar.BackgroundColor3 = Color3.fromRGB(60,60,60)
-	Instance.new("UICorner", bar).CornerRadius = UDim.new(1,0)
-
-	local fill = Instance.new("Frame", bar)
-	fill.BackgroundColor3 = Color3.fromRGB(200,200,200)
-	fill.Size = UDim2.fromScale(defaultValue/100,1)
-	Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
-
-	local knob = Instance.new("Frame", bar)
-	knob.Size = UDim2.fromScale(0.04,1.4)
-	knob.Position = UDim2.fromScale(defaultValue/100, -0.2)
-	knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
-
-	local dragging = false
-
-	local function update(x)
-		local pct = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-		local value = math.clamp(math.floor(pct*100),1,100)
-		fill.Size = UDim2.fromScale(value/100,1)
-		knob.Position = UDim2.fromScale(value/100, -0.2)
-		onChange(value)
-	end
-
-	knob.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
-	end)
-
-	UserInputService.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-	end)
-
-	UserInputService.InputChanged:Connect(function(i)
-		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-			update(i.Position.X)
-		end
-	end)
+    local bar = Instance.new("Frame", main)
+    bar.Size = UDim2.fromScale(0.9,0.02)
+    bar.Position = UDim2.fromScale(0.05,yPos)
+    bar.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    local fill = Instance.new("Frame", bar)
+    fill.BackgroundColor3 = Color3.fromRGB(200,200,200)
+    fill.Size = UDim2.fromScale(defaultValue/100,1)
+    local knob = Instance.new("Frame", bar)
+    knob.Size = UDim2.fromScale(0.04,1.8)
+    knob.Position = UDim2.fromScale(defaultValue/100, -0.4)
+    knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    
+    local dragging = false
+    local function update(x)
+        local pct = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        local value = math.clamp(math.floor(pct*100),1,100)
+        fill.Size = UDim2.fromScale(value/100,1)
+        knob.Position = UDim2.fromScale(value/100, -0.4)
+        onChange(value)
+    end
+    knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then update(i.Position.X) end end)
 end
 
 --==================================================
--- COIN / GEM GACHA
+-- LOGIC FUNCTIONS
 --==================================================
+
+local function getWeapon()
+    for _,v in ipairs(character:GetChildren()) do
+        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
+    end
+    for _,v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
+    end
+end
+
+-- ฟังก์ชันหาเป้าหมายที่แก้ไขตามโครงสร้างจริง
+local function findNewTarget()
+    local nearest, dist = nil, math.huge
+    
+    -- 1. หาใน WorldSea (WorldSea -> SeaX -> FishX -> Model -> Root)
+    local seaFolder = workspace:FindFirstChild("WorldSea")
+    if seaFolder then
+        for _, sea in ipairs(seaFolder:GetChildren()) do
+            for _, fish in ipairs(sea:GetChildren()) do
+                local model = fish:FindFirstChild("Model")
+                if model then
+                    local root = model:FindFirstChild("Root")
+                    if root and root:IsA("BasePart") then
+                        local d = (HRP.Position - root.Position).Magnitude
+                        if d < dist then
+                            dist = d
+                            nearest = fish -- เก็บตัว Fish (เช่น Fish501)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. หาใน WorldBoss (WorldBoss -> PointX -> BossX -> Model -> Root)
+    local bossFolder = workspace:FindFirstChild("WorldBoss")
+    if bossFolder then
+        for _, point in ipairs(bossFolder:GetChildren()) do
+            for _, boss in ipairs(point:GetChildren()) do
+                local model = boss:FindFirstChild("Model")
+                if model then
+                    local root = model:FindFirstChild("Root")
+                    if root and root:IsA("BasePart") then
+                        local d = (HRP.Position - root.Position).Magnitude
+                        if d < dist then
+                            dist = d
+                            nearest = boss -- เก็บตัว Boss (เช่น Boss03)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nearest
+end
+
+-- ระบบสกิล 01-14 (Delay 0.15)
+local function castSkill()
+    if skillBusy then return end
+    skillBusy = true
+    for i=1, 14 do
+        if not autoSkill then break end
+        FishRE:FireServer("Skill", {ID = string.format("Skill%02d", i)})
+        task.wait(0.15) 
+    end
+    skillBusy = false
+end
+
+--==================================================
+-- BUTTON ACTIONS
+--==================================================
+
 local coinBtn = button("สุ่มด้วยเงิน", UDim2.fromScale(0.05,0.05), Color3.fromRGB(255,200,70))
 local coinLabel = label("Count : 50", UDim2.fromScale(0.05,0.11))
-createSlider(0.16,50,function(v)
-	coinCount = v
-	coinLabel.Text = "Count : "..v
-end)
-
-coinBtn.MouseButton1Click:Connect(function()
-	SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount})
-end)
+createSlider(0.16,50,function(v) coinCount = v coinLabel.Text = "Count : "..v end)
+coinBtn.MouseButton1Click:Connect(function() SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount}) end)
 
 local gemBtn = button("สุ่มด้วยเพชร", UDim2.fromScale(0.05,0.21), Color3.fromRGB(160,130,255))
 local gemLabel = label("Count : 50", UDim2.fromScale(0.05,0.27))
-createSlider(0.32,50,function(v)
-	gemCount = v
-	gemLabel.Text = "Count : "..v
-end)
+createSlider(0.32,50,function(v) gemCount = v gemLabel.Text = "Count : "..v end)
+gemBtn.MouseButton1Click:Connect(function() SkillRE:FireServer("SkillGacha",{Key="Gems",Count=gemCount}) end)
 
-gemBtn.MouseButton1Click:Connect(function()
-	SkillRE:FireServer("SkillGacha",{Key="Gems",Count=gemCount})
-end)
-
---==================================================
--- TRADE / TARGET
---==================================================
 local tradeBtn = button("สถานะ : ยังไม่ได้เทรด", UDim2.fromScale(0.05,0.38), Color3.fromRGB(80,80,80))
-local targetLabel = label("เป้าหมาย : ยังไม่มีเป้าหมาย", UDim2.fromScale(0.05,0.44))
-local nextBtn = button("ถัดไป", UDim2.fromScale(0.05,0.50), Color3.fromRGB(100,120,140))
-
-local function setTradeEnabled(v)
-	tradeBtn.Active = v
-	tradeBtn.BackgroundColor3 = v and Color3.fromRGB(90,120,90) or Color3.fromRGB(60,60,60)
-end
-setTradeEnabled(false)
-
-local function updateTarget()
-	local list = {}
-	for _,p in ipairs(Players:GetPlayers()) do
-		if p ~= LocalPlayer then table.insert(list,p) end
-	end
-
-	if #list == 0 or targetIndex == 0 then
-		targetPlayer = nil
-		targetLabel.Text = "เป้าหมาย : ยังไม่มีเป้าหมาย"
-		targetLabel.BackgroundColor3 = Color3.fromRGB(70,70,70)
-		setTradeEnabled(false)
-		return
-	end
-
-	if targetIndex > #list then targetIndex = 1 end
-	targetPlayer = list[targetIndex]
-
-	targetLabel.Text = string.format("เป้าหมาย : %s (%d / %d)",targetPlayer.Name,targetIndex,#list)
-	targetLabel.BackgroundColor3 = Color3.fromRGB(70,120,80)
-	setTradeEnabled(true)
-end
-
-nextBtn.MouseButton1Click:Connect(function()
-	targetIndex += 1
-	updateTarget()
-end)
-
-Players.PlayerRemoving:Connect(function(p)
-	if p == targetPlayer then
-		targetIndex = 0
-		updateTarget()
-	end
-end)
-
 tradeBtn.MouseButton1Click:Connect(function()
-	if not targetPlayer then return end
-	trading = not trading
-	tradeBtn.Text = trading and "สถานะ : กำลังเทรด" or "สถานะ : ยังไม่ได้เทรด"
-
-	if trading then
-		task.spawn(function()
-			while trading and targetPlayer do
-				ToolRE:FireServer("Switch",{index=3})
-				SendFishRF:InvokeServer(targetPlayer)
-				task.wait(0.2)
-			end
-		end)
-	end
+    if not targetPlayer then return end
+    trading = not trading
+    tradeBtn.Text = trading and "สถานะ : กำลังเทรด" or "สถานะ : ยังไม่ได้เทรด"
+    if trading then
+        task.spawn(function()
+            while trading and targetPlayer do
+                ToolRE:FireServer("Switch",{index=3})
+                SendFishRF:InvokeServer(targetPlayer)
+                task.wait(0.5)
+            end
+        end)
+    end
 end)
 
---==================================================
--- AUTO ATTACK / AUTO SKILL
---==================================================
-local attackBtn = button("โจมตีใกล้ฉัน : ปิด", UDim2.fromScale(0.05,0.58), Color3.fromRGB(150,90,90))
-local skillBtn  = button("ออโต้สกิล : ปิด",   UDim2.fromScale(0.05,0.64), Color3.fromRGB(120,90,150))
+local targetLabel = label("เป้าหมาย : ยังไม่มี", UDim2.fromScale(0.05,0.44))
+local nextBtn = button("ถัดไป", UDim2.fromScale(0.05,0.50), Color3.fromRGB(100,120,140))
+nextBtn.MouseButton1Click:Connect(function()
+    local list = {}
+    for _,p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list,p) end end
+    if #list == 0 then return end
+    targetIndex = (targetIndex % #list) + 1
+    targetPlayer = list[targetIndex]
+    targetLabel.Text = "เป้าหมาย : "..targetPlayer.Name
+end)
 
+local attackBtn = button("โจมตี : ปิด", UDim2.fromScale(0.05,0.58), Color3.fromRGB(150,90,90))
 attackBtn.MouseButton1Click:Connect(function()
-	autoAttack = not autoAttack
-	attackBtn.Text = autoAttack and "โจมตีใกล้ฉัน : เปิด" or "โจมตีใกล้ฉัน : ปิด"
-	attackBtn.BackgroundColor3 = autoAttack and Color3.fromRGB(90,150,90) or Color3.fromRGB(150,90,90)
+    autoAttack = not autoAttack
+    attackBtn.Text = autoAttack and "โจมตี : เปิด" or "โจมตี : ปิด"
+    attackBtn.BackgroundColor3 = autoAttack and Color3.fromRGB(90,150,90) or Color3.fromRGB(150,90,90)
+    if not autoAttack then currentTarget = nil end
 end)
 
+local skillBtn = button("ออโต้สกิล : ปิด", UDim2.fromScale(0.05,0.64), Color3.fromRGB(120,90,150))
 skillBtn.MouseButton1Click:Connect(function()
-	autoSkill = not autoSkill
-	skillBtn.Text = autoSkill and "ออโต้สกิล : เปิด" or "ออโต้สกิล : ปิด"
-	skillBtn.BackgroundColor3 = autoSkill and Color3.fromRGB(90,140,150) or Color3.fromRGB(120,90,150)
+    autoSkill = not autoSkill
+    skillBtn.Text = autoSkill and "ออโต้สกิล : เปิด" or "ออโต้สกิล : ปิด"
+    skillBtn.BackgroundColor3 = autoSkill and Color3.fromRGB(90,140,150) or Color3.fromRGB(120,90,150)
 end)
 
 --==================================================
--- WEAPON / FISH
+-- MAIN LOOPS
 --==================================================
-local function getWeapon()
-	for _,v in ipairs(character:GetChildren()) do
-		if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
-	end
-	for _,v in ipairs(LocalPlayer.Backpack:GetChildren()) do
-		if v:IsA("Tool") and (v.Name:match("^Gun%d+$") or v.Name:match("^Harpoon%d+$")) then return v end
-	end
-end
-
-local function findNearestFish()
-	local nearest,dist=nil,math.huge
-	for _,sea in ipairs(workspace:WaitForChild("WorldSea"):GetChildren()) do
-		for _,fish in ipairs(sea:GetChildren()) do
-			local root = fish:FindFirstChild("Model") and fish.Model:FindFirstChild("Root")
-			if root then
-				local d=(HRP.Position-root.Position).Magnitude
-				if d<dist then dist=d nearest=root end
-			end
-		end
-	end
-	return nearest
-end
-
---==================================================
--- AUTO SKILL LOGIC (FIXED)
---==================================================
-local function castSkill()
-	if skillBusy then return end
-	skillBusy = true
-
-	for i = 1, 15 do
-		if not autoSkill then break end
-		FishRE:FireServer("Skill",{ID=string.format("Skill%02d",i)})
-		task.wait(0.2) -- ~3 วิครบทุกสกิล
-	end
-
-	skillBusy = false
-end
 
 task.spawn(function()
-	while true do
-		if autoSkill then
-			castSkill()
-		end
-		task.wait(0.1)
-	end
-end)
+    while true do
+        if autoAttack then
+            -- เช็คว่าเป้าหมายเดิมตาย/หายไปหรือยัง
+            if not currentTarget or not currentTarget.Parent or not currentTarget:FindFirstChild("Model") then
+                currentTarget = findNewTarget()
+            end
 
---==================================================
--- AUTO ATTACK LOOP
---==================================================
-task.spawn(function()
-	while true do
-		if autoAttack then
-			local root = findNearestFish()
-			if root then
-				HRP.CFrame = root.CFrame * CFrame.new(0,0,-4)
-				local weapon = getWeapon()
-				if weapon then
-					FireRE:FireServer("Hit",{
-						fishInstance = root.Parent.Parent,
-						HitPos = root.Position,
-						toolInstance = weapon
-					})
-				end
-			end
-		end
-		task.wait(0.3)
-	end
+            if currentTarget then
+                local root = currentTarget.Model:FindFirstChild("Root")
+                local weapon = getWeapon()
+                
+                if root and weapon then
+                    FireRE:FireServer("Hit", {
+                        fishInstance = currentTarget,
+                        HitPos = root.Position,
+                        toolInstance = weapon
+                    })
+                end
+                
+                -- เอาเรื่องสกิลมารันต่อเมื่อมีเป้าหมายเท่านั้น
+                if autoSkill then task.spawn(castSkill) end
+            else
+                -- **กันเหนียว:** เผื่อหาปลาไม่เจอ แต่เปิดออโต้สกิลไว้ ก็ให้ใช้สกิลไปพรางๆ
+                if autoSkill then task.spawn(castSkill) end
+            end
+        end
+        task.wait(0.2)
+    end
 end)
