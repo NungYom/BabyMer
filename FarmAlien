@@ -70,7 +70,7 @@ local function castSkillLoop()
     skillBusy = false
 end
 
--- STARTUP TP (5 SECONDS)
+-- STARTUP TP
 task.spawn(function()
     local startTime = tick()
     while tick() - startTime < 5 do
@@ -83,9 +83,9 @@ end)
 -- UI CREATION
 --==================================================
 local Window = Rayfield:CreateWindow({
-   Name = "👑 Fishing Hub | V13.2 (1% STOP)",
-   LoadingTitle = "Alien Shark Hunter v13.2",
-   LoadingSubtitle = "Threshold set to 1% HP",
+   Name = "👑 Fishing Hub | V13.3 (0.3% STOP)",
+   LoadingTitle = "Alien Shark Hunter v13.3",
+   LoadingSubtitle = "Threshold set to 0.3% HP",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -109,7 +109,7 @@ TabFarm:CreateToggle({
 local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting...")
 
 --==================================================
--- MAIN LOOP (1% STOP LOGIC)
+-- MAIN LOOP (0.3% STOP LOGIC)
 --==================================================
 task.spawn(function()
     while true do
@@ -129,14 +129,14 @@ task.spawn(function()
             
             if curHP and maxHP and maxHP > 0 then
                 local hpPercent = (curHP / maxHP) * 100
-                HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
+                HPLabel:Set("Boss HP: " .. string.format("%.3f", hpPercent) .. "%")
                 
-                -- เงื่อนไขหยุดยิงที่ 1%
-                if hpPercent <= 1 and not hasStopped then
+                -- เงื่อนไขหยุดยิงที่ 0.3%
+                if hpPercent <= 0.3 and not hasStopped then
                     hasStopped = true 
                     huntAlien = false
                     AlienToggle:Set(false)
-                    Rayfield:Notify({Title = "1% HP REACHED!", Content = "บอสใกล้ตายแล้ว! ระบบหยุดยิงอัตโนมัติให้แล้วครับ", Duration = 5})
+                    Rayfield:Notify({Title = "0.3% HP REACHED!", Content = "บอสเลือดแทบหมดหลอดแล้ว! ระบบหยุดยิงให้แล้วครับ", Duration = 5})
                 end
             end
 
