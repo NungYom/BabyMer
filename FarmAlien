@@ -115,7 +115,7 @@ TabFarm:CreateToggle({
 local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting...")
 
 --==================================================
--- MAIN LOOP (2% STOP LOGIC)
+-- MAIN LOOP (1% STOP LOGIC)
 --==================================================
 task.spawn(function()
     while true do
@@ -137,11 +137,11 @@ task.spawn(function()
                 HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
                 
                 -- เงื่อนไขหยุดยิงที่ 2% และสั่งแค่ครั้งเดียวต่อบอส 1 ตัว
-                if hpPercent <= 2 and not hasStopped then
+                if hpPercent <= 1 and not hasStopped then
                     hasStopped = true -- ล็อคไว้ว่าหยุดยิงบอสตัวนี้ไปแล้ว
                     huntAlien = false
                     AlienToggle:Set(false)
-                    Rayfield:Notify({Title = "2% HP Reached!", Content = "หยุดยิงอัตโนมัติแล้ว นายเปิดยิงเองได้เลย!", Duration = 5})
+                    Rayfield:Notify({Title = "1% HP Reached!", Content = "หยุดยิงอัตโนมัติแล้ว นายเปิดยิงเองได้เลย!", Duration = 5})
                 end
             end
 
