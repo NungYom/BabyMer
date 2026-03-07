@@ -21,7 +21,7 @@ local autoSkill = true
 local huntAlien = true   
 local currentTarget = nil
 local skillBusy = false
-local hasStopped = false -- ตัวแปรใหม่: กันการบังคับปิดซ้ำๆ
+local hasStopped = false -- กันการบังคับปิดซ้ำๆ
 
 --==================================================
 -- CORE LOGIC
@@ -70,7 +70,7 @@ local function castSkillLoop()
     skillBusy = false
 end
 
--- STARTUP TP
+-- STARTUP TP (5 SECONDS)
 task.spawn(function()
     local startTime = tick()
     while tick() - startTime < 5 do
@@ -83,26 +83,20 @@ end)
 -- UI CREATION
 --==================================================
 local Window = Rayfield:CreateWindow({
-   Name = "👑 Fishing Hub | V13.1 (2% STOP FIX)",
-   LoadingTitle = "Manual Takeover Ready...",
-   LoadingSubtitle = "Boss HP 2% Threshold",
+   Name = "👑 Fishing Hub | V13.2 (1% STOP)",
+   LoadingTitle = "Alien Shark Hunter v13.2",
+   LoadingSubtitle = "Threshold set to 1% HP",
    ConfigurationSaving = { Enabled = false }
 })
 
 local TabFarm = Window:CreateTab("Main Farm", 4483362458)
-TabFarm:CreateSection("Alien Shark (2% Auto-Stop)")
+TabFarm:CreateSection("Alien Shark Hunter (Boss08)")
 
 local AlienToggle = TabFarm:CreateToggle({
    Name = "🎯 ล่า Alien Shark (Boss08)",
    CurrentValue = true,
    Callback = function(Value)
       huntAlien = Value
-      if Value then 
-          -- ถ้าผู้เล่นกดเปิดเองด้วยมือ ให้ถือว่าต้องการสู้ต่อ
-          if hasStopped then
-              Rayfield:Notify({Title = "Manual Mode", Content = "คุณกำลังควบคุมการยิงด้วยตัวเอง", Duration = 2})
-          end
-      end
    end,
 })
 
@@ -122,13 +116,14 @@ task.spawn(function()
         local weapon = getWeapon()
         local newTarget = findTargetLogic()
         
-        -- ถ้าบอสตัวเก่าตาย หรือเปลี่ยนบอสตัวใหม่ ให้รีเซ็ตระบบหยุดยิง
+        -- รีเซ็ตสถานะเมื่อเจอตัวใหม่
         if newTarget ~= currentTarget then
             currentTarget = newTarget
             hasStopped = false 
         end
 
         if currentTarget and weapon then
+            -- ดึงค่าจาก Attribute CurHP และ HP
             local curHP = currentTarget:GetAttribute("CurHP")
             local maxHP = currentTarget:GetAttribute("HP")
             
@@ -136,12 +131,12 @@ task.spawn(function()
                 local hpPercent = (curHP / maxHP) * 100
                 HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
                 
-                -- เงื่อนไขหยุดยิงที่ 2% และสั่งแค่ครั้งเดียวต่อบอส 1 ตัว
+                -- เงื่อนไขหยุดยิงที่ 1%
                 if hpPercent <= 1 and not hasStopped then
-                    hasStopped = true -- ล็อคไว้ว่าหยุดยิงบอสตัวนี้ไปแล้ว
+                    hasStopped = true 
                     huntAlien = false
                     AlienToggle:Set(false)
-                    Rayfield:Notify({Title = "1% HP Reached!", Content = "หยุดยิงอัตโนมัติแล้ว นายเปิดยิงเองได้เลย!", Duration = 5})
+                    Rayfield:Notify({Title = "1% HP REACHED!", Content = "บอสใกล้ตายแล้ว! ระบบหยุดยิงอัตโนมัติให้แล้วครับ", Duration = 5})
                 end
             end
 
@@ -151,7 +146,7 @@ task.spawn(function()
                 if autoSkill then task.spawn(castSkillLoop) end
             end
         else
-            HPLabel:Set("Boss HP: Target Not Found")
+            HPLabel:Set("Boss HP: Not Found")
         end
         task.wait(0.2)
     end
