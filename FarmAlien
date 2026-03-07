@@ -9,7 +9,6 @@ local LocalPlayer = Players.LocalPlayer
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local SkillRE = Remotes:WaitForChild("SkillRE")
-local ToolRE = Remotes:WaitForChild("ToolRE")
 local FireRE = Remotes:WaitForChild("FireRE")
 local FishRE = Remotes:WaitForChild("FishRE")
 
@@ -43,7 +42,7 @@ local function tpToPoint(pointName)
     if worldBoss then
         local targetPoint = worldBoss:FindFirstChild(pointName)
         if targetPoint then
-            HRP.CFrame = (targetPoint:IsA("BasePart") and targetPoint.CFrame or targetPoint.PrimaryPart.CFrame) * CFrame.new(0, 5, 0)
+            HRP.CFrame = (targetPoint:IsA("BasePart") and targetPoint.CFrame or targetPoint.PrimaryPart.CFrame) * CFrame.new(0, 8, 0)
         end
     end
 end
@@ -52,6 +51,7 @@ local function findTargetLogic()
     if huntAlien then
         local worldBoss = workspace:FindFirstChild("WorldBoss")
         if worldBoss then
+            -- เจาะจงไปที่ Point7 สำหรับ Alien Shark (Boss08)
             local p7 = worldBoss:FindFirstChild("Point7")
             local boss = p7 and p7:FindFirstChild("Boss08")
             if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then 
@@ -74,7 +74,7 @@ local function castSkillLoop()
 end
 
 --==================================================
--- STARTUP TELEPORT (5 SECONDS)
+-- STARTUP TELEPORT (POINT7)
 --==================================================
 task.spawn(function()
     local startTime = tick()
@@ -88,14 +88,14 @@ end)
 -- UI CREATION
 --==================================================
 local Window = Rayfield:CreateWindow({
-   Name = "👑 Fishing Hub | V12 ALIEN (CurHP 5%)",
-   LoadingTitle = "Monitoring Alien Shark CurHP...",
-   LoadingSubtitle = "by Gemini Developer",
+   Name = "👑 Fishing Hub | V13 BOSS HP FIX",
+   LoadingTitle = "Detecting Boss Attributes...",
+   LoadingSubtitle = "Fixing CurHP & HP logic",
    ConfigurationSaving = { Enabled = false }
 })
 
 local TabFarm = Window:CreateTab("Main Farm", 4483362458)
-TabFarm:CreateSection("Alien Shark Hunter")
+TabFarm:CreateSection("Alien Shark Hunter (Boss08)")
 
 local AlienToggle = TabFarm:CreateToggle({
    Name = "🎯 ล่า Alien Shark (Boss08)",
@@ -112,11 +112,11 @@ TabFarm:CreateToggle({
    Callback = function(Value) autoSkill = Value end,
 })
 
-TabFarm:CreateSection("Boss Status")
-local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting...")
+TabFarm:CreateSection("Boss Live Status")
+local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting for Boss...")
 
 --==================================================
--- MAIN LOOP (WITH CurHP CHECK)
+-- MAIN LOOP (ATTRIBUTE BASED HP CHECK)
 --==================================================
 task.spawn(function()
     while true do
@@ -126,32 +126,32 @@ task.spawn(function()
         end
 
         if currentTarget and weapon then
-            -- ดึงค่าเลือดจาก Properties: CurHP และ HP
-            local curHP = currentTarget:FindFirstChild("CurHP")
-            local maxHP = currentTarget:FindFirstChild("HP")
+            -- แก้ไขการดึงเลือด: ใช้ GetAttribute แทน .Value
+            local curHP = currentTarget:GetAttribute("CurHP")
+            local maxHP = currentTarget:GetAttribute("HP")
             
-            if curHP and maxHP and maxHP.Value > 0 then
-                local hpPercent = (curHP.Value / maxHP.Value) * 100
-                HPLabel:Set("Boss HP: " .. string.format("%.1f", hpPercent) .. "%")
+            if curHP and maxHP and maxHP > 0 then
+                local hpPercent = (curHP / maxHP) * 100
+                HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
                 
                 -- ระบบหยุดยิงเมื่อเลือดเหลือ 5%
                 if hpPercent <= 5 then
                     huntAlien = false
                     AlienToggle:Set(false)
-                    HPLabel:Set("Boss HP: " .. string.format("%.1f", hpPercent) .. "% (AUTO STOP)")
-                    Rayfield:Notify({Title = "Target Weak!", Content = "เลือดบอสต่ำกว่า 5% หยุดยิงให้แล้วครับ!", Duration = 5})
+                    HPLabel:Set("Target Weak (5%): STOPPED")
+                    Rayfield:Notify({Title = "Critical HP!", Content = "บอสเลือดต่ำกว่า 5% แล้ว ปิดระบบออโต้ให้แล้วครับ!", Duration = 5})
                 end
+            else
+                HPLabel:Set("Boss HP: Attribute Loading...")
             end
 
             if huntAlien then
-                local root = currentTarget.Model:FindFirstChild("Root")
-                if root then
-                    FireRE:FireServer("Hit", {fishInstance = currentTarget, HitPos = root.Position, toolInstance = weapon})
-                    if autoSkill then task.spawn(castSkillLoop) end
-                end
+                local root = currentTarget.Model.Root
+                FireRE:FireServer("Hit", {fishInstance = currentTarget, HitPos = root.Position, toolInstance = weapon})
+                if autoSkill then task.spawn(castSkillLoop) end
             end
         else
-            HPLabel:Set("Boss HP: Not Found")
+            HPLabel:Set("Boss HP: Target Not Found")
         end
         task.wait(0.2)
     end
