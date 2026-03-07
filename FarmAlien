@@ -8,7 +8,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local SkillRE = Remotes:WaitForChild("SkillRE")
 local FireRE = Remotes:WaitForChild("FireRE")
 local FishRE = Remotes:WaitForChild("FishRE")
 
@@ -18,10 +17,11 @@ local FishRE = Remotes:WaitForChild("FishRE")
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP = character:WaitForChild("HumanoidRootPart")
 
-local autoSkill = true   -- [DEFAULT ON]
-local huntAlien = true   -- [DEFAULT ON] Boss08
+local autoSkill = true   
+local huntAlien = true   
 local currentTarget = nil
 local skillBusy = false
+local hasStopped = false -- ตัวแปรใหม่: กันการบังคับปิดซ้ำๆ
 
 --==================================================
 -- CORE LOGIC
@@ -48,15 +48,12 @@ local function tpToPoint(pointName)
 end
 
 local function findTargetLogic()
-    if huntAlien then
-        local worldBoss = workspace:FindFirstChild("WorldBoss")
-        if worldBoss then
-            -- เจาะจงไปที่ Point7 สำหรับ Alien Shark (Boss08)
-            local p7 = worldBoss:FindFirstChild("Point7")
-            local boss = p7 and p7:FindFirstChild("Boss08")
-            if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then 
-                return boss 
-            end
+    local worldBoss = workspace:FindFirstChild("WorldBoss")
+    if worldBoss then
+        local p7 = worldBoss:FindFirstChild("Point7")
+        local boss = p7 and p7:FindFirstChild("Boss08")
+        if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then 
+            return boss 
         end
     end
     return nil
@@ -73,9 +70,7 @@ local function castSkillLoop()
     skillBusy = false
 end
 
---==================================================
--- STARTUP TELEPORT (POINT7)
---==================================================
+-- STARTUP TP
 task.spawn(function()
     local startTime = tick()
     while tick() - startTime < 5 do
@@ -88,21 +83,26 @@ end)
 -- UI CREATION
 --==================================================
 local Window = Rayfield:CreateWindow({
-   Name = "👑 Fishing Hub | V13 BOSS HP FIX",
-   LoadingTitle = "Detecting Boss Attributes...",
-   LoadingSubtitle = "Fixing CurHP & HP logic",
+   Name = "👑 Fishing Hub | V13.1 (2% STOP FIX)",
+   LoadingTitle = "Manual Takeover Ready...",
+   LoadingSubtitle = "Boss HP 2% Threshold",
    ConfigurationSaving = { Enabled = false }
 })
 
 local TabFarm = Window:CreateTab("Main Farm", 4483362458)
-TabFarm:CreateSection("Alien Shark Hunter (Boss08)")
+TabFarm:CreateSection("Alien Shark (2% Auto-Stop)")
 
 local AlienToggle = TabFarm:CreateToggle({
    Name = "🎯 ล่า Alien Shark (Boss08)",
    CurrentValue = true,
    Callback = function(Value)
       huntAlien = Value
-      if Value then currentTarget = nil end
+      if Value then 
+          -- ถ้าผู้เล่นกดเปิดเองด้วยมือ ให้ถือว่าต้องการสู้ต่อ
+          if hasStopped then
+              Rayfield:Notify({Title = "Manual Mode", Content = "คุณกำลังควบคุมการยิงด้วยตัวเอง", Duration = 2})
+          end
+      end
    end,
 })
 
@@ -112,21 +112,23 @@ TabFarm:CreateToggle({
    Callback = function(Value) autoSkill = Value end,
 })
 
-TabFarm:CreateSection("Boss Live Status")
-local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting for Boss...")
+local HPLabel = TabFarm:CreateLabel("Boss HP: Waiting...")
 
 --==================================================
--- MAIN LOOP (ATTRIBUTE BASED HP CHECK)
+-- MAIN LOOP (2% STOP LOGIC)
 --==================================================
 task.spawn(function()
     while true do
         local weapon = getWeapon()
-        if not currentTarget or not currentTarget.Parent then
-            currentTarget = findTargetLogic()
+        local newTarget = findTargetLogic()
+        
+        -- ถ้าบอสตัวเก่าตาย หรือเปลี่ยนบอสตัวใหม่ ให้รีเซ็ตระบบหยุดยิง
+        if newTarget ~= currentTarget then
+            currentTarget = newTarget
+            hasStopped = false 
         end
 
         if currentTarget and weapon then
-            -- แก้ไขการดึงเลือด: ใช้ GetAttribute แทน .Value
             local curHP = currentTarget:GetAttribute("CurHP")
             local maxHP = currentTarget:GetAttribute("HP")
             
@@ -134,15 +136,13 @@ task.spawn(function()
                 local hpPercent = (curHP / maxHP) * 100
                 HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
                 
-                -- ระบบหยุดยิงเมื่อเลือดเหลือ 5%
-                if hpPercent <= 3 then
+                -- เงื่อนไขหยุดยิงที่ 2% และสั่งแค่ครั้งเดียวต่อบอส 1 ตัว
+                if hpPercent <= 2 and not hasStopped then
+                    hasStopped = true -- ล็อคไว้ว่าหยุดยิงบอสตัวนี้ไปแล้ว
                     huntAlien = false
                     AlienToggle:Set(false)
-                    HPLabel:Set("Target Weak (5%): STOPPED")
-                    Rayfield:Notify({Title = "Critical HP!", Content = "บอสเลือดต่ำกว่า 5% แล้ว ปิดระบบออโต้ให้แล้วครับ!", Duration = 5})
+                    Rayfield:Notify({Title = "2% HP Reached!", Content = "หยุดยิงอัตโนมัติแล้ว นายเปิดยิงเองได้เลย!", Duration = 5})
                 end
-            else
-                HPLabel:Set("Boss HP: Attribute Loading...")
             end
 
             if huntAlien then
