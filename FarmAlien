@@ -135,7 +135,7 @@ task.spawn(function()
                 HPLabel:Set("Boss HP: " .. string.format("%.2f", hpPercent) .. "%")
                 
                 -- ระบบหยุดยิงเมื่อเลือดเหลือ 5%
-                if hpPercent <= 5 then
+                if hpPercent <= 3 then
                     huntAlien = false
                     AlienToggle:Set(false)
                     HPLabel:Set("Target Weak (5%): STOPPED")
