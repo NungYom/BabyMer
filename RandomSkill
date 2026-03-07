@@ -32,7 +32,7 @@ local currentTarget = nil
 local skillBusy = false
 
 --==================================================
--- CORE LOGIC
+-- CORE LOGIC (FIXED NEAREST BOSS)
 --==================================================
 
 local function getWeapon()
@@ -46,24 +46,29 @@ local function getWeapon()
 end
 
 local function findTargetLogic()
+    -- เจาะจง Guardian Dragon (Boss07)
     if huntDragon then
-        local bossFolder = workspace:FindFirstChild("WorldBoss")
-        if bossFolder then
-            for _, point in ipairs(bossFolder:GetChildren()) do
+        local worldBoss = workspace:FindFirstChild("WorldBoss")
+        if worldBoss then
+            for _, point in ipairs(worldBoss:GetChildren()) do
                 local boss = point:FindFirstChild("Boss07")
                 if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then return boss end
             end
         end
+    -- เจาะจง Alien Shark (Boss08)
     elseif huntAlien then
-        local bossFolder = workspace:FindFirstChild("WorldBoss")
-        if bossFolder then
-            for _, point in ipairs(bossFolder:GetChildren()) do
+        local worldBoss = workspace:FindFirstChild("WorldBoss")
+        if worldBoss then
+            for _, point in ipairs(worldBoss:GetChildren()) do
                 local boss = point:FindFirstChild("Boss08")
                 if boss and boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root") then return boss end
             end
         end
+    -- โจมตีตัวที่ใกล้ที่สุด (รวมทั้งปลาและบอส)
     elseif autoAttack then
         local nearest, dist = nil, math.huge
+        
+        -- ส่วนที่ 1: หาในทะเล (WorldSea)
         local worldSea = workspace:FindFirstChild("WorldSea")
         if worldSea then
             for _, sea in ipairs(worldSea:GetChildren()) do
@@ -76,17 +81,29 @@ local function findTargetLogic()
                 end
             end
         end
+
+        -- ส่วนที่ 2: หาในบอส (WorldBoss) - เพิ่มกลับมาให้แล้วครับ!
+        local worldBoss = workspace:FindFirstChild("WorldBoss")
+        if worldBoss then
+            for _, point in ipairs(worldBoss:GetChildren()) do
+                for _, boss in ipairs(point:GetChildren()) do
+                    local root = boss:FindFirstChild("Model") and boss.Model:FindFirstChild("Root")
+                    if root then
+                        local d = (HRP.Position - root.Position).Magnitude
+                        if d < dist then dist = d nearest = boss end
+                    end
+                end
+            end
+        end
         return nearest
     end
     return nil
 end
 
--- ฟังก์ชันวาร์ปไปพิกัด Vector3
 local function tpToCoord(x, y, z)
     HRP.CFrame = CFrame.new(x, y + 3, z)
 end
 
--- ฟังก์ชันวาร์ปไปตามชื่อ Point (ใช้กับบอส)
 local function tpToPoint(pointName)
     local worldBoss = workspace:FindFirstChild("WorldBoss")
     if worldBoss then
@@ -112,17 +129,17 @@ end
 -- UI CREATION
 --==================================================
 local Window = Rayfield:CreateWindow({
-   Name = "👑 Fishing Hub | V11",
-   LoadingTitle = "Loading New Map Data...",
-   LoadingSubtitle = "by Gemini Developer",
-   ConfigurationSaving = { Enabled = false } -- ระบบ Save ถูกถอนออกถาวร
+   Name = "👑 Fishing Hub | V12 BOSS FIX",
+   LoadingTitle = "Fixing Target Logic...",
+   LoadingSubtitle = "Boss Scan Re-enabled",
+   ConfigurationSaving = { Enabled = false }
 })
 
 -- --- TAB: MAIN FARM ---
 local TabFarm = Window:CreateTab("Main Farm", 4483362458)
 TabFarm:CreateSection("Auto Hunting")
 TabFarm:CreateToggle({
-   Name = "โจมตีอัตโนมัติ (Nearest)",
+   Name = "โจมตีอัตโนมัติ (Nearest Fish & Boss)",
    CurrentValue = false,
    Callback = function(Value)
       autoAttack = Value
@@ -155,69 +172,38 @@ TabFarm:CreateSection("Boss Point TP")
 TabFarm:CreateButton({ Name = "วาร์ปไปจุดเกิด Guardian Dragon", Callback = function() tpToPoint("Point6") end })
 TabFarm:CreateButton({ Name = "วาร์ปไปจุดเกิด Alien Shark", Callback = function() tpToPoint("Point7") end })
 
--- --- TAB: TELEPORT LOCATIONS (หมวดใหม่!) ---
+-- --- TAB: TELEPORT ---
 local TabTP = Window:CreateTab("Teleport", 4483362458)
-TabTP:CreateSection("Island & Sea Teleports")
+TabTP:CreateSection("World Locations")
+TabTP:CreateButton({ Name = "Island Center Lake", Callback = function() tpToCoord(1265, 87, -271) end })
+TabTP:CreateButton({ Name = "Nether Island", Callback = function() tpToCoord(356, 86, -1077) end })
+TabTP:CreateButton({ Name = "Under Water", Callback = function() tpToCoord(1192, -1136, 3878) end })
+TabTP:CreateButton({ Name = "Lost Sea Ruins", Callback = function() tpToCoord(1222, -1115, 2976) end })
 
-TabTP:CreateButton({
-   Name = "Island Center Lake",
-   Callback = function() tpToCoord(1265, 87, -271) end,
-})
-
-TabTP:CreateButton({
-   Name = "Nether Island",
-   Callback = function() tpToCoord(356, 86, -1077) end,
-})
-
-TabTP:CreateButton({
-   Name = "Under Water",
-   Callback = function() tpToCoord(1192, -1136, 3878) end,
-})
-
-TabTP:CreateButton({
-   Name = "Lost Sea Ruins",
-   Callback = function() tpToCoord(1222, -1115, 2976) end,
-})
-
--- --- TAB: GACHA ---
+-- --- TAB: GACHA & TRADE (UNCHANGED) ---
 local TabGacha = Window:CreateTab("Gacha", 4483362458)
-TabGacha:CreateSlider({
-   Name = "จำนวนสุ่ม", Range = {1, 100}, Increment = 1, Suffix = "ครั้ง", CurrentValue = 50,
-   Callback = function(Value) coinCount = Value gemCount = Value end,
-})
+TabGacha:CreateSlider({ Name = "จำนวนสุ่ม", Range = {1, 100}, Increment = 1, Suffix = "ครั้ง", CurrentValue = 50, Callback = function(V) coinCount = V gemCount = V end })
 TabGacha:CreateButton({ Name = "สุ่มด้วยเงิน (Coins)", Callback = function() SkillRE:FireServer("SkillGacha",{Key="Coins",Count=coinCount}) end })
 TabGacha:CreateButton({ Name = "สุ่มด้วยเพชร (Gems)", Callback = function() SkillRE:FireServer("SkillGacha",{Key="Gems",Count=gemCount}) end })
 
--- --- TAB: TRADE SYSTEM ---
 local TabTrade = Window:CreateTab("Trade System", 4483362458)
 local PlayerLabel = TabTrade:CreateLabel("เป้าหมาย : ยังไม่ได้เลือก")
-TabTrade:CreateButton({
-   Name = "เลือกผู้เล่นคนถัดไป",
-   Callback = function()
+TabTrade:CreateButton({ Name = "เลือกผู้เล่นคนถัดไป", Callback = function()
       local list = {}
       for _,p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list,p) end end
       if #list == 0 then return end
       targetIndex = (targetIndex % #list) + 1
       targetPlayer = list[targetIndex]
       PlayerLabel:Set("เป้าหมาย : "..targetPlayer.Name)
-   end,
-})
-TabTrade:CreateToggle({
-   Name = "เริ่มเทรดอัตโนมัติ (0.5s Delay)",
-   CurrentValue = false,
-   Callback = function(Value)
-      trading = Value
+end })
+TabTrade:CreateToggle({ Name = "เริ่มเทรดอัตโนมัติ (0.5s)", CurrentValue = false, Callback = function(V)
+      trading = V
       if trading and targetPlayer then
           task.spawn(function()
-              while trading and targetPlayer do
-                  ToolRE:FireServer("Switch",{index=3})
-                  SendFishRF:InvokeServer(targetPlayer)
-                  task.wait(0.5)
-              end
+              while trading and targetPlayer do ToolRE:FireServer("Switch",{index=3}) SendFishRF:InvokeServer(targetPlayer) task.wait(0.5) end
           end)
       end
-   end,
-})
+end })
 
 --==================================================
 -- MAIN LOOP
@@ -241,4 +227,4 @@ task.spawn(function()
     end
 end)
 
-Rayfield:Notify({Title = "V11 Ready!", Content = "เพิ่มจุดวาร์ปและถอนระบบ Save ออกเรียบร้อยครับ!", Duration = 5})
+Rayfield:Notify({Title = "V12 Loaded", Content = "แก้ไขระบบเล็งบอสตัวที่ใกล้ที่สุดเรียบร้อย!", Duration = 5})
