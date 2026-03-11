@@ -54,9 +54,9 @@ local function collectItem(target)
         rootPart.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
         task.wait(0.2)
         
-        -- จำลองการกด E ค้างไว้ 1 วินาที
+        -- จำลองการกด E ค้างไว้ 0.5 วินาที
         proximityPrompt:InputHoldBegin()
-        task.wait(1.1)
+        task.wait(0.5)
         proximityPrompt:InputHoldEnd()
         return true
     end
