@@ -1,76 +1,115 @@
--- Roblox TP Script: Godly Hunter
--- คำอธิบาย: กด Q เพื่อวาร์ปไปหา Entity ที่มี "GodlyRarity" ยกเว้นจุดโชว์ของ
+-- Roblox Godly Hunter V2 Pro: Manual & Auto Collect
+-- Description: Q = Manual TP | P = Toggle Auto Collect (Detect, Collect, Claim)
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
 local entitiesFolder = workspace:WaitForChild("EntitiesFolder")
+local claimZone = workspace:WaitForChild("ClaimZone")
 
--- รายการพิกัดที่ต้องการข้าม (Blacklist)
+-- Settings
+local autoCollectEnabled = false
+local isProcessing = false -- ป้องกันการทำงานทับซ้อน
 local excludedPositions = {
     Vector3.new(421.796173, 74.812767, 151.834137),
     Vector3.new(439.000092, 93.5329514, -2.00000381),
     Vector3.new(527.250061, 126.200401, -58.0051613)
 }
 
-local lastTarget = nil
-
--- ฟังก์ชันเช็คว่าพิกัดนี้อยู่ใน Blacklist หรือไม่
+-- ฟังก์ชันเช็คพิกัดยกเว้น
 local function isExcluded(pos)
     for _, exPos in ipairs(excludedPositions) do
-        if (pos - exPos).Magnitude < 5 then -- เช็คระยะเผื่อไว้ 5 studs เพื่อความแม่นยำ
-            return true
-        end
+        if (pos - exPos).Magnitude < 7 then return true end
     end
     return false
 end
 
--- ฟังก์ชันหลักในการค้นหาและวาร์ป
-local function teleportToGodly()
-    local targets = {}
-    
-    -- ค้นหาใน EntitiesFolder ทั้งหมด
+-- ฟังก์ชันค้นหาเป้าหมาย Godly
+local function findGodlyTarget()
     for _, entity in ipairs(entitiesFolder:GetChildren()) do
-        -- พยายามเข้าถึง Path: HumanoidRootPart.EntityBillboardTemplate.TextLabels.RarityLabel.GodlyRarity
         local hrp = entity:FindFirstChild("HumanoidRootPart")
         if hrp then
             local billboard = hrp:FindFirstChild("EntityBillboardTemplate")
-            local textLabels = billboard and billboard:FindFirstChild("TextLabels")
-            local rarityLabel = textLabels and textLabels:FindFirstChild("RarityLabel")
+            local rarityLabel = billboard and billboard:FindFirstChild("TextLabels") and billboard.TextLabels:FindFirstChild("RarityLabel")
             
-            -- ตรวจสอบว่ามี GodlyRarity อยู่ข้างในหรือไม่
             if rarityLabel and rarityLabel:FindFirstChild("GodlyRarity") then
-                -- เช็คว่าไม่ใช่พิกัดที่ต้องห้าม และไม่ใช่ตัวเดิมที่เพิ่งวาร์ปไป
-                if not isExcluded(hrp.Position) and entity ~= lastTarget then
-                    table.insert(targets, entity)
+                if not isExcluded(hrp.Position) then
+                    return entity
                 end
             end
         end
     end
-
-    if #targets > 0 then
-        -- เลือกเป้าหมาย (สุ่มจากรายการที่เจอ เพื่อให้กด Q ซ้ำแล้วเปลี่ยนตัวได้)
-        local selected = targets[math.random(1, #targets)]
-        lastTarget = selected
-        
-        -- ทำการวาร์ป
-        rootPart.CFrame = selected.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0) -- วาร์ปไปเหนือหัวนิดหน่อย
-        print("🚀 Teleported to Godly: " .. selected.Name)
-    else
-        print("❌ ไม่พบ Godly ตัวใหม่ในขณะนี้")
-        lastTarget = nil -- Reset เผื่อกรณีหาไม่เจอ จะได้วนกลับมาตัวเดิมได้ในครั้งถัดไป
-    end
+    return nil
 end
 
--- ตรวจสอบการกดปุ่ม Q
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Q then
-        teleportToGodly()
+-- ฟังก์ชันเก็บของ (Hold E)
+local function collectItem(target)
+    local proximityPrompt = target.HumanoidRootPart:FindFirstChildOfClass("ProximityPrompt")
+    if proximityPrompt then
+        -- TP ไปหาของ
+        rootPart.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+        task.wait(0.2)
+        
+        -- จำลองการกด E ค้างไว้ 1 วินาที
+        proximityPrompt:InputHoldBegin()
+        task.wait(1.1)
+        proximityPrompt:InputHoldEnd()
+        return true
+    end
+    return false
+end
+
+-- ฟังก์ชันหลักของระบบ Auto
+task.spawn(function()
+    while true do
+        if autoCollectEnabled and not isProcessing then
+            local target = findGodlyTarget()
+            if target then
+                isProcessing = true
+                print("💎 พบ Godly! กำลังเริ่มเก็บ...")
+                
+                -- 1. วาร์ปไปเก็บ
+                if collectItem(target) then
+                    task.wait(0.5)
+                    
+                    -- 2. วาร์ปไปส่งที่ ClaimZone
+                    print("🚚 กำลังนำไปส่งที่ ClaimZone")
+                    rootPart.CFrame = claimZone.CFrame + Vector3.new(0, 3, 0)
+                    task.wait(1.2) -- ยืนรอ 1 วินาทีตามเงื่อนไข
+                end
+                
+                isProcessing = false
+            end
+        end
+        task.wait(0.3) -- ตรวจจับทุก 0.3 วินาที
     end
 end)
 
-print("✅ [Godly Hunter Tool] พร้อมทำงาน! กด 'Q' เพื่อเริ่มล่า")
+-- ควบคุมปุ่มกด
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    
+    -- Q: Manual Teleport (วาร์ปไปดูเฉยๆ หรือเลือกเป้าหมาย)
+    if input.KeyCode == Enum.KeyCode.Q then
+        local target = findGodlyTarget()
+        if target then
+            rootPart.CFrame = target.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
+            print("🚀 Manual TP to Godly")
+        end
+        
+    -- P: Toggle Auto Collect
+    elseif input.KeyCode == Enum.KeyCode.P then
+        autoCollectEnabled = not autoCollectEnabled
+        print(autoCollectEnabled and "🤖 [AUTO] ON" or "🤖 [AUTO] OFF")
+    end
+end)
+
+print("---------------------------------------")
+print("✅ Godly Hunter V2 Loaded!")
+print("⌨️ Press 'Q' to Manual TP")
+print("⌨️ Press 'P' to Toggle Auto Collect")
+print("---------------------------------------")
