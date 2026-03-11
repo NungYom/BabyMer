@@ -1,0 +1,76 @@
+-- Roblox TP Script: Godly Hunter
+-- คำอธิบาย: กด Q เพื่อวาร์ปไปหา Entity ที่มี "GodlyRarity" ยกเว้นจุดโชว์ของ
+
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+local entitiesFolder = workspace:WaitForChild("EntitiesFolder")
+
+-- รายการพิกัดที่ต้องการข้าม (Blacklist)
+local excludedPositions = {
+    Vector3.new(421.796173, 74.812767, 151.834137),
+    Vector3.new(439.000092, 93.5329514, -2.00000381),
+    Vector3.new(527.250061, 126.200401, -58.0051613)
+}
+
+local lastTarget = nil
+
+-- ฟังก์ชันเช็คว่าพิกัดนี้อยู่ใน Blacklist หรือไม่
+local function isExcluded(pos)
+    for _, exPos in ipairs(excludedPositions) do
+        if (pos - exPos).Magnitude < 5 then -- เช็คระยะเผื่อไว้ 5 studs เพื่อความแม่นยำ
+            return true
+        end
+    end
+    return false
+end
+
+-- ฟังก์ชันหลักในการค้นหาและวาร์ป
+local function teleportToGodly()
+    local targets = {}
+    
+    -- ค้นหาใน EntitiesFolder ทั้งหมด
+    for _, entity in ipairs(entitiesFolder:GetChildren()) do
+        -- พยายามเข้าถึง Path: HumanoidRootPart.EntityBillboardTemplate.TextLabels.RarityLabel.GodlyRarity
+        local hrp = entity:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local billboard = hrp:FindFirstChild("EntityBillboardTemplate")
+            local textLabels = billboard and billboard:FindFirstChild("TextLabels")
+            local rarityLabel = textLabels and textLabels:FindFirstChild("RarityLabel")
+            
+            -- ตรวจสอบว่ามี GodlyRarity อยู่ข้างในหรือไม่
+            if rarityLabel and rarityLabel:FindFirstChild("GodlyRarity") then
+                -- เช็คว่าไม่ใช่พิกัดที่ต้องห้าม และไม่ใช่ตัวเดิมที่เพิ่งวาร์ปไป
+                if not isExcluded(hrp.Position) and entity ~= lastTarget then
+                    table.insert(targets, entity)
+                end
+            end
+        end
+    end
+
+    if #targets > 0 then
+        -- เลือกเป้าหมาย (สุ่มจากรายการที่เจอ เพื่อให้กด Q ซ้ำแล้วเปลี่ยนตัวได้)
+        local selected = targets[math.random(1, #targets)]
+        lastTarget = selected
+        
+        -- ทำการวาร์ป
+        rootPart.CFrame = selected.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0) -- วาร์ปไปเหนือหัวนิดหน่อย
+        print("🚀 Teleported to Godly: " .. selected.Name)
+    else
+        print("❌ ไม่พบ Godly ตัวใหม่ในขณะนี้")
+        lastTarget = nil -- Reset เผื่อกรณีหาไม่เจอ จะได้วนกลับมาตัวเดิมได้ในครั้งถัดไป
+    end
+end
+
+-- ตรวจสอบการกดปุ่ม Q
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        teleportToGodly()
+    end
+end)
+
+print("✅ [Godly Hunter Tool] พร้อมทำงาน! กด 'Q' เพื่อเริ่มล่า")
