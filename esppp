@@ -1,0 +1,89 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+
+-- ค่านิยมสี
+local COLOR_BEAST = Color3.fromRGB(255, 0, 0)      -- สีแดง
+local COLOR_SURVIVOR = Color3.fromRGB(255, 255, 255) -- สีขาว
+local COLOR_COMPUTER = Color3.fromRGB(0, 255, 255)  -- สีฟ้า (สำหรับคอมพิวเตอร์)
+
+-- ฟังก์ชันสร้าง Highlight (ESP)
+local function createHighlight(target, color, name)
+	if not target:FindFirstChild("ESPHighlight") then
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "ESPHighlight"
+		highlight.FillColor = color
+		highlight.OutlineColor = Color3.new(1, 1, 1)
+		highlight.FillTransparency = 0.5
+		highlight.OutlineTransparency = 0
+		highlight.Adornee = target
+		highlight.Parent = target
+		
+		-- เพิ่มชื่อลอยบนหัว (Optional)
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "ESPName"
+		billboard.Size = UDim2.new(0, 200, 0, 50)
+		billboard.StudsOffset = Vector3.new(0, 3, 0)
+		billboard.AlwaysOnTop = true
+		
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.Text = name
+		label.TextColor3 = color
+		label.TextStrokeTransparency = 0
+		label.TextScaled = true
+		label.Parent = billboard
+		
+		billboard.Parent = target
+	end
+end
+
+-- อัปเดต ESP สำหรับผู้เล่น
+local function updatePlayersESP()
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local char = p.Character
+			
+			-- ตรวจสอบว่าเป็น Beast หรือไม่จากโฟลเดอร์ TempPlayerStatsModule
+			local isBeastValue = p:FindFirstChild("TempPlayerStatsModule") and p.TempPlayerStatsModule:FindFirstChild("IsBeast")
+			local isBeast = isBeastValue and isBeastValue.Value or false
+			
+			local targetColor = isBeast and COLOR_BEAST or COLOR_SURVIVOR
+			local displayName = isBeast and "[BEAST] " .. p.Name or p.Name
+			
+			-- ถ้ามี ESP อยู่แล้วแต่อยากเปลี่ยนสีตามสถานะที่เปลี่ยนไป
+			local existingHighlight = char:FindFirstChild("ESPHighlight")
+			if existingHighlight then
+				existingHighlight.FillColor = targetColor
+				if char:FindFirstChild("ESPName") then
+					char.ESPName.TextLabel.TextColor3 = targetColor
+					char.ESPName.TextLabel.Text = displayName
+				end
+			else
+				createHighlight(char, targetColor, displayName)
+			end
+		end
+	end
+end
+
+-- อัปเดต ESP สำหรับคอมพิวเตอร์ (ComputerTable)
+local function updateComputerESP()
+	-- ค้นหาใน Workspace (อิงตามชื่อในภาพ Airport by deadlybones28)
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if obj.Name == "ComputerTable" and obj:IsA("Model") then
+			createHighlight(obj, COLOR_COMPUTER, "Computer")
+		end
+	end
+end
+
+-- รัน Loop เพื่ออัปเดตข้อมูลให้สดใหม่เสมอ (เช่น เมื่อมีการเปลี่ยนฆาตกร)
+RunService.RenderStepped:Connect(function()
+	updatePlayersESP()
+	-- สำหรับคอมพิวเตอร์รันแค่ครั้งเดียวหรือนานๆ ทีเพื่อประหยัดสเปค
+	-- แต่ถ้าคอมพิวเตอร์มีการเกิดใหม่ให้ใส่ในนี้ได้ครับ
+end)
+
+-- รันครั้งแรกสำหรับคอมพิวเตอร์
+updateComputerESP()
