@@ -1,0 +1,41 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+-- อ้างอิงโฟลเดอร์สมบัติตามโครงสร้างในภาพ
+local treasureFolder = workspace:WaitForChild("Temp"):WaitForChild("Treasure")
+local player = Players.LocalPlayer
+
+-- ฟังก์ชันสำหรับการ Teleport
+local function teleportToTreasures()
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+	
+	local rootPart = character.HumanoidRootPart
+	local treasures = treasureFolder:GetChildren()
+
+	-- วนลูปผ่านทุก Part ในโฟลเดอร์ Treasure
+	for _, treasure in pairs(treasures) do
+		if treasure:IsA("BasePart") then
+			-- ดึงค่า CFrame ปัจจุบันของสมบัติ
+			local targetCFrame = treasure.CFrame
+			
+			-- เทเลพอร์ตไปที่ตำแหน่ง X, Y+1, Z
+			-- เราใช้ targetCFrame * CFrame.new(0, 1, 0) เพื่อขยับขึ้นไปข้างบน 1 stud
+			rootPart.CFrame = targetCFrame * CFrame.new(0, 1, 0)
+			
+			-- ใส่ Delay เล็กน้อยเพื่อให้เครื่องประมวลผลทัน (ปรับลด/เพิ่มได้ตามต้องการ)
+			task.wait(0.5) 
+		end
+	end
+end
+
+-- ตรวจสอบการกดปุ่ม Q
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	-- ถ้าผู้เล่นกำลังพิมพ์แชทอยู่ จะไม่ทำงาน
+	if gameProcessed then return end
+	
+	if input.KeyCode == Enum.KeyCode.Q then
+		print("Teleporting to all treasures...")
+		teleportToTreasures()
+	end
+end)
