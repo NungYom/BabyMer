@@ -1,0 +1,125 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local Window = Rayfield:CreateWindow({
+    Name = "BabeMer Rider Support V2",
+    LoadingTitle = "Rider Fix System",
+    LoadingSubtitle = "Anti-Fall Fixed",
+    ConfigurationSaving = { Enabled = false }
+})
+
+-- Variables
+local Player = game.Players.LocalPlayer
+local SafePos = Vector3.new(312.014984, 224.533417, -412.852478)
+
+local MyHorse = nil
+local AntiFallEnabled = false
+local StickToHorse = false
+local AutoClickEnabled = false
+local IsClicking = false
+
+-- Function: ดึง RootPart ปัจจุบัน (รองรับการเกิดใหม่)
+local function GetCurrentRoot()
+    local char = Player.Character
+    if char then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
+end
+
+-- Function: หาผู้เล่นที่ใกล้ที่สุด
+local function GetNearestPlayer()
+    local root = GetCurrentRoot()
+    if not root then return nil end
+    
+    local closest = nil
+    local dist = math.huge
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (root.Position - v.Character.HumanoidRootPart.Position).Magnitude
+            if d < dist then
+                dist = d
+                closest = v
+            end
+        end
+    end
+    return closest
+end
+
+-- UI Tabs
+local MainTab = Window:CreateTab("Rider Features", 4483362458)
+
+MainTab:CreateToggle({
+    Name = "Anti-Fall (Y < 50)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiFallEnabled = Value
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Stick to Horse (Auto TP)",
+    CurrentValue = false,
+    Callback = function(Value)
+        StickToHorse = Value
+        if Value then
+            MyHorse = GetNearestPlayer()
+            if MyHorse then
+                Rayfield:Notify({Title = "Horse Locked", Content = "จำผู้เล่น: " .. MyHorse.Name, Duration = 3})
+            end
+        else
+            MyHorse = nil
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Enable Combat Mode (Q to Click)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AutoClickEnabled = Value
+        if not Value then IsClicking = false end
+    end,
+})
+
+-- Keybind: Q
+game:GetService("UserInputService").InputBegan:Connect(function(input, proc)
+    if proc or not AutoClickEnabled then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        IsClicking = not IsClicking
+    end
+end)
+
+-- Main Loop (High Frequency)
+task.spawn(function()
+    while task.wait(0.05) do -- เช็คทุกๆ 0.05 วินาที
+        local root = GetCurrentRoot()
+        if not root then continue end
+
+        -- 1. Anti-Fall (เช็ค Y < 50) - แก้ไขให้ทำงานแน่นอน
+        if AntiFallEnabled then
+            if root.Position.Y < 50 then
+                root.CFrame = CFrame.new(SafePos)
+                -- ใส่แรงเฉื่อยเป็น 0 เพื่อให้ตัวหยุดนิ่งหลังวาร์ป
+                local velocityPart = root:FindFirstChildOfClass("BodyVelocity") or root
+                if root:IsA("BasePart") then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+            end
+        end
+
+        -- 2. Stick to Horse
+        if StickToHorse and MyHorse and MyHorse.Character and MyHorse.Character:FindFirstChild("HumanoidRootPart") then
+            local horseRoot = MyHorse.Character.HumanoidRootPart
+            local dist = (root.Position - horseRoot.Position).Magnitude
+            if dist > 6 then
+                root.CFrame = horseRoot.CFrame * CFrame.new(0, 1, 0)
+            end
+        end
+
+        -- 3. Auto Clicker
+        if AutoClickEnabled and IsClicking then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end
+    end
+end)
