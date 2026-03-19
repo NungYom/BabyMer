@@ -1,0 +1,122 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local Window = Rayfield:CreateWindow({
+    Name = "BabeMer Rider Support V3",
+    LoadingTitle = "Combo & Sync System",
+    LoadingSubtitle = "Auto Click + Skill 1",
+    ConfigurationSaving = { Enabled = false }
+})
+
+-- Variables
+local Player = game.Players.LocalPlayer
+local SafePos = Vector3.new(312.014984, 224.533417, -412.852478)
+
+local MyHorse = nil
+local AntiFallEnabled = false
+local StickToHorse = false
+local AutoClickEnabled = false
+local IsClicking = false
+
+-- Function: ดึง RootPart (รองรับการเกิดใหม่)
+local function GetCurrentRoot()
+    return (Player.Character and Player.Character:FindFirstChild("HumanoidRootPart"))
+end
+
+-- Function: หาผู้เล่นที่ใกล้ที่สุด (ม้า)
+local function GetNearestPlayer()
+    local root = GetCurrentRoot()
+    if not root then return nil end
+    local closest, dist = nil, math.huge
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (root.Position - v.Character.HumanoidRootPart.Position).Magnitude
+            if d < dist then dist = d; closest = v end
+        end
+    end
+    return closest
+end
+
+-- UI Tabs
+local MainTab = Window:CreateTab("Rider Ops", 4483362458)
+
+MainTab:CreateToggle({
+    Name = "Anti-Fall (Y < 50)",
+    CurrentValue = false,
+    Callback = function(v) AntiFallEnabled = v end,
+})
+
+MainTab:CreateToggle({
+    Name = "Stick to Horse (Auto TP)",
+    CurrentValue = false,
+    Callback = function(v) 
+        StickToHorse = v 
+        if v then MyHorse = GetNearestPlayer() end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Enable Combat Mode (Q to Combo)",
+    CurrentValue = false,
+    Callback = function(v) 
+        AutoClickEnabled = v 
+        if not v then IsClicking = false end
+    end,
+})
+
+-- Keybind: Q สำหรับ Toggle Combo
+game:GetService("UserInputService").InputBegan:Connect(function(input, proc)
+    if proc or not AutoClickEnabled then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        IsClicking = not IsClicking
+        local msg = IsClicking and "เริ่มคอมโบ (Click + 1)" or "หยุดคอมโบ"
+        Rayfield:Notify({Title = "Combat Status", Content = msg, Duration = 2})
+    end
+end)
+
+-- Main Loop
+task.spawn(function()
+    while task.wait(0.1) do
+        local root = GetCurrentRoot()
+        if not root then continue end
+
+        -- 1. Anti-Fall
+        if AntiFallEnabled and root.Position.Y < 50 then
+            root.CFrame = CFrame.new(SafePos)
+            if root:IsA("BasePart") then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+        end
+
+        -- 2. Stick to Horse
+        if StickToHorse and MyHorse and MyHorse.Character and MyHorse.Character:FindFirstChild("HumanoidRootPart") then
+            local hRoot = MyHorse.Character.HumanoidRootPart
+            if (root.Position - hRoot.Position).Magnitude > 6 then
+                root.CFrame = hRoot.CFrame * CFrame.new(0, 1, 0)
+            end
+        end
+    end
+end)
+
+-- Combat Loop (แยก Loop เพื่อความแม่นยำของจังหวะ)
+task.spawn(function()
+    while true do
+        if AutoClickEnabled and IsClicking then
+            -- จังหวะที่ 1: คลิกซ้าย
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+            
+            task.wait(0.3) -- รอ 0.3 วิถัดไป
+            
+            if not IsClicking then continue end -- เช็คอีกรอบเผื่อกดปิดระหว่างรอ
+            
+            -- จังหวะที่ 2: กดปุ่ม 1 (Skill)
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+            
+            task.wait(0.3) -- รอ 0.3 วิถัดไปเพื่อวนกลับไปคลิกใหม่
+        else
+            task.wait(0.5) -- พักเครื่องถ้าไม่ได้เปิดโหมดตี
+        end
+    end
+end)
