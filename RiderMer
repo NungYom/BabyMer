@@ -1,0 +1,111 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local Window = Rayfield:CreateWindow({
+    Name = "BabeMer Rider Support",
+    LoadingTitle = "Rider Link v1",
+    LoadingSubtitle = "Sync with your Horse",
+    ConfigurationSaving = { Enabled = false }
+})
+
+-- Variables
+local Player = game.Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+local MyHorse = nil
+local AntiFallEnabled = false
+local StickToHorse = false
+local AutoClickEnabled = false
+local IsClicking = false
+
+local SafePos = Vector3.new(392.223999, 80.8540459, -609.330811)
+
+-- Function: หาผู้เล่นที่ใกล้ที่สุด (เพื่อระบุว่าเป็นม้า)
+local function GetNearestPlayer()
+    local closest = nil
+    local dist = math.huge
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local d = (RootPart.Position - v.Character.HumanoidRootPart.Position).Magnitude
+            if d < dist then
+                dist = d
+                closest = v
+            end
+        end
+    end
+    return closest
+end
+
+-- UI Tabs
+local MainTab = Window:CreateTab("Rider Features", 4483362458)
+
+MainTab:CreateToggle({
+    Name = "Anti-Fall (Y < 50)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AntiFallEnabled = Value
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Stick to Horse (Auto TP)",
+    CurrentValue = false,
+    Callback = function(Value)
+        StickToHorse = Value
+        if Value then
+            MyHorse = GetNearestPlayer()
+            if MyHorse then
+                Rayfield:Notify({Title = "Horse Locked", Content = "จำผู้เล่น: " .. MyHorse.Name .. " เป็นม้า", Duration = 3})
+            end
+        else
+            MyHorse = nil
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Enable Combat Mode (Q to Click)",
+    CurrentValue = false,
+    Callback = function(Value)
+        AutoClickEnabled = Value
+        if not Value then IsClicking = false end
+    end,
+})
+
+-- Keybind: Q สำหรับเริ่ม/หยุดการตี
+game:GetService("UserInputService").InputBegan:Connect(function(input, proc)
+    if proc or not AutoClickEnabled then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        IsClicking = not IsClicking
+        local status = IsClicking and "เริ่มโจมตี" or "หยุดโจมตี"
+        Rayfield:Notify({Title = "Combat Status", Content = status, Duration = 1.5})
+    end
+end)
+
+-- Main Loop
+task.spawn(function()
+    while task.wait(0.1) do
+        -- 1. Anti-Fall
+        if AntiFallEnabled and RootPart.Position.Y < 50 then
+            RootPart.CFrame = CFrame.new(SafePos)
+        end
+
+        -- 2. Stick to Horse Logic
+        if StickToHorse and MyHorse and MyHorse.Character and MyHorse.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = (RootPart.Position - MyHorse.Character.HumanoidRootPart.Position).Magnitude
+            if dist > 6 then
+                -- วาร์ปไปที่ตำแหน่งม้า (เยื้องขึ้นบนนิดหน่อยกันจม)
+                RootPart.CFrame = MyHorse.Character.HumanoidRootPart.CFrame * CFrame.new(0, 1, 0)
+            end
+        end
+
+        -- 3. Auto Clicker
+        if AutoClickEnabled and IsClicking then
+            -- จำลองการคลิกเมาส์ซ้ายที่กลางหน้าจอ
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end
+    end
+end)
