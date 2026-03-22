@@ -1,0 +1,92 @@
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+local active = false
+local target = nil
+local connections = {}
+
+-- ฟังก์ชันหาเป้าหมายที่ใกล้ที่สุด
+local function getClosestPlayer()
+    local closest = nil
+    local shortestDistance = math.huge
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
+            if p.Character.Humanoid.Health > 0 then
+                local distance = (rootPart.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    closest = p.Character
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- ฟังก์ชันยกเลิกทุกอย่าง
+local function stopAll()
+    active = false
+    target = nil
+    if connections.loop then connections.loop:Disconnect() end
+    if connections.noclip then connections.noclip:Disconnect() end
+    connections = {}
+    -- คืนค่า CanCollide
+    if character then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+    end
+end
+
+-- ปุ่ม T เพื่อเริ่ม/หยุด
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.T then
+        active = not active
+        
+        if active then
+            target = getClosestPlayer()
+            if not target then 
+                active = false 
+                return 
+            end
+            
+            -- เริ่ม Noclip
+            connections.noclip = RunService.Stepped:Connect(function()
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end)
+            
+            local angle = 0
+            connections.loop = RunService.RenderStepped:Connect(function(dt)
+                if not target or not target:FindFirstChild("HumanoidRootPart") or target.Humanoid.Health <= 0 or not active then
+                    stopAll()
+                    return
+                end
+                
+                -- ปรับความเร็วการหมุนรอบเป้าหมาย (เพิ่มขึ้น 10 เท่าจากเดิม)
+                angle = angle + dt * 150 
+                
+                -- ระยะห่าง 6 studs
+                local radius = 6
+                local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+                local goalPos = target.HumanoidRootPart.Position + offset
+                
+                -- ปรับความเร็วการหมุนรอบตัวเอง (Spin) เพิ่มขึ้น 10 เท่า
+                -- ใช้ math.rad(angle * 1000) เพื่อความเร็วระดับพายุ
+                local spinCFrame = CFrame.Angles(0, math.rad(angle * 1000), 0)
+                
+                -- อัปเดตตำแหน่งและทิศทาง
+                rootPart.CFrame = CFrame.new(goalPos, target.HumanoidRootPart.Position) * spinCFrame
+            end)
+        else
+            stopAll()
+        end
+    end
+end)
