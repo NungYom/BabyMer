@@ -1,0 +1,67 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local running = false
+
+-- ฟังก์ชันหา GrassCoin ทั้งหมด
+local function getAllCoins()
+    local coins = {}
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v.Name == "GrassCoin" then
+            table.insert(coins, v)
+        end
+    end
+    return coins
+end
+
+-- ฟังก์ชัน TP ไปหา Coin
+local function teleportToCoin(coin)
+    local targetPart = coin:FindFirstChild("HumanoidRootPart") 
+        or coin:FindFirstChildWhichIsA("BasePart")
+
+    if targetPart then
+        hrp.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+    end
+end
+
+-- Loop หลัก
+local function farmCoins()
+    while running do
+        local coins = getAllCoins()
+
+        for _, coin in ipairs(coins) do
+            if not running then break end
+
+            teleportToCoin(coin)
+            task.wait(0.2) -- ปรับความเร็วได้
+        end
+
+        task.wait(0.5)
+    end
+end
+
+-- กด Q เพื่อ Toggle
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    if input.KeyCode == Enum.KeyCode.Q then
+        running = not running
+
+        if running then
+            task.spawn(farmCoins)
+            print("Start farming GrassCoin")
+        else
+            print("Stop farming")
+        end
+    end
+end)
+
+-- กันตัวละครรีเซ็ตแล้วพัง
+player.CharacterAdded:Connect(function(char)
+    character = char
+    hrp = character:WaitForChild("HumanoidRootPart")
+end)
