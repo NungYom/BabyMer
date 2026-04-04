@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Auto Collector",
+   Name = "Plot Auto Collector (Multi-Press)",
    LoadingTitle = "Starting Script...",
    LoadingSubtitle = "Gemini AI Custom",
    ConfigurationSaving = { Enabled = false }
@@ -10,10 +10,9 @@ local Window = Rayfield:CreateWindow({
 local _G = { AutoCollect = false }
 local vim = game:GetService("VirtualInputManager")
 
--- ฟังชั่นตรวจสอบ Plot ของผู้เล่นแบบ Real-time
+-- ฟังชั่นตรวจสอบ Plot ของผู้เล่น
 local function GetPlayerPlot()
     local playerName = game.Players.LocalPlayer.Name
-    -- ตรวจสอบใน workspace.Plots ทั้งหมด (1-6 ตามโครงสร้างเกม)
     for _, plot in pairs(workspace.Plots:GetChildren()) do
         local ownerObj = plot:FindFirstChild("Owner")
         if ownerObj and tostring(ownerObj.Value) == playerName then
@@ -26,7 +25,7 @@ end
 local Tab = Window:CreateTab("Auto Farm", 4483362458)
 
 Tab:CreateToggle({
-   Name = "Start Auto Collect",
+   Name = "Start Auto Collect (10x E-Press)",
    CurrentValue = false,
    Flag = "AutoFarm", 
    Callback = function(Value)
@@ -45,23 +44,28 @@ Tab:CreateToggle({
                           
                           local mainPart = item:FindFirstChild("MainPart")
                           if mainPart and mainPart:IsA("BasePart") then
-                              -- 1. TP ไปยังจุดเก็บ
+                              -- 1. TP ไปยัง MainPart
                               game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
                               
-                              -- 2. รอ 0.3 วินาที (ตามที่คุณต้องการ)
+                              -- 2. รอ 0.3 วินาที ให้ตัวละครนิ่ง
                               task.wait(0.3)
                               
-                              -- 3. จำลองการกดปุ่ม E
-                              vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                              task.wait(0.05)
-                              vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                              -- 3. ลูปกดปุ่ม E ทั้งหมด 10 รอบ
+                              for i = 1, 10 do
+                                  if not _G.AutoCollect then break end
+                                  
+                                  vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                  task.wait(0.05) -- กดลง
+                                  vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                                  
+                                  task.wait(0.1) -- รอ 0.1 วิ ตามโจทย์ก่อนกดรอบถัดไป
+                              end
                               
-                              -- 4. รอ 0.2 วินาที ก่อนจะไปอันถัดไป
+                              -- 4. รอ 0.2 วินาที ก่อนจะไปที่สิ่งปลูกสร้างถัดไป
                               task.wait(0.2)
                           end
                       end
                   else
-                      -- ถ้าหา Plot ไม่เจอ ให้รอแป๊บนึงแล้วเช็คใหม่
                       task.wait(1)
                   end
                   task.wait(0.1)
@@ -72,7 +76,7 @@ Tab:CreateToggle({
 })
 
 Rayfield:Notify({
-    Title = "Script Ready",
-    Content = "สคริปต์พร้อมทำงาน! ระบบจะหา Plot ของคุณอัตโนมัติ",
+    Title = "Script Loaded",
+    Content = "ตั้งค่ากด E 10 รอบเรียบร้อยแล้ว!",
     Duration = 5
 })
