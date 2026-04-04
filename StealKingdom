@@ -1,44 +1,34 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- สร้างหน้าต่าง GUI
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Collect Items - Plot System",
-   LoadingTitle = "Loading Script...",
-   LoadingSubtitle = "by Gemini AI",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "PlotAutoFarm",
-      FileName = "Config"
-   }
+   Name = "Plot Auto Collector",
+   LoadingTitle = "Starting Script...",
+   LoadingSubtitle = "Gemini AI Custom",
+   ConfigurationSaving = { Enabled = false }
 })
 
--- ตัวแปรสถานะ
-local _G = {
-    AutoCollect = false
-}
+local _G = { AutoCollect = false }
+local vim = game:GetService("VirtualInputManager")
 
--- ฟังชั่นหา Plot ของผู้เล่น
+-- ฟังชั่นตรวจสอบ Plot ของผู้เล่นแบบ Real-time
 local function GetPlayerPlot()
     local playerName = game.Players.LocalPlayer.Name
+    -- ตรวจสอบใน workspace.Plots ทั้งหมด (1-6 ตามโครงสร้างเกม)
     for _, plot in pairs(workspace.Plots:GetChildren()) do
         local ownerObj = plot:FindFirstChild("Owner")
-        if ownerObj and ownerObj.Value == playerName then
+        if ownerObj and tostring(ownerObj.Value) == playerName then
             return plot
         end
     end
     return nil
 end
 
--- สร้าง Tab หลัก
-local Tab = Window:CreateTab("Main Farm", 4483362458) -- ไอคอนรูปบ้าน
+local Tab = Window:CreateTab("Auto Farm", 4483362458)
 
-local Section = Tab:CreateSection("Collector Settings")
-
--- Toggle เปิด/ปิด ออโต้
-local Toggle = Tab:CreateToggle({
-   Name = "Auto Collect (TP to MainPart)",
+Tab:CreateToggle({
+   Name = "Start Auto Collect",
    CurrentValue = false,
-   Flag = "AutoCollectToggle", 
+   Flag = "AutoFarm", 
    Callback = function(Value)
       _G.AutoCollect = Value
       
@@ -47,53 +37,42 @@ local Toggle = Tab:CreateToggle({
               while _G.AutoCollect do
                   local myPlot = GetPlayerPlot()
                   
-                  if myPlot then
-                      local buildingFolder = myPlot:FindFirstChild("Building")
-                      if buildingFolder then
-                          -- วนลูปสิ่งปลูกสร้างทั้งหมดใน Building
-                          for _, building in pairs(buildingFolder:GetChildren()) do
-                              if not _G.AutoCollect then break end -- เช็คอีกรอบเผื่อกดปิดกลางคัน
+                  if myPlot and myPlot:FindFirstChild("Building") then
+                      local buildings = myPlot.Building:GetChildren()
+                      
+                      for _, item in pairs(buildings) do
+                          if not _G.AutoCollect then break end
+                          
+                          local mainPart = item:FindFirstChild("MainPart")
+                          if mainPart and mainPart:IsA("BasePart") then
+                              -- 1. TP ไปยังจุดเก็บ
+                              game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
                               
-                              local mainPart = building:FindFirstChild("MainPart")
-                              if mainPart and mainPart:IsA("BasePart") then
-                                  -- 1. TP ไปยัง MainPart
-                                  game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
-                                  
-                                  task.wait(0.1) -- รอ 0.1 วินาที
-                                  
-                                  -- 2. จำลองการกดปุ่ม E (VirtualUser)
-                                  local vim = game:GetService("VirtualInputManager")
-                                  vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                                  
-                                  task.wait(0.1) -- รอ 0.1 วินาที ก่อนไปที่ถัดไป
-                              end
+                              -- 2. รอ 0.3 วินาที (ตามที่คุณต้องการ)
+                              task.wait(0.3)
+                              
+                              -- 3. จำลองการกดปุ่ม E
+                              vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                              task.wait(0.05)
+                              vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                              
+                              -- 4. รอ 0.2 วินาที ก่อนจะไปอันถัดไป
+                              task.wait(0.2)
                           end
-                      else
-                          Rayfield:Notify({Title = "Error", Content = "ไม่พบโฟลเดอร์ Building ใน Plot", Duration = 5})
-                          _G.AutoCollect = false
-                          break
                       end
                   else
-                      Rayfield:Notify({Title = "Error", Content = "ไม่พบ Plot ที่เป็นของคุณ!", Duration = 5})
-                      _G.AutoCollect = false
-                      break
+                      -- ถ้าหา Plot ไม่เจอ ให้รอแป๊บนึงแล้วเช็คใหม่
+                      task.wait(1)
                   end
-                  task.wait(1) -- เว้นระยะลูปรวมเล็กน้อย
+                  task.wait(0.1)
               end
           end)
       end
    end,
 })
 
--- ปุ่มตรวจสอบ Plot (เอาไว้เช็คเพื่อความมั่นใจ)
-Tab:CreateButton({
-   Name = "Check My Plot",
-   Callback = function()
-       local plot = GetPlayerPlot()
-       if plot then
-           Rayfield:Notify({Title = "Success", Content = "พบ Plot ของคุณแล้ว: Plot " .. plot.Name, Duration = 5})
-       else
-           Rayfield:Notify({Title = "Error", Content = "หา Plot ของคุณไม่เจอ (ชื่อไม่ตรง)", Duration = 5})
-       end
-   end,
+Rayfield:Notify({
+    Title = "Script Ready",
+    Content = "สคริปต์พร้อมทำงาน! ระบบจะหา Plot ของคุณอัตโนมัติ",
+    Duration = 5
 })
