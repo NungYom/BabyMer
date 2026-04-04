@@ -1,16 +1,19 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Auto Collector (Multi-Press)",
-   LoadingTitle = "Starting Script...",
-   LoadingSubtitle = "Gemini AI Custom",
+   Name = "Plot Farm: Split System",
+   LoadingTitle = "Loading System...",
+   LoadingSubtitle = "By Gemini AI",
    ConfigurationSaving = { Enabled = false }
 })
 
-local _G = { AutoCollect = false }
+local _G = {
+    AutoTP = false,
+    AutoE = false
+}
 local vim = game:GetService("VirtualInputManager")
 
--- ฟังชั่นตรวจสอบ Plot ของผู้เล่น
+-- ฟังก์ชันหา Plot ของผู้เล่น
 local function GetPlayerPlot()
     local playerName = game.Players.LocalPlayer.Name
     for _, plot in pairs(workspace.Plots:GetChildren()) do
@@ -22,51 +25,34 @@ local function GetPlayerPlot()
     return nil
 end
 
-local Tab = Window:CreateTab("Auto Farm", 4483362458)
+local Tab = Window:CreateTab("Control Panel", 4483362458)
 
+-- --- ส่วนที่ 1: ระบบ Teleport ---
 Tab:CreateToggle({
-   Name = "Start Auto Collect (10x E-Press)",
+   Name = "1. Auto TP to Buildings",
    CurrentValue = false,
-   Flag = "AutoFarm", 
+   Flag = "TPToggle", 
    Callback = function(Value)
-      _G.AutoCollect = Value
-      
+      _G.AutoTP = Value
       if Value then
           task.spawn(function()
-              while _G.AutoCollect do
+              while _G.AutoTP do
                   local myPlot = GetPlayerPlot()
-                  
                   if myPlot and myPlot:FindFirstChild("Building") then
                       local buildings = myPlot.Building:GetChildren()
-                      
                       for _, item in pairs(buildings) do
-                          if not _G.AutoCollect then break end
+                          if not _G.AutoTP then break end
                           
                           local mainPart = item:FindFirstChild("MainPart")
                           if mainPart and mainPart:IsA("BasePart") then
-                              -- 1. TP ไปยัง MainPart
+                              -- วาร์ปไปที่จุด
                               game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
-                              
-                              -- 2. รอ 0.3 วินาที ให้ตัวละครนิ่ง
+                              -- รอ 0.3 วินาทีก่อนไปอันถัดไปตามโจทย์
                               task.wait(0.3)
-                              
-                              -- 3. ลูปกดปุ่ม E ทั้งหมด 10 รอบ
-                              for i = 1, 10 do
-                                  if not _G.AutoCollect then break end
-                                  
-                                  vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                                  task.wait(0.05) -- กดลง
-                                  vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                                  
-                                  task.wait(0.1) -- รอ 0.1 วิ ตามโจทย์ก่อนกดรอบถัดไป
-                              end
-                              
-                              -- 4. รอ 0.2 วินาที ก่อนจะไปที่สิ่งปลูกสร้างถัดไป
-                              task.wait(0.2)
                           end
                       end
                   else
-                      task.wait(1)
+                      task.wait(1) -- ถ้าหา Plot ไม่เจอให้รอแป๊บนึง
                   end
                   task.wait(0.1)
               end
@@ -75,8 +61,31 @@ Tab:CreateToggle({
    end,
 })
 
+-- --- ส่วนที่ 2: ระบบรัวปุ่ม E ---
+Tab:CreateToggle({
+   Name = "2. Auto Spam E",
+   CurrentValue = false,
+   Flag = "EToggle", 
+   Callback = function(Value)
+      _G.AutoE = Value
+      if Value then
+          task.spawn(function()
+              while _G.AutoE do
+                  -- กดปุ่ม E
+                  vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                  task.wait(0.05) -- หน่วงเวลาตอนกดลงเล็กน้อยให้เกมรับรู้
+                  vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                  
+                  -- เว้นระยะรัว 0.2 วินาทีตามโจทย์
+                  task.wait(0.2)
+              end
+          end)
+      end
+   end,
+})
+
 Rayfield:Notify({
-    Title = "Script Loaded",
-    Content = "ตั้งค่ากด E 10 รอบเรียบร้อยแล้ว!",
+    Title = "System Ready",
+    Content = "แยกปุ่ม TP และปุ่มรัว E เรียบร้อยแล้ว!",
     Duration = 5
 })
