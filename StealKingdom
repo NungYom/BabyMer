@@ -1,19 +1,23 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Farm: Split System",
-   LoadingTitle = "Loading System...",
-   LoadingSubtitle = "By Gemini AI",
+   Name = "Plot Farm + Unit Collector",
+   LoadingTitle = "System Booting...",
+   LoadingSubtitle = "Gemini AI Advanced",
    ConfigurationSaving = { Enabled = false }
 })
 
 local _G = {
     AutoTP = false,
-    AutoE = false
+    AutoE = false,
+    UnitTarget = {}, -- เก็บรายชื่อ Unit ที่เราสนใจ
+    IsCollectingUnit = false -- สถานะตัวเช็คว่ากำลังไปเก็บ Unit พิเศษอยู่ไหม
 }
-local vim = game:GetService("VirtualInputManager")
 
--- ฟังก์ชันหา Plot ของผู้เล่น
+local vim = game:GetService("VirtualInputManager")
+local targetUnits = {"Blacksmith", "Knight", "Fisherman", "BeeKeeper", "Ghoul King", "Cappuccino Assassino", "Talale Talala"}
+
+-- ฟังก์ชันหา Plot
 local function GetPlayerPlot()
     local playerName = game.Players.LocalPlayer.Name
     for _, plot in pairs(workspace.Plots:GetChildren()) do
@@ -27,9 +31,71 @@ end
 
 local Tab = Window:CreateTab("Control Panel", 4483362458)
 
--- --- ส่วนที่ 1: ระบบ Teleport ---
+-- --- ส่วนที่ 3: ระบบตรวจจับ Unit พิเศษ (NEW!) ---
+local SectionUnit = Tab:CreateSection("Unit Collector (Priority)")
+
+Tab:CreateDropdown({
+   Name = "Select Units to Auto-Collect",
+   Options = targetUnits,
+   CurrentOption = {},
+   MultipleOptions = true,
+   Flag = "SelectedUnits",
+   Callback = function(Options)
+      _G.UnitTarget = Options
+   end,
+})
+
+-- ลูปหลักสำหรับตรวจสอบ Unit พิเศษ
+task.spawn(function()
+    while true do
+        task.wait(0.5) -- เช็คทุกๆ 0.5 วินาทีเพื่อไม่ให้แลค
+        
+        -- ถ้าเราเลือก Unit ไว้ในลิสต์
+        for _, unitName in pairs(_G.UnitTarget) do
+            local foundUnit = workspace:FindFirstChild(unitName)
+            
+            if foundUnit and not _G.IsCollectingUnit then
+                local hrp = foundUnit:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    _G.IsCollectingUnit = true -- สั่ง Pause ระบบอื่นๆ
+                    
+                    local playerChar = game.Players.LocalPlayer.Character
+                    local oldPos = playerChar:GetPrimaryPartCFrame() -- จำจุดเดิมไว้
+                    
+                    -- 1. TP ไปหา Unit
+                    playerChar:SetPrimaryPartCFrame(hrp.CFrame * CFrame.new(0, 0, -3)) -- วาร์ปไปข้างหน้า Unit 3 เมตร
+                    
+                    -- 2. รอ 1 วินาที
+                    task.wait(1)
+                    
+                    -- 3. กด E 3 ครั้ง ห่างกัน 0.1 วิ
+                    for i = 1, 3 do
+                        vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                        task.wait(0.05)
+                        vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        task.wait(0.1)
+                    end
+                    
+                    -- 4. รอ 0.5 วินาที
+                    task.wait(0.5)
+                    
+                    -- 5. วาร์ปกลับจุดเดิม และปลดล็อกระบบ
+                    playerChar:SetPrimaryPartCFrame(oldPos)
+                    _G.IsCollectingUnit = false
+                    
+                    -- แจ้งเตือน
+                    Rayfield:Notify({Title = "Unit Collected!", Content = "รับตัว " .. unitName .. " เรียบร้อยแล้ว", Duration = 3})
+                end
+            end
+        end
+    end
+end)
+
+-- --- ส่วนที่ 1 & 2: ระบบเดิมที่เพิ่มตัวเช็ค Pause ---
+local SectionFarm = Tab:CreateSection("Plot Farming")
+
 Tab:CreateToggle({
-   Name = "1. Auto TP to Buildings",
+   Name = "Auto TP to Buildings",
    CurrentValue = false,
    Flag = "TPToggle", 
    Callback = function(Value)
@@ -37,22 +103,18 @@ Tab:CreateToggle({
       if Value then
           task.spawn(function()
               while _G.AutoTP do
-                  local myPlot = GetPlayerPlot()
-                  if myPlot and myPlot:FindFirstChild("Building") then
-                      local buildings = myPlot.Building:GetChildren()
-                      for _, item in pairs(buildings) do
-                          if not _G.AutoTP then break end
-                          
-                          local mainPart = item:FindFirstChild("MainPart")
-                          if mainPart and mainPart:IsA("BasePart") then
-                              -- วาร์ปไปที่จุด
-                              game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
-                              -- รอ 0.3 วินาทีก่อนไปอันถัดไปตามโจทย์
-                              task.wait(0.3)
+                  if not _G.IsCollectingUnit then -- ตรวจเช็คว่าไม่ได้กำลังไปเก็บ Unit อยู่
+                      local myPlot = GetPlayerPlot()
+                      if myPlot and myPlot:FindFirstChild("Building") then
+                          for _, item in pairs(myPlot.Building:GetChildren()) do
+                              if not _G.AutoTP or _G.IsCollectingUnit then break end
+                              local mainPart = item:FindFirstChild("MainPart")
+                              if mainPart then
+                                  game.Players.LocalPlayer.Character:SetPrimaryPartCFrame(mainPart.CFrame)
+                                  task.wait(0.3)
+                              end
                           end
                       end
-                  else
-                      task.wait(1) -- ถ้าหา Plot ไม่เจอให้รอแป๊บนึง
                   end
                   task.wait(0.1)
               end
@@ -61,9 +123,8 @@ Tab:CreateToggle({
    end,
 })
 
--- --- ส่วนที่ 2: ระบบรัวปุ่ม E ---
 Tab:CreateToggle({
-   Name = "2. Auto Spam E",
+   Name = "Auto Spam E",
    CurrentValue = false,
    Flag = "EToggle", 
    Callback = function(Value)
@@ -71,21 +132,14 @@ Tab:CreateToggle({
       if Value then
           task.spawn(function()
               while _G.AutoE do
-                  -- กดปุ่ม E
-                  vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                  task.wait(0.05) -- หน่วงเวลาตอนกดลงเล็กน้อยให้เกมรับรู้
-                  vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                  
-                  -- เว้นระยะรัว 0.2 วินาทีตามโจทย์
+                  if not _G.IsCollectingUnit then -- ตรวจเช็คว่าไม่ได้กำลังไปเก็บ Unit อยู่
+                      vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                      task.wait(0.05)
+                      vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                  end
                   task.wait(0.2)
               end
           end)
       end
    end,
-})
-
-Rayfield:Notify({
-    Title = "System Ready",
-    Content = "แยกปุ่ม TP และปุ่มรัว E เรียบร้อยแล้ว!",
-    Duration = 5
 })
