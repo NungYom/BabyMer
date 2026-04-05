@@ -1,17 +1,18 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Farm + Unit Collector",
+   Name = "Plot Farm + Unit & Bee Collector",
    LoadingTitle = "System Booting...",
-   LoadingSubtitle = "Gemini AI Advanced",
+   LoadingSubtitle = "Gemini AI Advanced V2",
    ConfigurationSaving = { Enabled = false }
 })
 
 local _G = {
     AutoTP = false,
     AutoE = false,
-    UnitTarget = {}, -- เก็บรายชื่อ Unit ที่เราสนใจ
-    IsCollectingUnit = false -- สถานะตัวเช็คว่ากำลังไปเก็บ Unit พิเศษอยู่ไหม
+    UnitTarget = {}, 
+    CollectBee = false, -- ปุ่มเปิดปิดว่าจะเก็บผึ้งไหม
+    IsCollectingUnit = false 
 }
 
 local vim = game:GetService("VirtualInputManager")
@@ -31,11 +32,20 @@ end
 
 local Tab = Window:CreateTab("Control Panel", 4483362458)
 
--- --- ส่วนที่ 3: ระบบตรวจจับ Unit พิเศษ (NEW!) ---
-local SectionUnit = Tab:CreateSection("Unit Collector (Priority)")
+-- --- ส่วนที่ 3: ระบบตรวจจับ Unit & Bee (NEW!) ---
+local SectionUnit = Tab:CreateSection("Special Unit & Bee")
+
+Tab:CreateToggle({
+   Name = "Auto Collect Bee (Follow + Hold E)",
+   CurrentValue = false,
+   Flag = "BeeToggle", 
+   Callback = function(Value)
+      _G.CollectBee = Value
+   end,
+})
 
 Tab:CreateDropdown({
-   Name = "Select Units to Auto-Collect",
+   Name = "Select Other Units",
    Options = targetUnits,
    CurrentOption = {},
    MultipleOptions = true,
@@ -45,65 +55,91 @@ Tab:CreateDropdown({
    end,
 })
 
--- ลูปหลักสำหรับตรวจสอบ Unit พิเศษ
+-- ลูปหลักสำหรับตรวจสอบ Unit พิเศษ และ ผึ้ง
 task.spawn(function()
     while true do
-        task.wait(0.5) -- เช็คทุกๆ 0.5 วินาทีเพื่อไม่ให้แลค
-        
-        -- ถ้าเราเลือก Unit ไว้ในลิสต์
-        for _, unitName in pairs(_G.UnitTarget) do
-            local foundUnit = workspace:FindFirstChild(unitName)
-            
-            if foundUnit and not _G.IsCollectingUnit then
-                local hrp = foundUnit:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    _G.IsCollectingUnit = true -- สั่ง Pause ระบบอื่นๆ
-                    
-                    local playerChar = game.Players.LocalPlayer.Character
-                    local oldPos = playerChar:GetPrimaryPartCFrame() -- จำจุดเดิมไว้
-                    
-                    -- 1. TP ไปหา Unit
-                    playerChar:SetPrimaryPartCFrame(hrp.CFrame * CFrame.new(0, 0, -3)) -- วาร์ปไปข้างหน้า Unit 3 เมตร
-                    
-                    -- 2. รอ 1 วินาที
-                    task.wait(1)
-                    
-                    -- 3. กด E 3 ครั้ง ห่างกัน 0.1 วิ
-                    for i = 1, 3 do
-                        vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait(0.05)
-                        vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                        task.wait(0.1)
+        task.wait(0.1) -- เช็คถี่ขึ้นเพื่อให้ทันผึ้ง
+        if _G.IsCollectingUnit then continue end
+
+        local playerChar = game.Players.LocalPlayer.Character
+        if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then continue end
+
+        -- 1. ตรวจสอบ "ผึ้ง" (Bee) ก่อนเป็นอันดับแรก
+        local foundBee = workspace:FindFirstChild("Bee")
+        if _G.CollectBee and foundBee then
+            local beeHRP = foundBee:FindFirstChild("HumanoidRootPart")
+            if beeHRP then
+                _G.IsCollectingUnit = true
+                local oldPos = playerChar:GetPrimaryPartCFrame()
+                
+                -- ลูปวาร์ปตามผึ้งอย่างต่อเนื่องเป็นเวลา 1 วินาทีก่อนเริ่มเก็บ
+                local startTime = tick()
+                while tick() - startTime < 1 do
+                    playerChar:SetPrimaryPartCFrame(beeHRP.CFrame * CFrame.new(0, 0, -2))
+                    task.wait()
+                end
+
+                -- เริ่มกด E ค้าง 1.5 วินาที พร้อมวาร์ปตามไปด้วย (Sticky TP)
+                vim:SendKeyEvent(true, Enum.KeyCode.E, false, game) -- กด E ลง
+                
+                local holdStartTime = tick()
+                while tick() - holdStartTime < 1.5 do
+                    if beeHRP.Parent then -- ถ้าผึ้งยังอยู่
+                        playerChar:SetPrimaryPartCFrame(beeHRP.CFrame * CFrame.new(0, 0, -2))
                     end
-                    
-                    -- 4. รอ 0.5 วินาที
-                    task.wait(0.5)
-                    
-                    -- 5. วาร์ปกลับจุดเดิม และปลดล็อกระบบ
-                    playerChar:SetPrimaryPartCFrame(oldPos)
-                    _G.IsCollectingUnit = false
-                    
-                    -- แจ้งเตือน
-                    Rayfield:Notify({Title = "Unit Collected!", Content = "รับตัว " .. unitName .. " เรียบร้อยแล้ว", Duration = 3})
+                    task.wait()
+                end
+                
+                vim:SendKeyEvent(false, Enum.KeyCode.E, false, game) -- ปล่อย E
+                
+                task.wait(0.5)
+                playerChar:SetPrimaryPartCFrame(oldPos)
+                _G.IsCollectingUnit = false
+                Rayfield:Notify({Title = "Bee Caught!", Content = "เก็บผึ้งเรียบร้อยแล้ว", Duration = 3})
+            end
+            
+        -- 2. ตรวจสอบ Unit อื่นๆ ใน List
+        else
+            for _, unitName in pairs(_G.UnitTarget) do
+                local foundUnit = workspace:FindFirstChild(unitName)
+                if foundUnit then
+                    local hrp = foundUnit:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        _G.IsCollectingUnit = true
+                        local oldPos = playerChar:GetPrimaryPartCFrame()
+                        
+                        playerChar:SetPrimaryPartCFrame(hrp.CFrame * CFrame.new(0, 0, -3))
+                        task.wait(1)
+                        
+                        for i = 1, 3 do
+                            vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.05)
+                            vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            task.wait(0.1)
+                        end
+                        
+                        task.wait(0.5)
+                        playerChar:SetPrimaryPartCFrame(oldPos)
+                        _G.IsCollectingUnit = false
+                        break
+                    end
                 end
             end
         end
     end
 end)
 
--- --- ส่วนที่ 1 & 2: ระบบเดิมที่เพิ่มตัวเช็ค Pause ---
+-- --- ส่วนของ Farm Plot (เหมือนเดิม) ---
 local SectionFarm = Tab:CreateSection("Plot Farming")
-
 Tab:CreateToggle({
    Name = "Auto TP to Buildings",
    CurrentValue = false,
-   Flag = "TPToggle", 
    Callback = function(Value)
       _G.AutoTP = Value
       if Value then
           task.spawn(function()
               while _G.AutoTP do
-                  if not _G.IsCollectingUnit then -- ตรวจเช็คว่าไม่ได้กำลังไปเก็บ Unit อยู่
+                  if not _G.IsCollectingUnit then
                       local myPlot = GetPlayerPlot()
                       if myPlot and myPlot:FindFirstChild("Building") then
                           for _, item in pairs(myPlot.Building:GetChildren()) do
@@ -126,13 +162,12 @@ Tab:CreateToggle({
 Tab:CreateToggle({
    Name = "Auto Spam E",
    CurrentValue = false,
-   Flag = "EToggle", 
    Callback = function(Value)
       _G.AutoE = Value
       if Value then
           task.spawn(function()
               while _G.AutoE do
-                  if not _G.IsCollectingUnit then -- ตรวจเช็คว่าไม่ได้กำลังไปเก็บ Unit อยู่
+                  if not _G.IsCollectingUnit then
                       vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                       task.wait(0.05)
                       vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
