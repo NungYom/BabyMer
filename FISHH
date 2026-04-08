@@ -1,0 +1,141 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Fisherman Ultra Hub",
+   LoadingTitle = "Loading Systems...",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = { Enabled = true, FolderName = "FishermanConfig" }
+})
+
+local MainTab = Window:CreateTab("Automation", 4483362458)
+local WorldTab = Window:CreateTab("World & Setup", 4483362458)
+
+local Remote = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("rajden28_packet@1.7.3"):WaitForChild("packet"):WaitForChild("RemoteEvent")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+-- [ Section: Automation ] --
+local AutoCollect = false
+local AutoSell = false
+local Rewards = {
+    "$\r\acoin500", "$\014\bcoin1500", "$\015\fdamagePotion", 
+    "$\016\bcoin3000", "$\017\015vipDamagePotion", "$\018\bcoin5000", 
+    "$\019\fcrit30Potion", "$\020\015earning50Potion", "$\021\004nuke"
+}
+
+MainTab:CreateToggle({
+   Name = "Auto Collect Rewards (10s)",
+   CurrentValue = false,
+   Flag = "CollectToggle",
+   Callback = function(Value)
+      AutoCollect = Value
+      if AutoCollect then
+          task.spawn(function()
+              while AutoCollect do
+                  for _, rewardStr in pairs(Rewards) do
+                      if not AutoCollect then break end
+                      Remote:FireServer(buffer.fromstring(rewardStr))
+                  end
+                  task.wait(10)
+              end
+          end)
+      end
+   end,
+})
+
+-- ปรับปรุงส่วน Auto Sell ตามลำดับใหม่ของคุณ --
+MainTab:CreateToggle({
+   Name = "Auto Sell & Equip (1 min)",
+   CurrentValue = false,
+   Flag = "SellToggle",
+   Callback = function(Value)
+      AutoSell = Value
+      if AutoSell then
+          task.spawn(function()
+              while AutoSell do
+                  -- 1. รัน EquipBest
+                  local equipArgs = {
+                      buffer.fromstring("\015\tEquipBest"),
+                      {}
+                  }
+                  Remote:FireServer(unpack(equipArgs))
+                  task.wait(0.1) -- เว้นช่วงเล็กน้อยเพื่อให้ระบบประมวลผล
+
+                  -- 2. ยิง Remote ขายของทั้งหมด
+                  Remote:FireServer(buffer.fromstring("\017\022\aSellAll"))
+                  
+                  -- 3. กดปุ่ม 2
+                  VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+                  task.wait(0.1)
+                  VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Two, false, game)
+                  
+                  -- 4. รอ 0.5 วินาที
+                  task.wait(0.5)
+                  
+                  -- 5. กดปุ่ม 1
+                  VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+                  task.wait(0.1)
+                  VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+                  
+                  -- 6. ยิง Remote เพิ่มเติม (<\000)
+                  Remote:FireServer(buffer.fromstring("<\000"))
+                  
+                  -- 7. รอ 1 นาที (60 วินาที) ก่อนเริ่มลูปใหม่
+                  task.wait(60)
+              end
+          end)
+      end
+   end,
+})
+
+-- [ Section: World & Platforms ] --
+local Platform1 = nil
+local Platform2 = nil
+
+WorldTab:CreateToggle({
+   Name = "สร้างที่ยืน 1 (แบบบาง)",
+   CurrentValue = false,
+   Flag = "P1",
+   Callback = function(Value)
+      if Value then
+          Platform1 = Instance.new("Part", game.Workspace)
+          Platform1.Anchored = true
+          Platform1.CFrame = CFrame.new(-88.9899902, -136.277283, -117.828575, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+          Platform1.Size = Vector3.new(103.74999237060547, 6.001, 738.3099975585938)
+          Platform1.Material = Enum.Material.Neon
+          Platform1.Color = Color3.fromRGB(0, 255, 255)
+      elseif Platform1 then
+          Platform1:Destroy()
+      end
+   end,
+})
+
+WorldTab:CreateToggle({
+   Name = "สร้างที่ยืน 2 (แบบหนาพิเศษ 30.0)",
+   CurrentValue = false,
+   Flag = "P2",
+   Callback = function(Value)
+      if Value then
+          Platform2 = Instance.new("Part", game.Workspace)
+          Platform2.Anchored = true
+          Platform2.CFrame = CFrame.new(-88.9899902, -136.277283, -117.828575, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+          Platform2.Size = Vector3.new(103.74999237060547, 30.001, 738.3099975585938)
+          Platform2.Material = Enum.Material.SmoothPlastic
+          Platform2.Transparency = 0.3
+          Platform2.Color = Color3.fromRGB(255, 85, 0)
+      elseif Platform2 then
+          Platform2:Destroy()
+      end
+   end,
+})
+
+WorldTab:CreateButton({
+   Name = "Teleport to Platform",
+   Callback = function()
+      local hrp = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+      if hrp then
+          hrp.CFrame = CFrame.new(-88.9899902, -115, -117.828575)
+      end
+   end,
+})
+
+Rayfield:LoadConfiguration()
