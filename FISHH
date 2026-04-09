@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Fisherman Ultra Hub",
-   LoadingTitle = "Loading Systems...",
+   Name = "Fisherman Ultra Hub (Updated)",
+   LoadingTitle = "Applying Update...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = { Enabled = true, FolderName = "FishermanConfig" }
 })
@@ -42,7 +42,6 @@ MainTab:CreateToggle({
    end,
 })
 
--- ปรับปรุงส่วน Auto Sell ตามลำดับใหม่ของคุณ --
 MainTab:CreateToggle({
    Name = "Auto Sell & Equip (1 min)",
    CurrentValue = false,
@@ -58,7 +57,7 @@ MainTab:CreateToggle({
                       {}
                   }
                   Remote:FireServer(unpack(equipArgs))
-                  task.wait(0.1) -- เว้นช่วงเล็กน้อยเพื่อให้ระบบประมวลผล
+                  task.wait(0.1)
 
                   -- 2. ยิง Remote ขายของทั้งหมด
                   Remote:FireServer(buffer.fromstring("\017\022\aSellAll"))
@@ -76,8 +75,11 @@ MainTab:CreateToggle({
                   task.wait(0.1)
                   VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
                   
-                  -- 6. ยิง Remote เพิ่มเติม (<\000)
-                  Remote:FireServer(buffer.fromstring("<\000"))
+                  -- 6. ยิง Remote ตัวใหม่ที่อัปเดต (=\000...)
+                  local updateArgs = {
+                      buffer.fromstring("=\000\002\181V8\195\"D\190\194\147\189\139B")
+                  }
+                  Remote:FireServer(unpack(updateArgs))
                   
                   -- 7. รอ 1 นาที (60 วินาที) ก่อนเริ่มลูปใหม่
                   task.wait(60)
