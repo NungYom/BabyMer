@@ -1,19 +1,19 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Farm | Bloater Anti-Explode",
-   LoadingTitle = "Safe Farming System...",
+   Name = "Ultimate Auto-Combat | NPC Hunter",
+   LoadingTitle = "Scanning Characters...",
    LoadingSubtitle = "by Gemini AI",
 })
 
-local MainTab = Window:CreateTab("Auto Farm", 4483362458)
+local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local DetectionEnabled = false
 local StartPosition = nil 
 
 MainTab:CreateToggle({
-   Name = "เริ่มระบบ Auto Farm (Safe Mode)",
+   Name = "เริ่มระบบ Auto Hunter (Smart Mode)",
    CurrentValue = false,
-   Flag = "AutoFarmToggle", 
+   Flag = "AutoHunterToggle", 
    Callback = function(Value)
       DetectionEnabled = Value
       
@@ -21,8 +21,7 @@ MainTab:CreateToggle({
          local char = game.Players.LocalPlayer.Character
          local root = char and char:FindFirstChild("HumanoidRootPart")
          if root then
-            -- บันทึกจุดฟาร์มปัจจุบันไว้เป็นจุดอ้างอิงตอนหิว
-            StartPosition = root.Position
+            StartPosition = root.Position -- บันทึกจุดฟาร์ม (0,0,20)
          end
       end
       
@@ -40,19 +39,16 @@ MainTab:CreateToggle({
                 local currentHunger = targetModel:GetAttribute("Hunger") or 100
                 local currentPos = rootPart.Position
                 
-                -- พิกัดเป้าหมาย
-                local targetX, targetY, targetZ
+                local targetPoint = nil -- จุดหมายปลายทางที่จะไป
                 
-                -- ตรวจสอบ Bloater ก่อนเป็นอันดับแรก (Priority 0 - Critical)
+                -- 1. [Priority 0] ตรวจจับ Bloater ระเบิด (ระยะ 30 studs, เลือด < 1)
                 local isBloaterDanger = false
                 for _, obj in pairs(characterFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
                         local bHum = obj:FindFirstChild("Humanoid")
                         local bRoot = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
-                        if bHum and bRoot then
-                            local dist = (rootPart.Position - bRoot.Position).Magnitude
-                            -- ถ้าเลือดต่ำกว่า 1 (กำลังจะระเบิด) และอยู่ในระยะ 30 studs
-                            if bHum.Health < 1 and dist <= 30 then
+                        if bHum and bRoot and bHum.Health < 1 then
+                            if (currentPos - bRoot.Position).Magnitude <= 30 then
                                 isBloaterDanger = true
                                 break
                             end
@@ -60,39 +56,57 @@ MainTab:CreateToggle({
                     end
                 end
 
-                -- การตัดสินใจเลือกจุด TP
-                if isBloaterDanger then
-                    -- พบการระเบิด: หนีลงโซนปลอดภัยสุดทันที (พิกัดโซนปลอดภัย Y = -20)
-                    targetX, targetY, targetZ = 20, -20, 0
-                elseif currentHunger < 5 then
-                    -- หิว: กลับไปที่จุดที่กดเปิดโปร (StartPosition) แต่ Y = -7 เพื่อความปลอดภัย
-                    targetX, targetY, targetZ = StartPosition.X, -7, StartPosition.Z
-                elseif currentHealth < 90 then
-                    -- เลือดน้อย: ไปพักโซนปลอดภัย
-                    targetX, targetY, targetZ = 20, -20, 0
-                else
-                    -- ปกติ: ไปโซนต่อสู้
-                    targetX, targetY, targetZ = 20, -7, 0
+                -- 2. [Priority 3] ค้นหาศัตรูที่ใกล้ที่สุด (ถ้าผ่านเงื่อนไขอื่นๆ)
+                local closestEnemy = nil
+                local minDistance = math.huge
+
+                for _, obj in pairs(characterFolder:GetChildren()) do
+                    -- คัดกรอง: ต้องไม่ใช่เรา, ไม่ใช่ผู้เล่นอื่น, และมี Humanoid
+                    local isPlayer = game.Players:GetPlayerFromCharacter(obj)
+                    local enemyHum = obj:FindFirstChild("Humanoid")
+                    local enemyRoot = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
+
+                    if not isPlayer and enemyHum and enemyRoot and enemyHum.Health > 0 then
+                        -- เงื่อนไข: ศัตรูต้องห่างจากจุด 0,0,0 ไม่เกิน 100 studs
+                        local distFromOrigin = (enemyRoot.Position - Vector3.new(0, 0, 0)).Magnitude
+                        if distFromOrigin <= 100 then
+                            local distFromMe = (currentPos - enemyRoot.Position).Magnitude
+                            if distFromMe < minDistance then
+                                minDistance = distFromMe
+                                closestEnemy = enemyRoot
+                            end
+                        end
+                    end
                 end
 
-                -- ระบบ TP แบบค่อยเป็นค่อยไป (0.1s ต่อ 1 stud)
-                local nextX = currentPos.X
-                local nextY = currentPos.Y
-                local nextZ = currentPos.Z
+                -- 3. ตรรกะการเลือกจุดหมาย (Decision Making)
+                if isBloaterDanger then
+                    -- หนีระเบิด
+                    targetPoint = Vector3.new(20, -20, 0)
+                elseif currentHunger < 5 then
+                    -- หิว: กลับจุดฟาร์มเดิมที่ Y = -8
+                    targetPoint = Vector3.new(StartPosition.X, -8, StartPosition.Z)
+                elseif currentHealth < 90 then
+                    -- เลือดน้อย: พักโซนปลอดภัย
+                    targetPoint = Vector3.new(20, -20, 0)
+                elseif closestEnemy then
+                    -- พบศัตรู: ไปอยู่ใต้ตัวมันที่ Y = -7
+                    targetPoint = Vector3.new(closestEnemy.Position.X, -7, closestEnemy.Position.Z)
+                else
+                    -- ไม่เจอศัตรู: ไปรอที่จุดปลอดภัย
+                    targetPoint = Vector3.new(20, -20, 0)
+                end
 
-                if math.abs(currentPos.X - targetX) > 0.1 then
-                    nextX = currentPos.X + (targetX > currentPos.X and 1 or -1)
-                else nextX = targetX end
-
-                if math.abs(currentPos.Y - targetY) > 0.1 then
-                    nextY = currentPos.Y + (targetY > currentPos.Y and 1 or -1)
-                else nextY = targetY end
-
-                if math.abs(currentPos.Z - targetZ) > 0.1 then
-                    nextZ = currentPos.Z + (targetZ > currentPos.Z and 1 or -1)
-                else nextZ = targetZ end
-
-                rootPart.CFrame = CFrame.new(nextX, nextY, nextZ)
+                -- 4. ระบบค่อยๆ TP (0.1s ต่อ 1 stud)
+                if targetPoint then
+                    local moveDir = (targetPoint - currentPos)
+                    if moveDir.Magnitude > 0.1 then
+                        local nextPos = currentPos + moveDir.Unit * 1 -- ขยับทีละ 1 unit
+                        rootPart.CFrame = CFrame.new(nextPos)
+                    else
+                        rootPart.CFrame = CFrame.new(targetPoint)
+                    end
+                end
             end
             
             task.wait(0.1) -- ความถี่ 0.1 วินาที
