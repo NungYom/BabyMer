@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Auto-Combat | NPC Hunter",
-   LoadingTitle = "Scanning Characters...",
+   Name = "Ultimate Farmer | Speed Detect Mode",
+   LoadingTitle = "Monitoring Attributes...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -10,106 +10,113 @@ local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local DetectionEnabled = false
 local StartPosition = nil 
 
+local AllyList = {
+    "Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", 
+    "Medic", "Farmer", "Fragger", "Guardian", "Engineer", 
+    "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", 
+    "Commander", "Psychic", "Merchant"
+}
+
 MainTab:CreateToggle({
-   Name = "เริ่มระบบ Auto Hunter (Smart Mode)",
+   Name = "เริ่มระบบ Auto Hunter (Smart Speed Detect)",
    CurrentValue = false,
    Flag = "AutoHunterToggle", 
    Callback = function(Value)
       DetectionEnabled = Value
-      
       if Value then
          local char = game.Players.LocalPlayer.Character
          local root = char and char:FindFirstChild("HumanoidRootPart")
-         if root then
-            StartPosition = root.Position -- บันทึกจุดฟาร์ม (0,0,20)
-         end
+         if root then StartPosition = root.Position end
       end
       
       task.spawn(function()
+         local lastSwitchTime = 0
+         local currentLockedEnemy = nil
+
          while DetectionEnabled do
             local player = game.Players.LocalPlayer
             local character = player.Character
             local rootPart = character and character:FindFirstChild("HumanoidRootPart")
             local humanoid = character and character:FindFirstChild("Humanoid")
-            local characterFolder = workspace:FindFirstChild("Characters")
-            local targetModel = characterFolder and characterFolder:FindFirstChild(player.Name)
+            local charFolder = workspace:FindFirstChild("Characters")
+            local targetModel = charFolder and charFolder:FindFirstChild(player.Name)
 
             if rootPart and humanoid and targetModel and StartPosition then
                 local currentHealth = humanoid.Health
                 local currentHunger = targetModel:GetAttribute("Hunger") or 100
                 local currentPos = rootPart.Position
-                
-                local targetPoint = nil -- จุดหมายปลายทางที่จะไป
-                
-                -- 1. [Priority 0] ตรวจจับ Bloater ระเบิด (ระยะ 30 studs, เลือด < 1)
+                local targetPoint = nil 
+
+                -- 1. [Priority 0] ตรวจจับ Bloater (เช็ค Speed Attribute ที่ HumanoidRootPart)
                 local isBloaterDanger = false
-                for _, obj in pairs(characterFolder:GetChildren()) do
+                for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
-                        local bHum = obj:FindFirstChild("Humanoid")
-                        local bRoot = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
-                        if bHum and bRoot and bHum.Health < 1 then
-                            if (currentPos - bRoot.Position).Magnitude <= 30 then
-                                isBloaterDanger = true
-                                break
+                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
+                        if bRoot then
+                            local dist = (currentPos - bRoot.Position).Magnitude
+                            if dist <= 30 then
+                                -- ตรวจสอบ Attribute "Speed" ตามรูปที่ 0a655e.png
+                                local speedAttr = bRoot:GetAttribute("Speed")
+                                
+                                -- ถ้าไม่มีค่า Speed (nil) หรือไม่ใช่ตัวเลข ให้ถือว่าอันตราย
+                                if speedAttr == nil or type(speedAttr) ~= "number" then
+                                    isBloaterDanger = true
+                                    break
+                                end
                             end
                         end
                     end
                 end
 
-                -- 2. [Priority 3] ค้นหาศัตรูที่ใกล้ที่สุด (ถ้าผ่านเงื่อนไขอื่นๆ)
-                local closestEnemy = nil
-                local minDistance = math.huge
+                -- 2. ค้นหาศัตรูที่ "ไกลที่สุด" (สลับเป้าหมายทุก 1 วินาที)
+                if tick() - lastSwitchTime >= 1 then
+                    local furthestEnemy = nil
+                    local maxDistance = -1
+                    for _, obj in pairs(charFolder:GetChildren()) do
+                        local isPlayer = game.Players:GetPlayerFromCharacter(obj)
+                        local isAlly = table.find(AllyList, obj.Name)
+                        local enemyHum = obj:FindFirstChild("Humanoid")
+                        local enemyRoot = obj:FindFirstChild("HumanoidRootPart")
 
-                for _, obj in pairs(characterFolder:GetChildren()) do
-                    -- คัดกรอง: ต้องไม่ใช่เรา, ไม่ใช่ผู้เล่นอื่น, และมี Humanoid
-                    local isPlayer = game.Players:GetPlayerFromCharacter(obj)
-                    local enemyHum = obj:FindFirstChild("Humanoid")
-                    local enemyRoot = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
-
-                    if not isPlayer and enemyHum and enemyRoot and enemyHum.Health > 0 then
-                        -- เงื่อนไข: ศัตรูต้องห่างจากจุด 0,0,0 ไม่เกิน 100 studs
-                        local distFromOrigin = (enemyRoot.Position - Vector3.new(0, 0, 0)).Magnitude
-                        if distFromOrigin <= 100 then
-                            local distFromMe = (currentPos - enemyRoot.Position).Magnitude
-                            if distFromMe < minDistance then
-                                minDistance = distFromMe
-                                closestEnemy = enemyRoot
+                        if not isPlayer and not isAlly and enemyHum and enemyRoot and enemyHum.Health > 0 then
+                            local distFromOrigin = (enemyRoot.Position - Vector3.new(0, 0, 0)).Magnitude
+                            if distFromOrigin <= 100 then
+                                local distFromMe = (currentPos - enemyRoot.Position).Magnitude
+                                if distFromMe > maxDistance then
+                                    maxDistance = distFromMe
+                                    furthestEnemy = enemyRoot
+                                end
                             end
                         end
                     end
+                    currentLockedEnemy = furthestEnemy
+                    lastSwitchTime = tick()
                 end
 
-                -- 3. ตรรกะการเลือกจุดหมาย (Decision Making)
+                -- 3. ตรรกะการตัดสินใจเลือกพิกัด
                 if isBloaterDanger then
-                    -- หนีระเบิด
-                    targetPoint = Vector3.new(20, -20, 0)
+                    targetPoint = Vector3.new(20, -20, 0) -- หลบลงโซนปลอดภัย
                 elseif currentHunger < 5 then
-                    -- หิว: กลับจุดฟาร์มเดิมที่ Y = -8
-                    targetPoint = Vector3.new(StartPosition.X, -8, StartPosition.Z)
+                    targetPoint = Vector3.new(StartPosition.X, -8, StartPosition.Z) -- กลับไปฟาร์ม/กิน
                 elseif currentHealth < 90 then
-                    -- เลือดน้อย: พักโซนปลอดภัย
-                    targetPoint = Vector3.new(20, -20, 0)
-                elseif closestEnemy then
-                    -- พบศัตรู: ไปอยู่ใต้ตัวมันที่ Y = -7
-                    targetPoint = Vector3.new(closestEnemy.Position.X, -7, closestEnemy.Position.Z)
+                    targetPoint = Vector3.new(20, -20, 0) -- พักเลือด
+                elseif currentLockedEnemy and currentLockedEnemy.Parent then
+                    targetPoint = Vector3.new(currentLockedEnemy.Position.X, -7, currentLockedEnemy.Position.Z)
                 else
-                    -- ไม่เจอศัตรู: ไปรอที่จุดปลอดภัย
                     targetPoint = Vector3.new(20, -20, 0)
                 end
 
-                -- 4. ระบบค่อยๆ TP (0.1s ต่อ 1 stud)
+                -- 4. การเคลื่อนที่ (0.05 วินาทีต่อ stud)
                 if targetPoint then
                     local moveDir = (targetPoint - currentPos)
                     if moveDir.Magnitude > 0.1 then
-                        local nextPos = currentPos + moveDir.Unit * 1 -- ขยับทีละ 1 unit
-                        rootPart.CFrame = CFrame.new(nextPos)
+                        rootPart.CFrame = CFrame.new(currentPos + moveDir.Unit * 1)
                     else
                         rootPart.CFrame = CFrame.new(targetPoint)
                     end
                 end
             end
-            
-            task.wait(0.1) -- ความถี่ 0.1 วินาที
+            task.wait(0.05)
          end
       end)
    end,
