@@ -1,18 +1,20 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | Turbo Safety v5",
-   LoadingTitle = "Adjusting Motor Speeds...",
+   Name = "Ultimate Farmer | Turbo Vertical v6",
+   LoadingTitle = "Configuring Dynamic Speeds...",
    LoadingSubtitle = "by Gemini AI",
 })
 
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 
--- Shared Config
+-- Config Shared
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 
--- Mode States
+-- State & Thresholds
+local SafeHealth1 = 60
+local SafeHealth2 = 60
 local HunterEnabled = false
 local SquareEnabled = false
 local StartPosHunter = nil
@@ -26,18 +28,29 @@ local LoopPoints = {
     Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีดตามสถานะ
-local function GetMovementSettings(isDanger)
-    if isDanger then
-        return 1, 0.02 -- เร่งสปีด: 1 stud ทุก 0.02 วิ
+-- ฟังก์ชันคำนวณสปีด (Normal vs Turbo)
+local function GetMovementSettings(isDanger, isVerticalMoving)
+    -- เร่งสปีดถ้าอยู่ในสถานะอันตราย "หรือ" กำลังปรับระดับแกน Y (ขึ้นหรือลง)
+    if isDanger or isVerticalMoving then
+        return 1, 0.02 -- Turbo: 1 stud ทุก 0.02 วิ
     else
-        return 0.5, 0.1 -- ปกติ: 0.5 stud ทุก 0.1 วิ
+        return 0.5, 0.1 -- Normal: 0.5 stud ทุก 0.1 วิ
     end
 end
 
 -- ==========================================
--- หมวด 1: Auto Hunter (Dynamic Speed)
+-- หมวด 1: Auto Hunter
 -- ==========================================
+MainTab:CreateSlider({
+   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
+   Range = {10, 100},
+   Increment = 1,
+   Suffix = " HP",
+   CurrentValue = 60,
+   Flag = "HealthSlider1",
+   Callback = function(Value) SafeHealth1 = Value end,
+})
+
 MainTab:CreateToggle({
    Name = "เริ่มระบบ Auto Hunter",
    CurrentValue = false,
@@ -64,8 +77,6 @@ MainTab:CreateToggle({
             if root and hum and targetAttr and StartPosHunter then
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
                 local isBloater = false
-                
-                -- Check Bloater Speed Attribute
                 for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
                         local bRoot = obj:FindFirstChild("HumanoidRootPart")
@@ -75,11 +86,10 @@ MainTab:CreateToggle({
                     end
                 end
 
-                local isDanger = (isBloater or hum.Health < 90)
-                local step, waitTime = GetMovementSettings(isDanger)
                 local targetPoint = nil
+                local isDanger = (isBloater or hum.Health < SafeHealth1)
 
-                -- Target Logic
+                -- กำหนดเป้าหมายก่อนเพื่อเช็คว่าต้องขยับแกน Y ไหม
                 if isDanger then targetPoint = Vector3.new(20, -20, 0)
                 elseif hunger < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
                 else
@@ -100,6 +110,10 @@ MainTab:CreateToggle({
                     else targetPoint = Vector3.new(20, -20, 0) end
                 end
 
+                -- เช็คว่าแกน Y ปัจจุบัน ห่างจากเป้าหมายเกิน 0.5 ไหม (Vertical Moving)
+                local isVerticalMoving = math.abs(root.Position.Y - targetPoint.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
+
                 if targetPoint then
                     local dir = (targetPoint - root.Position)
                     if dir.Magnitude > 0.1 then
@@ -107,16 +121,14 @@ MainTab:CreateToggle({
                     end
                 end
                 task.wait(waitTime)
-            else
-                task.wait(0.5)
-            end
+            else task.wait(0.5) end
          end
       end)
    end,
 })
 
 -- ==========================================
--- หมวด 2: Square Loop Farm (Dynamic Speed)
+-- หมวด 2: Square Loop Farm
 -- ==========================================
 SquareTab:CreateSlider({
    Name = "ระดับแกน Y ตอนวนลูป",
@@ -126,6 +138,16 @@ SquareTab:CreateSlider({
    CurrentValue = -7,
    Flag = "YLevelSlider",
    Callback = function(Value) TargetYLevel = Value end,
+})
+
+SquareTab:CreateSlider({
+   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
+   Range = {10, 100},
+   Increment = 1,
+   Suffix = " HP",
+   CurrentValue = 60,
+   Flag = "HealthSlider2",
+   Callback = function(Value) SafeHealth2 = Value end,
 })
 
 SquareTab:CreateToggle({
@@ -151,8 +173,6 @@ SquareTab:CreateToggle({
 
             if root and hum and targetAttr and StartPosSquare then
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
-                
-                -- ตรวจสอบสถานะอันตราย
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
@@ -163,11 +183,9 @@ SquareTab:CreateToggle({
                     end
                 end
                 
-                local isDanger = (isBloater or hum.Health < 90)
-                local step, waitTime = GetMovementSettings(isDanger)
+                local isDanger = (isBloater or hum.Health < SafeHealth2)
                 local finalTarget = nil
 
-                -- Decision Making
                 if isDanger then
                     local p = LoopPoints[LoopIndex]
                     finalTarget = Vector3.new(p.X, -20, p.Z)
@@ -178,11 +196,13 @@ SquareTab:CreateToggle({
                     finalTarget = Vector3.new(p.X, TargetYLevel, p.Z)
                 end
 
-                -- Movement Logic
+                -- เช็คสถานะการขยับแกน Y
+                local isVerticalMoving = math.abs(root.Position.Y - finalTarget.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
+
                 local moveDir = (finalTarget - root.Position)
                 local horizontalDist = (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
                 
-                -- เปลี่ยนจุด Loop เมื่อถึงเป้าหมายในแนวราบ และไม่อยู่ในภาวะหิวหรืออันตราย
                 if horizontalDist < 1 and hunger >= 5 and not isDanger then
                     LoopIndex = LoopIndex + 1
                     if LoopIndex > #LoopPoints then LoopIndex = 1 end
@@ -192,9 +212,7 @@ SquareTab:CreateToggle({
                     root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude))
                 end
                 task.wait(waitTime)
-            else
-                task.wait(0.5)
-            end
+            else task.wait(0.5) end
          end
       end)
    end,
