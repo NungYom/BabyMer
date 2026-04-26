@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | Health Thresholds v8",
-   LoadingTitle = "Syncing Health Logic...",
+   Name = "Ultimate Farmer | v6 Adjusted",
+   LoadingTitle = "Restoring v6 Systems...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -13,27 +13,32 @@ local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 
 -- State & Thresholds
-local SafeHealthEnter1, SafeHealthExit1 = 60, 90
-local SafeHealthEnter2, SafeHealthExit2 = 60, 90
-local HunterEnabled, SquareEnabled = false, false
-local InSafeMode1, InSafeMode2 = false, false -- ตัวแปรเช็คว่ากำลังอยู่ในสถานะ "หลบภัย" หรือไม่
-
-local StartPosHunter, StartPosSquare = nil, nil
+local SafeHealth1 = 60
+local SafeHealth2 = 60
+local HunterEnabled = false
+local SquareEnabled = false
+local StartPosHunter = nil
+local StartPosSquare = nil
 local TargetYLevel = -7
 local LoopIndex = 1
 local LoopPoints = {
-    Vector3.new(0, 0, 50), Vector3.new(0, 0, -50),
-    Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
+    Vector3.new(0, 0, 50),
+    Vector3.new(0, 0, -50),
+    Vector3.new(50, 0, -50),
+    Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด
+-- ฟังก์ชันคำนวณสปีด (ปรับปรุงตามสั่ง)
 local function GetMovementSettings(isDanger, isVerticalMoving)
     if isVerticalMoving then
-        return 1, 0.05 -- ย้ายชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
+        -- ระหว่างเปลี่ยนระดับชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
+        return 1, 0.05 
     elseif isDanger then
-        return 1, 0.02 -- Turbo Danger (หนีในแนวราบ): 1 stud ทุก 0.02 วิ
+        -- Turbo Safety (กรณีอยู่ที่ระดับแกน Y ปลอดภัยแล้วแต่ยังอันตราย): 1 stud ทุก 0.02 วิ
+        return 1, 0.02
     else
-        return 0.5, 0.1 -- Normal: 0.5 stud ทุก 0.1 วิ
+        -- Normal Mode (เดินราบปกติ): 0.5 stud ทุก 0.1 วิ
+        return 0.5, 0.1
     end
 end
 
@@ -41,19 +46,19 @@ end
 -- หมวด 1: Auto Hunter
 -- ==========================================
 MainTab:CreateSlider({
-   Name = "เลือดที่ต้องหนี (Enter Safe Zone)",
-   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
-   Flag = "H1_Enter", Callback = function(v) SafeHealthEnter1 = v end,
-})
-MainTab:CreateSlider({
-   Name = "เลือดที่พร้อมลุย (Exit Safe Zone)",
-   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 90,
-   Flag = "H1_Exit", Callback = function(v) SafeHealthExit1 = v end,
+   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
+   Range = {10, 100},
+   Increment = 1,
+   Suffix = " HP",
+   CurrentValue = 60,
+   Flag = "HealthSlider1",
+   Callback = function(Value) SafeHealth1 = Value end,
 })
 
 MainTab:CreateToggle({
    Name = "เริ่มระบบ Auto Hunter",
-   CurrentValue = false, Flag = "HunterToggle", 
+   CurrentValue = false,
+   Flag = "HunterToggle", 
    Callback = function(Value)
       HunterEnabled = Value
       if Value then
@@ -63,34 +68,37 @@ MainTab:CreateToggle({
       end
       
       task.spawn(function()
-         local lastSwitch, lockedEnemy = 0, nil
+         local lastSwitch = 0
+         local lockedEnemy = nil
          while HunterEnabled do
             local player = game.Players.LocalPlayer
-            local char, root, hum = player.Character, player.Character:FindFirstChild("HumanoidRootPart"), player.Character:FindFirstChild("Humanoid")
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
             if root and hum and targetAttr and StartPosHunter then
-                -- 1. Check Bloater Speed
+                local hunger = targetAttr:GetAttribute("Hunger") or 100
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
-                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
+                    if obj.Name == "Bloater" then
+                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
+                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
+                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
+                        end
                     end
                 end
 
-                -- 2. Health Logic (In/Out Safe Zone)
-                if hum.Health < SafeHealthEnter1 then InSafeMode1 = true 
-                elseif hum.Health >= SafeHealthExit1 then InSafeMode1 = false end
-
-                local isDanger = (isBloater or InSafeMode1)
                 local targetPoint = nil
+                local isDanger = (isBloater or hum.Health < SafeHealth1)
 
                 if isDanger then targetPoint = Vector3.new(20, -20, 0)
-                elseif (targetAttr:GetAttribute("Hunger") or 100) < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
+                elseif hunger < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
                 else
                     if tick() - lastSwitch >= 1 then
-                        local maxD, furthest = -1, nil
+                        local furthest = nil
+                        local maxD = -1
                         for _, obj in pairs(charFolder:GetChildren()) do
                             if not game.Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") and obj.Humanoid.Health > 0 then
                                 local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
@@ -105,10 +113,16 @@ MainTab:CreateToggle({
                     else targetPoint = Vector3.new(20, -20, 0) end
                 end
 
-                local isVertical = math.abs(root.Position.Y - targetPoint.Y) > 0.5
-                local step, waitTime = GetMovementSettings(isDanger, isVertical)
-                local dir = (targetPoint - root.Position)
-                if dir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) end
+                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
+                local isVerticalMoving = math.abs(root.Position.Y - targetPoint.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
+
+                if targetPoint then
+                    local dir = (targetPoint - root.Position)
+                    if dir.Magnitude > 0.1 then
+                        root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude))
+                    end
+                end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
@@ -121,23 +135,28 @@ MainTab:CreateToggle({
 -- ==========================================
 SquareTab:CreateSlider({
    Name = "ระดับแกน Y ตอนวนลูป",
-   Range = {-20, -5}, Increment = 1, Suffix = " Y", CurrentValue = -7,
-   Flag = "YLevel", Callback = function(v) TargetYLevel = v end,
+   Range = {-20, -5},
+   Increment = 1,
+   Suffix = " Y",
+   CurrentValue = -7,
+   Flag = "YLevelSlider",
+   Callback = function(Value) TargetYLevel = Value end,
 })
+
 SquareTab:CreateSlider({
-   Name = "เลือดที่ต้องหนี (Enter Safe Zone)",
-   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
-   Flag = "H2_Enter", Callback = function(v) SafeHealthEnter2 = v end,
-})
-SquareTab:CreateSlider({
-   Name = "เลือดที่พร้อมลุย (Exit Safe Zone)",
-   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 90,
-   Flag = "H2_Exit", Callback = function(v) SafeHealthExit2 = v end,
+   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
+   Range = {10, 100},
+   Increment = 1,
+   Suffix = " HP",
+   CurrentValue = 60,
+   Flag = "HealthSlider2",
+   Callback = function(Value) SafeHealth2 = Value end,
 })
 
 SquareTab:CreateToggle({
    Name = "เริ่มระบบ Square Loop Farm",
-   CurrentValue = false, Flag = "SquareToggle",
+   CurrentValue = false,
+   Flag = "SquareToggle",
    Callback = function(Value)
       SquareEnabled = Value
       if Value then
@@ -149,39 +168,52 @@ SquareTab:CreateToggle({
       task.spawn(function()
          while SquareEnabled do
             local player = game.Players.LocalPlayer
-            local char, root, hum = player.Character, player.Character:FindFirstChild("HumanoidRootPart"), player.Character:FindFirstChild("Humanoid")
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
             if root and hum and targetAttr and StartPosSquare then
-                -- 1. Check Bloater
+                local hunger = targetAttr:GetAttribute("Hunger") or 100
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
-                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
+                    if obj.Name == "Bloater" then
+                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
+                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
+                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
+                        end
                     end
                 end
-
-                -- 2. Health Logic
-                if hum.Health < SafeHealthEnter2 then InSafeMode2 = true 
-                elseif hum.Health >= SafeHealthExit2 then InSafeMode2 = false end
-
-                local isDanger = (isBloater or InSafeMode2)
+                
+                local isDanger = (isBloater or hum.Health < SafeHealth2)
                 local finalTarget = nil
 
-                if isDanger then finalTarget = Vector3.new(LoopPoints[LoopIndex].X, -20, LoopPoints[LoopIndex].Z)
-                elseif (targetAttr:GetAttribute("Hunger") or 100) < 5 then finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
-                else finalTarget = Vector3.new(LoopPoints[LoopIndex].X, TargetYLevel, LoopPoints[LoopIndex].Z) end
-
-                local isVertical = math.abs(root.Position.Y - finalTarget.Y) > 0.5
-                local step, waitTime = GetMovementSettings(isDanger, isVertical)
-
-                if (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude < 1 and not isDanger and (targetAttr:GetAttribute("Hunger") or 100) >= 5 then
-                    LoopIndex = LoopIndex + 1 if LoopIndex > #LoopPoints then LoopIndex = 1 end
+                if isDanger then
+                    local p = LoopPoints[LoopIndex]
+                    finalTarget = Vector3.new(p.X, -20, p.Z)
+                elseif hunger < 5 then
+                    finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
+                else
+                    local p = LoopPoints[LoopIndex]
+                    finalTarget = Vector3.new(p.X, TargetYLevel, p.Z)
                 end
 
+                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
+                local isVerticalMoving = math.abs(root.Position.Y - finalTarget.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
+
                 local moveDir = (finalTarget - root.Position)
-                if moveDir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude)) end
+                local horizontalDist = (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
+                
+                if horizontalDist < 1 and hunger >= 5 and not isDanger then
+                    LoopIndex = LoopIndex + 1
+                    if LoopIndex > #LoopPoints then LoopIndex = 1 end
+                end
+
+                if moveDir.Magnitude > 0.1 then
+                    root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude))
+                end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
