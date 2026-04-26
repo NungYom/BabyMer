@@ -1,18 +1,18 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | Dynamic Pacing v7",
-   LoadingTitle = "Fine-tuning Movement Speeds...",
+   Name = "Ultimate Farmer | Turbo Vertical v6",
+   LoadingTitle = "Configuring Dynamic Speeds...",
    LoadingSubtitle = "by Gemini AI",
 })
 
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 
--- Shared Configuration
+-- Config Shared
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 
--- Thresholds & States
+-- State & Thresholds
 local SafeHealth1 = 60
 local SafeHealth2 = 60
 local HunterEnabled = false
@@ -28,17 +28,13 @@ local LoopPoints = {
     Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีดตามโจทย์ (3 ระดับ)
-local function GetMovementSettings(isDanger, currentY, targetY)
-    if isDanger then
-        -- 1. Turbo Safety Mode (หนี/อันตราย): 1 stud ทุก 0.02s
-        return 1, 0.02
-    elseif currentY < (targetY - 0.1) then
-        -- 2. ย้ายชั้นเพื่อกลับขึ้น (Ascending): 1 stud ทุก 0.05s
-        return 1, 0.05
+-- ฟังก์ชันคำนวณสปีด (Normal vs Turbo)
+local function GetMovementSettings(isDanger, isVerticalMoving)
+    -- เร่งสปีดถ้าอยู่ในสถานะอันตราย "หรือ" กำลังปรับระดับแกน Y (ขึ้นหรือลง)
+    if isDanger or isVerticalMoving then
+        return 1, 0.02 -- Turbo: 1 stud ทุก 0.02 วิ
     else
-        -- 3. Normal Mode (เดินราบ/มุดลงแบบไม่รีบ): 0.5 stud ทุก 0.1s
-        return 0.5, 0.1
+        return 0.5, 0.1 -- Normal: 0.5 stud ทุก 0.1 วิ
     end
 end
 
@@ -93,6 +89,7 @@ MainTab:CreateToggle({
                 local targetPoint = nil
                 local isDanger = (isBloater or hum.Health < SafeHealth1)
 
+                -- กำหนดเป้าหมายก่อนเพื่อเช็คว่าต้องขยับแกน Y ไหม
                 if isDanger then targetPoint = Vector3.new(20, -20, 0)
                 elseif hunger < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
                 else
@@ -113,7 +110,9 @@ MainTab:CreateToggle({
                     else targetPoint = Vector3.new(20, -20, 0) end
                 end
 
-                local step, waitTime = GetMovementSettings(isDanger, root.Position.Y, targetPoint.Y)
+                -- เช็คว่าแกน Y ปัจจุบัน ห่างจากเป้าหมายเกิน 0.5 ไหม (Vertical Moving)
+                local isVerticalMoving = math.abs(root.Position.Y - targetPoint.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
 
                 if targetPoint then
                     local dir = (targetPoint - root.Position)
@@ -197,7 +196,9 @@ SquareTab:CreateToggle({
                     finalTarget = Vector3.new(p.X, TargetYLevel, p.Z)
                 end
 
-                local step, waitTime = GetMovementSettings(isDanger, root.Position.Y, finalTarget.Y)
+                -- เช็คสถานะการขยับแกน Y
+                local isVerticalMoving = math.abs(root.Position.Y - finalTarget.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
 
                 local moveDir = (finalTarget - root.Position)
                 local horizontalDist = (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
