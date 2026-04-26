@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | Turbo Vertical v6",
-   LoadingTitle = "Configuring Dynamic Speeds...",
+   Name = "Ultimate Farmer | v6 Adjusted",
+   LoadingTitle = "Restoring v6 Systems...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -28,13 +28,17 @@ local LoopPoints = {
     Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด (Normal vs Turbo)
+-- ฟังก์ชันคำนวณสปีด (ปรับปรุงตามสั่ง)
 local function GetMovementSettings(isDanger, isVerticalMoving)
-    -- เร่งสปีดถ้าอยู่ในสถานะอันตราย "หรือ" กำลังปรับระดับแกน Y (ขึ้นหรือลง)
-    if isDanger or isVerticalMoving then
-        return 1, 0.02 -- Turbo: 1 stud ทุก 0.02 วิ
+    if isVerticalMoving then
+        -- ระหว่างเปลี่ยนระดับชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
+        return 1, 0.05 
+    elseif isDanger then
+        -- Turbo Safety (กรณีอยู่ที่ระดับแกน Y ปลอดภัยแล้วแต่ยังอันตราย): 1 stud ทุก 0.02 วิ
+        return 1, 0.02
     else
-        return 0.5, 0.1 -- Normal: 0.5 stud ทุก 0.1 วิ
+        -- Normal Mode (เดินราบปกติ): 0.5 stud ทุก 0.1 วิ
+        return 0.5, 0.1
     end
 end
 
@@ -89,7 +93,6 @@ MainTab:CreateToggle({
                 local targetPoint = nil
                 local isDanger = (isBloater or hum.Health < SafeHealth1)
 
-                -- กำหนดเป้าหมายก่อนเพื่อเช็คว่าต้องขยับแกน Y ไหม
                 if isDanger then targetPoint = Vector3.new(20, -20, 0)
                 elseif hunger < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
                 else
@@ -110,7 +113,7 @@ MainTab:CreateToggle({
                     else targetPoint = Vector3.new(20, -20, 0) end
                 end
 
-                -- เช็คว่าแกน Y ปัจจุบัน ห่างจากเป้าหมายเกิน 0.5 ไหม (Vertical Moving)
+                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
                 local isVerticalMoving = math.abs(root.Position.Y - targetPoint.Y) > 0.5
                 local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
 
@@ -196,7 +199,7 @@ SquareTab:CreateToggle({
                     finalTarget = Vector3.new(p.X, TargetYLevel, p.Z)
                 end
 
-                -- เช็คสถานะการขยับแกน Y
+                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
                 local isVerticalMoving = math.abs(root.Position.Y - finalTarget.Y) > 0.5
                 local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
 
