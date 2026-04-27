@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | v6 Pro Custom Update",
-   LoadingTitle = "Initializing Center-Based Safety...",
+   Name = "Ultimate Farmer | v6 Pro Stable",
+   LoadingTitle = "Fixing Logic Errors...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -15,10 +15,12 @@ local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "
 -- State & Thresholds
 local SafeHealth1, SafeHealth2 = 60, 60
 local DetectionRange1 = 50 
-local CenterPosHunter = Vector3.new(0, 7, 0) -- ค่าเริ่มต้นตามที่กำหนด (0, 7, 0)
+local CenterPosHunter = Vector3.new(0, 7, 0) -- Default 0, 7, 0 ตามสั่ง
 
 local HunterEnabled, SquareEnabled = false, false
 local IsEating1, IsEating2 = false, false
+local EatTimer1, EatTimer2 = 0, 0 -- ใช้เก็บเวลาแทนการ task.wait
+
 local StartPosHunter, StartPosSquare = nil, nil
 local TargetYLevel = -7
 local LoopIndex = 1
@@ -27,14 +29,14 @@ local LoopPoints = {
     Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด (v6 Adjusted Logic)
+-- ฟังก์ชันคำนวณสปีด (Safe Logic)
 local function GetMovementSettings(isDanger, isVerticalMoving)
     if isVerticalMoving then
-        return 1, 0.05 -- ย้ายชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
+        return 1, 0.05 -- ย้ายชั้น: 1 stud / 0.05s
     elseif isDanger then
-        return 1, 0.02 -- Turbo Danger (หนีในแนวราบ): 1 stud ทุก 0.02 วิ
+        return 1, 0.02 -- Danger: 1 stud / 0.02s
     else
-        return 0.5, 0.1 -- Normal Mode: 0.5 stud ทุก 0.1 วิ
+        return 0.5, 0.1 -- Normal: 0.5 stud / 0.1s
     end
 end
 
@@ -82,34 +84,44 @@ MainTab:CreateToggle({
          local lastSwitch, lockedEnemy = 0, nil
          while HunterEnabled do
             local player = game.Players.LocalPlayer
-            local char, root, hum = player.Character, player.Character and player.Character:FindFirstChild("HumanoidRootPart"), player.Character and player.Character:FindFirstChild("Humanoid")
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
             if root and hum and targetAttr and StartPosHunter then
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
+                
+                -- 1. เช็ค Bloater (แบบปลอดภัย v6 Adjusted Style)
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
-                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
+                    if obj.Name == "Bloater" then
+                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
+                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
+                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
+                        end
                     end
+                end
+
+                -- 2. Hunger Delay Logic (Non-blocking)
+                if hunger < 5 then
+                    IsEating1 = true
+                    EatTimer1 = 0
+                elseif hunger >= 5 and IsEating1 then
+                    if EatTimer1 == 0 then EatTimer1 = tick() + 2 end -- ตั้งเวลาเป้าหมายล่วงหน้า 2 วิ
+                    if tick() >= EatTimer1 then IsEating1 = false end
                 end
 
                 local targetPoint = nil
                 local isDanger = (isBloater or hum.Health < SafeHealth1)
 
-                -- 🛡️ Logic การเลือกเป้าหมายและจุดปลอดภัย
+                -- 3. Target Selection
                 if isDanger then 
-                    -- จุดปลอดภัย: พิกัดศูนย์กลาง แต่แกน Y = -20
+                    -- จุดปลอดภัย: พิกัดศูนย์กลาง X, Z แกน Y = -20
                     targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
-                elseif hunger < 5 or IsEating1 then
+                elseif IsEating1 then
                     targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
-                    if not IsEating1 then IsEating1 = true end
-                    -- รอจนหิว > 5 แล้ว รอเพิ่มอีก 2 วินาที
-                    if hunger > 5 then
-                        task.wait(2)
-                        IsEating1 = false
-                    end
                 else
                     if tick() - lastSwitch >= 1 then
                         local maxD, furthest = -1, nil
@@ -179,27 +191,35 @@ SquareTab:CreateToggle({
 
             if root and hum and targetAttr and StartPosSquare then
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
+                
+                -- Bloater Check Safe
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
-                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
+                    if obj.Name == "Bloater" then
+                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
+                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
+                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
+                        end
                     end
+                end
+
+                -- Hunger Delay Logic (Non-blocking)
+                if hunger < 5 then
+                    IsEating2 = true
+                    EatTimer2 = 0
+                elseif hunger >= 5 and IsEating2 then
+                    if EatTimer2 == 0 then EatTimer2 = tick() + 2 end
+                    if tick() >= EatTimer2 then IsEating2 = false end
                 end
                 
                 local isDanger = (isBloater or hum.Health < SafeHealth2)
                 local finalTarget = nil
 
                 if isDanger then 
-                    -- จุดปลอดภัยของการวนลูป: พิกัด Loop ปัจจุบัน แต่แกน Y = -20
                     local p = LoopPoints[LoopIndex]
                     finalTarget = Vector3.new(p.X, -20, p.Z)
-                elseif hunger < 5 or IsEating2 then
+                elseif IsEating2 then
                     finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
-                    if not IsEating2 then IsEating2 = true end
-                    if hunger > 5 then
-                        task.wait(2)
-                        IsEating2 = false
-                    end
                 else 
                     local p = LoopPoints[LoopIndex]
                     finalTarget = Vector3.new(p.X, TargetYLevel, p.Z) 
