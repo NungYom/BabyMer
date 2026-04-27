@@ -5,47 +5,40 @@ local LocalPlayer = Players.LocalPlayer
 
 local Window = Rayfield:CreateWindow({
    Name = "Ultimate Farmer | v6 Pro SmartEquip+",
-   LoadingTitle = "Loading Systems & Anti-Lag...",
+   LoadingTitle = "Full System Integration...",
    LoadingSubtitle = "by Gemini AI",
 })
 
+-- [[ Tabs Setup ]]
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 local OtherTab = Window:CreateTab("Other", 4483362458)
 
--- Config Shared
+-- [[ Shared State & Configuration ]]
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
-
--- State Variables
-local SafeHealth1, SafeHealth2 = 60, 60
+local SafeHealth1 = 60
 local DetectionRange1 = 50 
 local CenterPosHunter = Vector3.new(0, 7, 0)
-local HunterEnabled, SquareEnabled = false, false
+local HunterEnabled = false
 local FocusBloater = false 
 local AutoEquipEnabled = false
-local AntiLagEnabled = false -- สถานะ Anti Lag
+local AntiLagEnabled = false
 
--- Weapon Selection
+-- [[ Weapon Selection Variables ]]
 local SelectedMelee = ""
 local SelectedRanged = ""
 local LastPressTime = 0
 
-local IsEating1, IsEating2 = false, false
-local EatTimer1, EatTimer2 = 0, 0
-local StartPosHunter, StartPosSquare = nil, nil
-local TargetYLevel = -7
-local LoopIndex = 1
-local LoopPoints = {
-    Vector3.new(0, 0, 50), Vector3.new(0, 0, -50),
-    Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
-}
+local IsEating1 = false
+local EatTimer1 = 0
+local StartPosHunter = nil
 
 -- ==========================================
--- ระบบ Anti Lag (Background Process)
+-- ระบบ Anti Lag (ตรวจจับและลบ Model ใน Workspace)
 -- ==========================================
 workspace.ChildAdded:Connect(function(child)
     if AntiLagEnabled then
-        -- ตรวจสอบชื่อ Model ที่ต้องการลบ
+        -- ตรวจสอบรายชื่อ Model ที่ระบุจากรูป
         if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
             task.delay(10, function()
                 if child and child.Parent then
@@ -56,47 +49,60 @@ workspace.ChildAdded:Connect(function(child)
     end
 end)
 
--- ฟังก์ชันช่วยดึงรายชื่ออาวุธ
+-- ==========================================
+-- ฟังก์ชันช่วยเหลือ (Helper Functions)
+-- ==========================================
 local function GetToolList()
     local tools = {}
+    -- ดึงจากกระเป๋า
     for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then table.insert(tools, tool.Name) end
     end
+    -- ดึงจากมือที่ถืออยู่ใน Workspace
     local charFolder = workspace:FindFirstChild("Characters")
     local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
     if myChar then
         for _, tool in pairs(myChar:GetChildren()) do
-            if tool:IsA("Tool") and not table.find(tools, tool.Name) then table.insert(tools, tool.Name) end
+            if tool:IsA("Tool") and not table.find(tools, tool.Name) then
+                table.insert(tools, tool.Name)
+            end
         end
     end
     return tools
 end
 
--- ระบบสลับอาวุธ Smart Equip
+-- ระบบสลับอาวุธแบบเสถียร (แก้ปัญหากดย้ำ)
 local function HandleAutoEquip(root, hum)
     if not AutoEquipEnabled or not root or not hum then return end
+    
     local charFolder = workspace:FindFirstChild("Characters")
-    local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
-    if not myChar then return end
-
+    local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name) --
+    
     local y = root.Position.Y
     local isInSafeZone = (y >= -22 and y <= -18)
+    
     local targetWeapon = isInSafeZone and SelectedRanged or SelectedMelee
     local targetKey = isInSafeZone and Enum.KeyCode.Four or Enum.KeyCode.Two
 
     if targetWeapon == "" or targetWeapon == nil then return end
 
-    -- เช็คว่าอาวุธที่เลือกถืออยู่ในมือจริงไหม (อ้างอิงจากโครงสร้าง Character ใน Workspace)
-    local isHolding = myChar:FindFirstChild(targetWeapon)
+    -- ตรวจสอบว่า "ถืออยู่แล้ว" หรือไม่ ทั้งใน Workspace และ Character มาตรฐาน
+    local isEquipped = (myChar and myChar:FindFirstChild(targetWeapon)) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(targetWeapon))
 
-    if not isHolding then
-        if tick() - LastPressTime >= 1 then
+    -- ตรวจสอบว่าอาวุธ "อยู่ในกระเป๋า" หรือไม่
+    local inBackpack = LocalPlayer.Backpack:FindFirstChild(targetWeapon)
+
+    -- เงื่อนไข: ต้องไม่อยู่ในมือ และต้องมีของอยู่ในกระเป๋า ถึงจะกดปุ่ม
+    if not isEquipped and inBackpack then
+        if tick() - LastPressTime >= 1.5 then -- Cooldown 1.5 วิ ป้องกันการ Toggle ไปมา
             VIM:SendKeyEvent(true, targetKey, false, game)
             task.wait(0.05)
             VIM:SendKeyEvent(false, targetKey, false, game)
             LastPressTime = tick()
         end
     end
+    
+    -- ล็อคตัวไม่ให้หมุนเวลาถือปืนในเซฟโซน
     hum.AutoRotate = not isInSafeZone
 end
 
@@ -156,19 +162,19 @@ MainTab:CreateToggle({
             local targetAttr = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
 
             if root and hum and targetAttr and StartPosHunter then
+                -- เรียกใช้งานระบบสลับอาวุธ
                 HandleAutoEquip(root, hum)
+
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
-                
                 local explodingBloater = false
                 local targetBloater = nil
                 
+                -- ตรวจจับศัตรูและ Bloater
                 for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
-                        -- ตรวจสอบโครงสร้าง Bloater
                         local bRoot = obj:FindFirstChild("HumanoidRootPart")
                         if bRoot then
                             local dist = (root.Position - bRoot.Position).Magnitude
-                            -- เช็ค Attribute Speed เพื่อดูว่ากำลังระเบิดหรือไม่
                             local isExploding = bRoot:GetAttribute("Speed") == nil
                             if dist <= 30 and isExploding then explodingBloater = true end
                             if FocusBloater and not isExploding and (bRoot.Position - CenterPosHunter).Magnitude <= DetectionRange1 then
@@ -178,12 +184,14 @@ MainTab:CreateToggle({
                     end
                 end
 
+                -- ระบบกินอาหาร
                 if hunger < 5 then IsEating1 = true EatTimer1 = 0
                 elseif hunger >= 5 and IsEating1 then
                     if EatTimer1 == 0 then EatTimer1 = tick() + 2 end
                     if tick() >= EatTimer1 then IsEating1 = false end
                 end
 
+                -- กำหนดจุดหมาย (Target Point)
                 local targetPoint = nil
                 local isDanger = (explodingBloater or hum.Health < SafeHealth1)
 
@@ -194,6 +202,7 @@ MainTab:CreateToggle({
                 elseif FocusBloater and targetBloater then
                     targetPoint = Vector3.new(targetBloater.Position.X, -7, targetBloater.Position.Z)
                 else
+                    -- ล็อคเป้าหมายศัตรูที่อยู่ไกลสุดในระยะ (Logic เดิม)
                     if tick() - lastSwitch >= 1 then
                         local maxD, furthest = -1, nil
                         for _, obj in pairs(charFolder:GetChildren()) do
@@ -212,12 +221,15 @@ MainTab:CreateToggle({
                     else targetPoint = Vector3.new(CenterPosHunter.X, -7, CenterPosHunter.Z) end
                 end
 
+                -- การเคลื่อนที่แบบสมูท
                 local isVertical = math.abs(root.Position.Y - targetPoint.Y) > 0.5
                 local step = isVertical and 1 or (isDanger and 1 or 0.5)
                 local waitTime = isVertical and 0.05 or (isDanger and 0.02 or 0.1)
                 
                 local dir = (targetPoint - root.Position)
-                if dir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) end
+                if dir.Magnitude > 0.1 then 
+                    root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) 
+                end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
@@ -226,10 +238,16 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- หมวด 3: Other (Anti Lag & Smart Equip)
+-- หมวด 2: Square Loop Farm (Tab Placeholder)
+-- ==========================================
+SquareTab:CreateLabel("ระบบเดินวนแบบสี่เหลี่ยม")
+-- คุณสามารถใส่ Logic เดินวนที่นี่ได้เลยครับ
+
+-- ==========================================
+-- หมวด 3: Other (Anti Lag & Smart Equip Selection)
 -- ==========================================
 OtherTab:CreateToggle({
-   Name = "Anti Lag (ลบกระสุน/หิน อัตโนมัติ 10วิ)",
+   Name = "Anti Lag (ลบกระสุน/หิน อัตโนมัติ 10วิ)", --
    CurrentValue = false,
    Callback = function(v) AntiLagEnabled = v end,
 })
@@ -258,7 +276,7 @@ OtherTab:CreateButton({
 })
 
 OtherTab:CreateToggle({
-   Name = "ระบบสลับอาวุธ & Anti-Ragdoll",
+   Name = "ระบบสลับอาวุธ & Anti-Ragdoll", --
    CurrentValue = false,
    Callback = function(v) 
       AutoEquipEnabled = v 
