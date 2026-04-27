@@ -4,8 +4,8 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | v6 Pro SmartEquip",
-   LoadingTitle = "Loading Combat Systems...",
+   Name = "Ultimate Farmer | v6 Pro SmartEquip+",
+   LoadingTitle = "Loading Systems & Anti-Lag...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -16,15 +16,16 @@ local OtherTab = Window:CreateTab("Other", 4483362458)
 -- Config Shared
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 
--- State & Variables
+-- State Variables
 local SafeHealth1, SafeHealth2 = 60, 60
 local DetectionRange1 = 50 
 local CenterPosHunter = Vector3.new(0, 7, 0)
 local HunterEnabled, SquareEnabled = false, false
 local FocusBloater = false 
 local AutoEquipEnabled = false
+local AntiLagEnabled = false -- สถานะ Anti Lag
 
--- Weapon Selection Variables
+-- Weapon Selection
 local SelectedMelee = ""
 local SelectedRanged = ""
 local LastPressTime = 0
@@ -39,50 +40,56 @@ local LoopPoints = {
     Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันช่วยดึงรายชื่ออาวุธจาก Backpack
+-- ==========================================
+-- ระบบ Anti Lag (Background Process)
+-- ==========================================
+workspace.ChildAdded:Connect(function(child)
+    if AntiLagEnabled then
+        -- ตรวจสอบชื่อ Model ที่ต้องการลบ
+        if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
+            task.delay(10, function()
+                if child and child.Parent then
+                    child:Destroy()
+                end
+            end)
+        end
+    end
+end)
+
+-- ฟังก์ชันช่วยดึงรายชื่ออาวุธ
 local function GetToolList()
     local tools = {}
     for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            table.insert(tools, tool.Name)
-        end
+        if tool:IsA("Tool") then table.insert(tools, tool.Name) end
     end
-    -- เพิ่มอาวุธที่ถืออยู่ในมือปัจจุบันด้วย (ถ้ามี)
     local charFolder = workspace:FindFirstChild("Characters")
     local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
     if myChar then
         for _, tool in pairs(myChar:GetChildren()) do
-            if tool:IsA("Tool") and not table.find(tools, tool.Name) then
-                table.insert(tools, tool.Name)
-            end
+            if tool:IsA("Tool") and not table.find(tools, tool.Name) then table.insert(tools, tool.Name) end
         end
     end
     return tools
 end
 
--- ระบบสลับอาวุธแบบ Smart (เช็คจาก Workspace จริง)
+-- ระบบสลับอาวุธ Smart Equip
 local function HandleAutoEquip(root, hum)
     if not AutoEquipEnabled or not root or not hum then return end
-    
     local charFolder = workspace:FindFirstChild("Characters")
     local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
     if not myChar then return end
 
     local y = root.Position.Y
     local isInSafeZone = (y >= -22 and y <= -18)
-    
-    -- เลือกอาวุธและปุ่มตามเงื่อนไข Y
     local targetWeapon = isInSafeZone and SelectedRanged or SelectedMelee
     local targetKey = isInSafeZone and Enum.KeyCode.Four or Enum.KeyCode.Two
 
-    -- ถ้าไม่ได้เลือกอาวุธไว้ ให้ข้ามไป
     if targetWeapon == "" or targetWeapon == nil then return end
 
-    -- เช็คว่าในตัวละคร (Workspace) มีอาวุธชิ้นนั้นอยู่หรือไม่
+    -- เช็คว่าอาวุธที่เลือกถืออยู่ในมือจริงไหม (อ้างอิงจากโครงสร้าง Character ใน Workspace)
     local isHolding = myChar:FindFirstChild(targetWeapon)
 
     if not isHolding then
-        -- ถ้ายังไม่ได้ถือ ให้กดปุ่มทุกๆ 1 วินาที
         if tick() - LastPressTime >= 1 then
             VIM:SendKeyEvent(true, targetKey, false, game)
             task.wait(0.05)
@@ -90,8 +97,6 @@ local function HandleAutoEquip(root, hum)
             LastPressTime = tick()
         end
     end
-    
-    -- Anti-Ragdoll: ล็อคตัวเมื่ออยู่โซนปลอดภัย (Y -18 ถึง -22)
     hum.AutoRotate = not isInSafeZone
 end
 
@@ -159,9 +164,11 @@ MainTab:CreateToggle({
                 
                 for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
+                        -- ตรวจสอบโครงสร้าง Bloater
                         local bRoot = obj:FindFirstChild("HumanoidRootPart")
                         if bRoot then
                             local dist = (root.Position - bRoot.Position).Magnitude
+                            -- เช็ค Attribute Speed เพื่อดูว่ากำลังระเบิดหรือไม่
                             local isExploding = bRoot:GetAttribute("Speed") == nil
                             if dist <= 30 and isExploding then explodingBloater = true end
                             if FocusBloater and not isExploding and (bRoot.Position - CenterPosHunter).Magnitude <= DetectionRange1 then
@@ -219,8 +226,14 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- หมวด 3: Other (Selection & Smart Equip)
+-- หมวด 3: Other (Anti Lag & Smart Equip)
 -- ==========================================
+OtherTab:CreateToggle({
+   Name = "Anti Lag (ลบกระสุน/หิน อัตโนมัติ 10วิ)",
+   CurrentValue = false,
+   Callback = function(v) AntiLagEnabled = v end,
+})
+
 local MeleeDropdown = OtherTab:CreateDropdown({
    Name = "อาวุธระยะใกล้ (สล็อต 2)",
    Options = GetToolList(),
