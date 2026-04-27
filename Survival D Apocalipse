@@ -1,13 +1,15 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local VIM = game:GetService("VirtualInputManager")
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | v6 Pro Stable",
-   LoadingTitle = "Fixing Logic Errors...",
+   Name = "Ultimate Farmer | v6 Pro Combat+",
+   LoadingTitle = "Loading Advanced Combat Systems...",
    LoadingSubtitle = "by Gemini AI",
 })
 
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
+local OtherTab = Window:CreateTab("Other", 4483362458)
 
 -- Config Shared
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
@@ -15,12 +17,13 @@ local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "
 -- State & Thresholds
 local SafeHealth1, SafeHealth2 = 60, 60
 local DetectionRange1 = 50 
-local CenterPosHunter = Vector3.new(0, 7, 0) -- Default 0, 7, 0 ตามสั่ง
-
+local CenterPosHunter = Vector3.new(0, 7, 0)
 local HunterEnabled, SquareEnabled = false, false
-local IsEating1, IsEating2 = false, false
-local EatTimer1, EatTimer2 = 0, 0 -- ใช้เก็บเวลาแทนการ task.wait
+local FocusBloater = false -- โหมดโฟกัสตัวระเบิด
+local AutoEquipEnabled = false -- โหมดสลับอาวุธ & Anti-Ragdoll
 
+local IsEating1, IsEating2 = false, false
+local EatTimer1, EatTimer2 = 0, 0
 local StartPosHunter, StartPosSquare = nil, nil
 local TargetYLevel = -7
 local LoopIndex = 1
@@ -29,15 +32,33 @@ local LoopPoints = {
     Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด (Safe Logic)
-local function GetMovementSettings(isDanger, isVerticalMoving)
-    if isVerticalMoving then
-        return 1, 0.05 -- ย้ายชั้น: 1 stud / 0.05s
-    elseif isDanger then
-        return 1, 0.02 -- Danger: 1 stud / 0.02s
+-- ระบบสลับอาวุธ (State Check เพื่อไม่ให้กดปุ่มรัวเกินไป)
+local CurrentWeaponState = nil -- 2 หรือ 4
+
+local function HandleAutoEquip(root, hum)
+    if not AutoEquipEnabled or not root or not hum then return end
+    
+    local y = root.Position.Y
+    if y >= -22 and y <= -18 then
+        if CurrentWeaponState ~= 4 then
+            VIM:SendKeyEvent(true, Enum.KeyCode.Four, false, game)
+            hum.AutoRotate = false -- ล็อคการหันเพื่อกัน Ragdoll
+            CurrentWeaponState = 4
+        end
     else
-        return 0.5, 0.1 -- Normal: 0.5 stud / 0.1s
+        if CurrentWeaponState ~= 2 then
+            VIM:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+            hum.AutoRotate = true -- ปลดล็อคการหัน
+            CurrentWeaponState = 2
+        end
     end
+end
+
+-- ฟังก์ชันคำนวณสปีด
+local function GetMovementSettings(isDanger, isVerticalMoving)
+    if isVerticalMoving then return 1, 0.05
+    elseif isDanger then return 1, 0.02
+    else return 0.5, 0.1 end
 end
 
 -- ==========================================
@@ -55,6 +76,12 @@ MainTab:CreateButton({
          CenterLabel:SetText(string.format("พิกัดศูนย์กลาง: %.1f, -7.0, %.1f", CenterPosHunter.X, CenterPosHunter.Z))
       end
    end,
+})
+
+MainTab:CreateToggle({
+   Name = "โหมดโฟกัสตัวระเบิด (Focus Bloater)",
+   CurrentValue = false,
+   Callback = function(v) FocusBloater = v end,
 })
 
 MainTab:CreateSlider({
@@ -84,45 +111,56 @@ MainTab:CreateToggle({
          local lastSwitch, lockedEnemy = 0, nil
          while HunterEnabled do
             local player = game.Players.LocalPlayer
-            local char = player.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
+            local char, root, hum = player.Character, player.Character and player.Character:FindFirstChild("HumanoidRootPart"), player.Character and player.Character:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
             if root and hum and targetAttr and StartPosHunter then
+                HandleAutoEquip(root, hum)
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
                 
-                -- 1. เช็ค Bloater (แบบปลอดภัย v6 Adjusted Style)
-                local isBloater = false
+                -- ตรวจสอบ Bloater ในระยะ
+                local explodingBloater = false
+                local targetBloater = nil
+                
                 for _, obj in pairs(charFolder:GetChildren()) do
                     if obj.Name == "Bloater" then
                         local bRoot = obj:FindFirstChild("HumanoidRootPart")
-                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
-                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
+                        if bRoot then
+                            local dist = (root.Position - bRoot.Position).Magnitude
+                            local isExploding = bRoot:GetAttribute("Speed") == nil
+                            
+                            -- ถ้ามันกำลังจะระเบิดในระยะ 30 studs -> ต้องหนี
+                            if dist <= 30 and isExploding then
+                                explodingBloater = true
+                            end
+                            -- ถ้าเราเปิดโหมด Focus และมันยังไม่ระเบิด และอยู่ในระยะตรวจจับ -> หมายตาไว้
+                            if FocusBloater and not isExploding and (bRoot.Position - CenterPosHunter).Magnitude <= DetectionRange1 then
+                                targetBloater = bRoot
+                            end
                         end
                     end
                 end
 
-                -- 2. Hunger Delay Logic (Non-blocking)
-                if hunger < 5 then
-                    IsEating1 = true
-                    EatTimer1 = 0
+                -- Hunger Delay Logic
+                if hunger < 5 then IsEating1 = true EatTimer1 = 0
                 elseif hunger >= 5 and IsEating1 then
-                    if EatTimer1 == 0 then EatTimer1 = tick() + 2 end -- ตั้งเวลาเป้าหมายล่วงหน้า 2 วิ
+                    if EatTimer1 == 0 then EatTimer1 = tick() + 2 end
                     if tick() >= EatTimer1 then IsEating1 = false end
                 end
 
                 local targetPoint = nil
-                local isDanger = (isBloater or hum.Health < SafeHealth1)
+                local isDanger = (explodingBloater or hum.Health < SafeHealth1)
 
-                -- 3. Target Selection
                 if isDanger then 
-                    -- จุดปลอดภัย: พิกัดศูนย์กลาง X, Z แกน Y = -20
                     targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
                 elseif IsEating1 then
                     targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
+                elseif FocusBloater and targetBloater then
+                    -- โจมตี Bloater ก่อนถ้าเปิดโหมด Focus
+                    targetPoint = Vector3.new(targetBloater.Position.X, -7, targetBloater.Position.Z)
                 else
+                    -- ลอจิกหาศัตรูปกติ
                     if tick() - lastSwitch >= 1 then
                         local maxD, furthest = -1, nil
                         for _, obj in pairs(charFolder:GetChildren()) do
@@ -146,9 +184,7 @@ MainTab:CreateToggle({
                 local isVertical = math.abs(root.Position.Y - targetPoint.Y) > 0.5
                 local step, waitTime = GetMovementSettings(isDanger, isVertical)
                 local dir = (targetPoint - root.Position)
-                if dir.Magnitude > 0.1 then 
-                    root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) 
-                end
+                if dir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
@@ -157,23 +193,13 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- หมวด 2: Square Loop Farm
+-- หมวด 2: Square Loop Farm (เพิ่ม AutoEquip)
 -- ==========================================
-SquareTab:CreateSlider({
-   Name = "ระดับแกน Y ตอนวนลูป",
-   Range = {-20, -5}, Increment = 1, Suffix = " Y", CurrentValue = -7,
-   Flag = "YLevel", Callback = function(v) TargetYLevel = v end,
-})
-
-SquareTab:CreateSlider({
-   Name = "ตั้งค่าเลือดขั้นต่ำ",
-   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
-   Flag = "H2_Safe", Callback = function(v) SafeHealth2 = v end,
-})
-
+SquareTab:CreateSlider({ Name = "ระดับแกน Y", Range = {-20, -5}, Increment = 1, Suffix = " Y", CurrentValue = -7, Callback = function(v) TargetYLevel = v end })
+SquareTab:CreateSlider({ Name = "เลือดที่ต้องหนี", Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60, Callback = function(v) SafeHealth2 = v end })
 SquareTab:CreateToggle({
-   Name = "เริ่มระบบ Square Loop Farm",
-   CurrentValue = false, Flag = "SquareToggle",
+   Name = "เริ่ม Square Loop Farm",
+   CurrentValue = false,
    Callback = function(Value)
       SquareEnabled = Value
       if Value then
@@ -181,62 +207,58 @@ SquareTab:CreateToggle({
          local root = char and char:FindFirstChild("HumanoidRootPart")
          if root then StartPosSquare = root.Position end
       end
-
       task.spawn(function()
          while SquareEnabled do
             local player = game.Players.LocalPlayer
-            local char, root, hum = player.Character, player.Character:FindFirstChild("HumanoidRootPart"), player.Character:FindFirstChild("Humanoid")
-            local charFolder = workspace:FindFirstChild("Characters")
-            local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
-
+            local char, root, hum = player.Character, player.Character and player.Character:FindFirstChild("HumanoidRootPart"), player.Character and player.Character:FindFirstChild("Humanoid")
+            local targetAttr = workspace:FindFirstChild("Characters") and workspace.Characters:FindFirstChild(player.Name)
             if root and hum and targetAttr and StartPosSquare then
+                HandleAutoEquip(root, hum)
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
-                
-                -- Bloater Check Safe
                 local isBloater = false
-                for _, obj in pairs(charFolder:GetChildren()) do
+                for _, obj in pairs(workspace.Characters:GetChildren()) do
                     if obj.Name == "Bloater" then
                         local bRoot = obj:FindFirstChild("HumanoidRootPart")
-                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
-                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
-                        end
+                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 and bRoot:GetAttribute("Speed") == nil then isBloater = true break end
                     end
                 end
-
-                -- Hunger Delay Logic (Non-blocking)
-                if hunger < 5 then
-                    IsEating2 = true
-                    EatTimer2 = 0
+                if hunger < 5 then IsEating2 = true EatTimer2 = 0
                 elseif hunger >= 5 and IsEating2 then
                     if EatTimer2 == 0 then EatTimer2 = tick() + 2 end
                     if tick() >= EatTimer2 then IsEating2 = false end
                 end
-                
                 local isDanger = (isBloater or hum.Health < SafeHealth2)
                 local finalTarget = nil
-
-                if isDanger then 
-                    local p = LoopPoints[LoopIndex]
-                    finalTarget = Vector3.new(p.X, -20, p.Z)
-                elseif IsEating2 then
-                    finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
-                else 
-                    local p = LoopPoints[LoopIndex]
-                    finalTarget = Vector3.new(p.X, TargetYLevel, p.Z) 
-                end
-
+                if isDanger then finalTarget = Vector3.new(LoopPoints[LoopIndex].X, -20, LoopPoints[LoopIndex].Z)
+                elseif IsEating2 then finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
+                else finalTarget = Vector3.new(LoopPoints[LoopIndex].X, TargetYLevel, LoopPoints[LoopIndex].Z) end
                 local isVertical = math.abs(root.Position.Y - finalTarget.Y) > 0.5
                 local step, waitTime = GetMovementSettings(isDanger, isVertical)
-
                 if (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude < 1 and not isDanger and not IsEating2 then
                     LoopIndex = LoopIndex + 1 if LoopIndex > #LoopPoints then LoopIndex = 1 end
                 end
-
                 local moveDir = (finalTarget - root.Position)
                 if moveDir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude)) end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
       end)
+   end,
+})
+
+-- ==========================================
+-- หมวด 3: Other (Combat Aux)
+-- ==========================================
+OtherTab:CreateToggle({
+   Name = "ระบบสลับอาวุธ & Anti-Ragdoll (Y -18 ถึง -22)",
+   CurrentValue = false,
+   Callback = function(v) 
+      AutoEquipEnabled = v 
+      if not v then
+         local char = game.Players.LocalPlayer.Character
+         local hum = char and char:FindFirstChild("Humanoid")
+         if hum then hum.AutoRotate = true end -- คืนค่าปกติเมื่อปิด
+         CurrentWeaponState = nil
+      end
    end,
 })
