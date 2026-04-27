@@ -5,16 +5,16 @@ local LocalPlayer = Players.LocalPlayer
 
 local Window = Rayfield:CreateWindow({
    Name = "Ultimate Farmer | v6 Pro SmartEquip+",
-   LoadingTitle = "Weapon Logic Fixed...",
+   LoadingTitle = "Applying Strict Name Check...",
    LoadingSubtitle = "by Gemini AI",
 })
 
--- [[ Tabs Setup ]]
+-- [[ Tabs ]]
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 local OtherTab = Window:CreateTab("Other", 4483362458)
 
--- [[ State Variables ]]
+-- [[ Shared State ]]
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 local SafeHealth1 = 60
 local DetectionRange1 = 50 
@@ -24,7 +24,7 @@ local FocusBloater = false
 local AutoEquipEnabled = false
 local AntiLagEnabled = false
 
--- Weapon Config
+-- Weapon Selection
 local SelectedMelee = ""
 local SelectedRanged = ""
 local LastPressTime = 0
@@ -34,10 +34,11 @@ local EatTimer1 = 0
 local StartPosHunter = nil
 
 -- ==========================================
--- ระบบ Anti Lag (คงเดิม)
+-- ระบบ Anti Lag (คงเดิม: ลบ Model ใน Workspace)
 -- ==========================================
 workspace.ChildAdded:Connect(function(child)
     if AntiLagEnabled then
+        -- ตรวจสอบชื่อ Model จากรูป
         if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
             task.delay(10, function()
                 if child and child.Parent then child:Destroy() end
@@ -47,51 +48,43 @@ workspace.ChildAdded:Connect(function(child)
 end)
 
 -- ==========================================
--- ฟังก์ชันตรวจสอบอาวุธ (The Core Logic)
+-- ระบบสลับอาวุธ (Strict Name Check Logic)
 -- ==========================================
 
--- ดึงรายชื่อจาก Backpack เพื่อแสดงใน UI เท่านั้น
+-- ฟังก์ชันดึงรายชื่อเพื่อใช้ใน Dropdown
 local function GetToolList()
     local tools = {}
+    -- ดึงจาก Backpack
     for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") then table.insert(tools, tool.Name) end
-    end
-    -- รวมของที่ถืออยู่ในมือปัจจุบันด้วยเผื่อลืม
-    local charFolder = workspace:FindFirstChild("Characters")
-    local myChar = charFolder and charFolder:FindFirstChild(LocalPlayer.Name)
-    if myChar then
-        for _, tool in pairs(myChar:GetChildren()) do
-            if tool:IsA("Tool") and not table.find(tools, tool.Name) then table.insert(tools, tool.Name) end
-        end
     end
     return tools
 end
 
--- ระบบเช็คใน Workspace.Characters.[Name] ตามที่คุณสั่ง
 local function HandleAutoEquip(root, hum)
     if not AutoEquipEnabled or not root or not hum then return end
     
+    -- เข้าถึงโฟลเดอร์ Characters และตัวละครเราโดยใช้ชื่อ
     local charFolder = workspace:FindFirstChild("Characters")
     if not charFolder then return end
     
-    -- หาโฟลเดอร์ตัวละครตามชื่อผู้เล่นปัจจุบัน
     local myCharInWorkspace = charFolder:FindFirstChild(LocalPlayer.Name)
     if not myCharInWorkspace then return end
 
     local y = root.Position.Y
     local isInSafeZone = (y >= -22 and y <= -18)
     
-    -- กำหนดอาวุธเป้าหมายและปุ่ม
-    local targetWeaponName = isInSafeZone and SelectedRanged or SelectedMelee
+    -- เลือกชื่ออาวุธและปุ่มตามเงื่อนไข Y
+    local targetName = isInSafeZone and SelectedRanged or SelectedMelee
     local targetKey = isInSafeZone and Enum.KeyCode.Four or Enum.KeyCode.Two
 
-    if targetWeaponName == "" or targetWeaponName == nil then return end
+    if targetName == "" or targetName == nil then return end
 
-    -- เช็คว่าใน workspace.Characters.[ชื่อเรา] มีอาวุธชิ้นนั้นอยู่ไหม
-    local isHolding = myCharInWorkspace:FindFirstChild(targetWeaponName)
+    -- **CHECK POINT**: เช็คแค่ชื่อ (Name) ใน Workspace เท่านั้น ไม่สนข้อมูลภายใน
+    local isHolding = myCharInWorkspace:FindFirstChild(targetName)
 
     if not isHolding then
-        -- ถ้าไม่มี ให้กดปุ่มทุก 1 วินาที (จนกว่าจะตรวจเจอในรอบถัดไป)
+        -- ถ้ายังไม่มีชื่อนี้ในตัวละคร ให้กดปุ่มซ้ำทุก 1 วินาที
         if tick() - LastPressTime >= 1 then
             VIM:SendKeyEvent(true, targetKey, false, game)
             task.wait(0.05)
@@ -105,7 +98,7 @@ local function HandleAutoEquip(root, hum)
 end
 
 -- ==========================================
--- หมวด 1: Auto Hunter (คงระบบเดิมทั้งหมด)
+-- หมวด 1: Auto Hunter (คงเดิม)
 -- ==========================================
 local CenterLabel = MainTab:CreateLabel("จุดศูนย์กลางปัจจุบัน: 0, 7, 0")
 
@@ -229,7 +222,7 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- หมวด 3: Other (Anti Lag & Improved Weapon Selection)
+-- หมวด 3: Other (Anti Lag & Selection)
 -- ==========================================
 OtherTab:CreateToggle({
    Name = "Anti Lag (ลบกระสุน/หิน อัตโนมัติ 10วิ)",
