@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | v6 Adjusted",
-   LoadingTitle = "Restoring v6 Systems...",
+   Name = "Ultimate Farmer | v6 Pro Custom",
+   LoadingTitle = "Restoring & Upgrading v6...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -13,52 +13,63 @@ local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
 
 -- State & Thresholds
-local SafeHealth1 = 60
-local SafeHealth2 = 60
-local HunterEnabled = false
-local SquareEnabled = false
-local StartPosHunter = nil
-local StartPosSquare = nil
+local SafeHealth1, SafeHealth2 = 60, 60
+local DetectionRange1 = 50 -- Default 50 studs
+local CenterPosHunter = Vector3.new(0, -7, 0) -- Default 0, -7, 0
+
+local HunterEnabled, SquareEnabled = false, false
+local IsEating1, IsEating2 = false, false -- สำหรับเช็คสถานะการรอ 2 วิ
+local StartPosHunter, StartPosSquare = nil, nil
 local TargetYLevel = -7
 local LoopIndex = 1
 local LoopPoints = {
-    Vector3.new(0, 0, 50),
-    Vector3.new(0, 0, -50),
-    Vector3.new(50, 0, -50),
-    Vector3.new(-50, 0, 50)
+    Vector3.new(0, 0, 50), Vector3.new(0, 0, -50),
+    Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด (ปรับปรุงตามสั่ง)
+-- ฟังก์ชันคำนวณสปีด (อิง v6 Adjusted)
 local function GetMovementSettings(isDanger, isVerticalMoving)
     if isVerticalMoving then
-        -- ระหว่างเปลี่ยนระดับชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
-        return 1, 0.05 
+        return 1, 0.05 -- ย้ายชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
     elseif isDanger then
-        -- Turbo Safety (กรณีอยู่ที่ระดับแกน Y ปลอดภัยแล้วแต่ยังอันตราย): 1 stud ทุก 0.02 วิ
-        return 1, 0.02
+        return 1, 0.02 -- Turbo Danger (หนีในแนวราบ): 1 stud ทุก 0.02 วิ
     else
-        -- Normal Mode (เดินราบปกติ): 0.5 stud ทุก 0.1 วิ
-        return 0.5, 0.1
+        return 0.5, 0.1 -- Normal Mode: 0.5 stud ทุก 0.1 วิ
     end
 end
 
 -- ==========================================
 -- หมวด 1: Auto Hunter
 -- ==========================================
+local CenterLabel = MainTab:CreateLabel("พิกัดศูนย์กลาง: ยังไม่ได้กำหนด")
+
+MainTab:CreateButton({
+   Name = "กำหนดจุดนี้เป็นจุดศูนย์กลาง (Fix Y -7)",
+   Callback = function()
+      local char = game.Players.LocalPlayer.Character
+      local root = char and char:FindFirstChild("HumanoidRootPart")
+      if root then
+         CenterPosHunter = Vector3.new(root.Position.X, -7, root.Position.Z)
+         CenterLabel:SetText(string.format("พิกัดศูนย์กลาง: %.1f, -7.0, %.1f", CenterPosHunter.X, CenterPosHunter.Z))
+      end
+   end,
+})
+
 MainTab:CreateSlider({
-   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
-   Range = {10, 100},
-   Increment = 1,
-   Suffix = " HP",
-   CurrentValue = 60,
-   Flag = "HealthSlider1",
-   Callback = function(Value) SafeHealth1 = Value end,
+   Name = "ระยะการตรวจจับ (Studs)",
+   Range = {0, 100}, Increment = 1, Suffix = " studs", CurrentValue = 50,
+   Flag = "RangeSlider1", Callback = function(v) DetectionRange1 = v end,
+})
+
+MainTab:CreateSlider({
+   Name = "ตั้งค่าเลือดขั้นต่ำ",
+   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
+   Flag = "H1_Safe", Callback = function(v) SafeHealth1 = v end,
 })
 
 MainTab:CreateToggle({
    Name = "เริ่มระบบ Auto Hunter",
-   CurrentValue = false,
-   Flag = "HunterToggle", 
+   CurrentValue = false, Flag = "HunterToggle", 
    Callback = function(Value)
       HunterEnabled = Value
       if Value then
@@ -68,13 +79,10 @@ MainTab:CreateToggle({
       end
       
       task.spawn(function()
-         local lastSwitch = 0
-         local lockedEnemy = nil
+         local lastSwitch, lockedEnemy = 0, nil
          while HunterEnabled do
             local player = game.Players.LocalPlayer
-            local char = player.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
+            local char, root, hum = player.Character, player.Character and player.Character:FindFirstChild("HumanoidRootPart"), player.Character and player.Character:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
@@ -82,47 +90,48 @@ MainTab:CreateToggle({
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" then
-                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
-                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
-                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
-                        end
+                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
+                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
                     end
                 end
 
                 local targetPoint = nil
                 local isDanger = (isBloater or hum.Health < SafeHealth1)
 
-                if isDanger then targetPoint = Vector3.new(20, -20, 0)
-                elseif hunger < 5 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
+                -- Logic การเลือกเป้าหมาย
+                if isDanger then 
+                    targetPoint = Vector3.new(20, -20, 0)
+                elseif hunger < 5 or IsEating1 then
+                    targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
+                    if not IsEating1 then IsEating1 = true end
+                    -- ถ้ารอจนหิว > 5 แล้ว ให้รอต่ออีก 2 วินาที
+                    if hunger > 5 then
+                        task.wait(2)
+                        IsEating1 = false
+                    end
                 else
                     if tick() - lastSwitch >= 1 then
-                        local furthest = nil
-                        local maxD = -1
+                        local maxD, furthest = -1, nil
                         for _, obj in pairs(charFolder:GetChildren()) do
                             if not game.Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") and obj.Humanoid.Health > 0 then
-                                local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
-                                if dMe > maxD and (obj.HumanoidRootPart.Position - Vector3.new(0,0,0)).Magnitude <= 100 then
-                                    maxD = dMe furthest = obj.HumanoidRootPart
+                                -- ตรวจระยะห่างจากจุดศูนย์กลางที่ตั้งไว้
+                                local dFromCenter = (obj.HumanoidRootPart.Position - CenterPosHunter).Magnitude
+                                if dFromCenter <= DetectionRange1 then
+                                    local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
+                                    if dMe > maxD then maxD = dMe furthest = obj.HumanoidRootPart end
                                 end
                             end
                         end
                         lockedEnemy = furthest lastSwitch = tick()
                     end
                     if lockedEnemy and lockedEnemy.Parent then targetPoint = Vector3.new(lockedEnemy.Position.X, -7, lockedEnemy.Position.Z)
-                    else targetPoint = Vector3.new(20, -20, 0) end
+                    else targetPoint = Vector3.new(CenterPosHunter.X, -7, CenterPosHunter.Z) end
                 end
 
-                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
-                local isVerticalMoving = math.abs(root.Position.Y - targetPoint.Y) > 0.5
-                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
-
-                if targetPoint then
-                    local dir = (targetPoint - root.Position)
-                    if dir.Magnitude > 0.1 then
-                        root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude))
-                    end
-                end
+                local isVertical = math.abs(root.Position.Y - targetPoint.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVertical)
+                local dir = (targetPoint - root.Position)
+                if dir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
@@ -135,28 +144,19 @@ MainTab:CreateToggle({
 -- ==========================================
 SquareTab:CreateSlider({
    Name = "ระดับแกน Y ตอนวนลูป",
-   Range = {-20, -5},
-   Increment = 1,
-   Suffix = " Y",
-   CurrentValue = -7,
-   Flag = "YLevelSlider",
-   Callback = function(Value) TargetYLevel = Value end,
+   Range = {-20, -5}, Increment = 1, Suffix = " Y", CurrentValue = -7,
+   Flag = "YLevel", Callback = function(v) TargetYLevel = v end,
 })
 
 SquareTab:CreateSlider({
-   Name = "ตั้งค่าเลือดขั้นต่ำ (Safe Health)",
-   Range = {10, 100},
-   Increment = 1,
-   Suffix = " HP",
-   CurrentValue = 60,
-   Flag = "HealthSlider2",
-   Callback = function(Value) SafeHealth2 = Value end,
+   Name = "ตั้งค่าเลือดขั้นต่ำ",
+   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
+   Flag = "H2_Safe", Callback = function(v) SafeHealth2 = v end,
 })
 
 SquareTab:CreateToggle({
    Name = "เริ่มระบบ Square Loop Farm",
-   CurrentValue = false,
-   Flag = "SquareToggle",
+   CurrentValue = false, Flag = "SquareToggle",
    Callback = function(Value)
       SquareEnabled = Value
       if Value then
@@ -168,9 +168,7 @@ SquareTab:CreateToggle({
       task.spawn(function()
          while SquareEnabled do
             local player = game.Players.LocalPlayer
-            local char = player.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
+            local char, root, hum = player.Character, player.Character:FindFirstChild("HumanoidRootPart"), player.Character:FindFirstChild("Humanoid")
             local charFolder = workspace:FindFirstChild("Characters")
             local targetAttr = charFolder and charFolder:FindFirstChild(player.Name)
 
@@ -178,42 +176,36 @@ SquareTab:CreateToggle({
                 local hunger = targetAttr:GetAttribute("Hunger") or 100
                 local isBloater = false
                 for _, obj in pairs(charFolder:GetChildren()) do
-                    if obj.Name == "Bloater" then
-                        local bRoot = obj:FindFirstChild("HumanoidRootPart")
-                        if bRoot and (root.Position - bRoot.Position).Magnitude <= 30 then
-                            if bRoot:GetAttribute("Speed") == nil then isBloater = true break end
-                        end
+                    if obj.Name == "Bloater" and (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 then
+                        if obj.HumanoidRootPart:GetAttribute("Speed") == nil then isBloater = true break end
                     end
                 end
                 
                 local isDanger = (isBloater or hum.Health < SafeHealth2)
                 local finalTarget = nil
 
-                if isDanger then
-                    local p = LoopPoints[LoopIndex]
-                    finalTarget = Vector3.new(p.X, -20, p.Z)
-                elseif hunger < 5 then
+                if isDanger then 
+                    finalTarget = Vector3.new(LoopPoints[LoopIndex].X, -20, LoopPoints[LoopIndex].Z)
+                elseif hunger < 5 or IsEating2 then
                     finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
-                else
-                    local p = LoopPoints[LoopIndex]
-                    finalTarget = Vector3.new(p.X, TargetYLevel, p.Z)
+                    if not IsEating2 then IsEating2 = true end
+                    if hunger > 5 then
+                        task.wait(2)
+                        IsEating2 = false
+                    end
+                else 
+                    finalTarget = Vector3.new(LoopPoints[LoopIndex].X, TargetYLevel, LoopPoints[LoopIndex].Z) 
                 end
 
-                -- ตรวจสอบการเคลื่อนที่แนวตั้ง (Vertical Check)
-                local isVerticalMoving = math.abs(root.Position.Y - finalTarget.Y) > 0.5
-                local step, waitTime = GetMovementSettings(isDanger, isVerticalMoving)
+                local isVertical = math.abs(root.Position.Y - finalTarget.Y) > 0.5
+                local step, waitTime = GetMovementSettings(isDanger, isVertical)
+
+                if (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude < 1 and not isDanger and not IsEating2 then
+                    LoopIndex = LoopIndex + 1 if LoopIndex > #LoopPoints then LoopIndex = 1 end
+                end
 
                 local moveDir = (finalTarget - root.Position)
-                local horizontalDist = (Vector3.new(finalTarget.X, 0, finalTarget.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
-                
-                if horizontalDist < 1 and hunger >= 5 and not isDanger then
-                    LoopIndex = LoopIndex + 1
-                    if LoopIndex > #LoopPoints then LoopIndex = 1 end
-                end
-
-                if moveDir.Magnitude > 0.1 then
-                    root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude))
-                end
+                if moveDir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + moveDir.Unit * math.min(step, moveDir.Magnitude)) end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
