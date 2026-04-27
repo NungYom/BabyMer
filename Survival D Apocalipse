@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Ultimate Farmer | v6 Pro Custom",
-   LoadingTitle = "Restoring & Upgrading v6...",
+   Name = "Ultimate Farmer | v6 Pro Custom Update",
+   LoadingTitle = "Initializing Center-Based Safety...",
    LoadingSubtitle = "by Gemini AI",
 })
 
@@ -14,11 +14,11 @@ local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "
 
 -- State & Thresholds
 local SafeHealth1, SafeHealth2 = 60, 60
-local DetectionRange1 = 50 -- Default 50 studs
-local CenterPosHunter = Vector3.new(0, -7, 0) -- Default 0, -7, 0
+local DetectionRange1 = 50 
+local CenterPosHunter = Vector3.new(0, 7, 0) -- ค่าเริ่มต้นตามที่กำหนด (0, 7, 0)
 
 local HunterEnabled, SquareEnabled = false, false
-local IsEating1, IsEating2 = false, false -- สำหรับเช็คสถานะการรอ 2 วิ
+local IsEating1, IsEating2 = false, false
 local StartPosHunter, StartPosSquare = nil, nil
 local TargetYLevel = -7
 local LoopIndex = 1
@@ -27,7 +27,7 @@ local LoopPoints = {
     Vector3.new(50, 0, -50), Vector3.new(-50, 0, 50)
 }
 
--- ฟังก์ชันคำนวณสปีด (อิง v6 Adjusted)
+-- ฟังก์ชันคำนวณสปีด (v6 Adjusted Logic)
 local function GetMovementSettings(isDanger, isVerticalMoving)
     if isVerticalMoving then
         return 1, 0.05 -- ย้ายชั้น (ขึ้น/ลง): 1 stud ทุก 0.05 วิ
@@ -41,7 +41,7 @@ end
 -- ==========================================
 -- หมวด 1: Auto Hunter
 -- ==========================================
-local CenterLabel = MainTab:CreateLabel("พิกัดศูนย์กลาง: ยังไม่ได้กำหนด")
+local CenterLabel = MainTab:CreateLabel("จุดศูนย์กลางปัจจุบัน: 0, 7, 0 (Default)")
 
 MainTab:CreateButton({
    Name = "กำหนดจุดนี้เป็นจุดศูนย์กลาง (Fix Y -7)",
@@ -98,13 +98,14 @@ MainTab:CreateToggle({
                 local targetPoint = nil
                 local isDanger = (isBloater or hum.Health < SafeHealth1)
 
-                -- Logic การเลือกเป้าหมาย
+                -- 🛡️ Logic การเลือกเป้าหมายและจุดปลอดภัย
                 if isDanger then 
-                    targetPoint = Vector3.new(20, -20, 0)
+                    -- จุดปลอดภัย: พิกัดศูนย์กลาง แต่แกน Y = -20
+                    targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
                 elseif hunger < 5 or IsEating1 then
                     targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
                     if not IsEating1 then IsEating1 = true end
-                    -- ถ้ารอจนหิว > 5 แล้ว ให้รอต่ออีก 2 วินาที
+                    -- รอจนหิว > 5 แล้ว รอเพิ่มอีก 2 วินาที
                     if hunger > 5 then
                         task.wait(2)
                         IsEating1 = false
@@ -114,7 +115,6 @@ MainTab:CreateToggle({
                         local maxD, furthest = -1, nil
                         for _, obj in pairs(charFolder:GetChildren()) do
                             if not game.Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") and obj.Humanoid.Health > 0 then
-                                -- ตรวจระยะห่างจากจุดศูนย์กลางที่ตั้งไว้
                                 local dFromCenter = (obj.HumanoidRootPart.Position - CenterPosHunter).Magnitude
                                 if dFromCenter <= DetectionRange1 then
                                     local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
@@ -124,14 +124,19 @@ MainTab:CreateToggle({
                         end
                         lockedEnemy = furthest lastSwitch = tick()
                     end
-                    if lockedEnemy and lockedEnemy.Parent then targetPoint = Vector3.new(lockedEnemy.Position.X, -7, lockedEnemy.Position.Z)
-                    else targetPoint = Vector3.new(CenterPosHunter.X, -7, CenterPosHunter.Z) end
+                    if lockedEnemy and lockedEnemy.Parent then 
+                        targetPoint = Vector3.new(lockedEnemy.Position.X, -7, lockedEnemy.Position.Z)
+                    else 
+                        targetPoint = Vector3.new(CenterPosHunter.X, -7, CenterPosHunter.Z) 
+                    end
                 end
 
                 local isVertical = math.abs(root.Position.Y - targetPoint.Y) > 0.5
                 local step, waitTime = GetMovementSettings(isDanger, isVertical)
                 local dir = (targetPoint - root.Position)
-                if dir.Magnitude > 0.1 then root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) end
+                if dir.Magnitude > 0.1 then 
+                    root.CFrame = CFrame.new(root.Position + dir.Unit * math.min(step, dir.Magnitude)) 
+                end
                 task.wait(waitTime)
             else task.wait(0.5) end
          end
@@ -185,7 +190,9 @@ SquareTab:CreateToggle({
                 local finalTarget = nil
 
                 if isDanger then 
-                    finalTarget = Vector3.new(LoopPoints[LoopIndex].X, -20, LoopPoints[LoopIndex].Z)
+                    -- จุดปลอดภัยของการวนลูป: พิกัด Loop ปัจจุบัน แต่แกน Y = -20
+                    local p = LoopPoints[LoopIndex]
+                    finalTarget = Vector3.new(p.X, -20, p.Z)
                 elseif hunger < 5 or IsEating2 then
                     finalTarget = Vector3.new(StartPosSquare.X, -8, StartPosSquare.Z)
                     if not IsEating2 then IsEating2 = true end
@@ -194,7 +201,8 @@ SquareTab:CreateToggle({
                         IsEating2 = false
                     end
                 else 
-                    finalTarget = Vector3.new(LoopPoints[LoopIndex].X, TargetYLevel, LoopPoints[LoopIndex].Z) 
+                    local p = LoopPoints[LoopIndex]
+                    finalTarget = Vector3.new(p.X, TargetYLevel, p.Z) 
                 end
 
                 local isVertical = math.abs(root.Position.Y - finalTarget.Y) > 0.5
