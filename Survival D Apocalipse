@@ -4,11 +4,11 @@ local LocalPlayer = Players.LocalPlayer
 
 local Window = Rayfield:CreateWindow({
    Name = "Ultimate Farmer | v6 Safe Travel+",
-   LoadingTitle = "Waypoint System Loading...",
+   LoadingTitle = "Restoring Controls & Waypoints...",
    LoadingSubtitle = "by Gemini AI",
 })
 
--- [[ Tabs Setup ]]
+-- [[ Tabs ]]
 local MainTab = Window:CreateTab("Auto Hunter", 4483362458)
 local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
 local OtherTab = Window:CreateTab("Other", 4483362458)
@@ -19,6 +19,7 @@ local SafeHealth1 = 60
 local DetectionRange1 = 50 
 local CenterPosHunter = Vector3.new(0, 7, 0)
 local HunterEnabled = false
+local FocusBloater = false
 local AntiLagEnabled = false
 
 -- Waypoint States
@@ -31,28 +32,14 @@ local Waypoints = {
 }
 
 -- Movement Control
-local MoveSpeed = 1 -- 1 stud
-local MoveInterval = 0.05 -- per 0.05s
+local MoveSpeed = 1 
+local MoveInterval = 0.05 
 
 -- ==========================================
--- ระบบ Anti Lag (คงเดิม)
--- ==========================================
-workspace.ChildAdded:Connect(function(child)
-    if AntiLagEnabled then
-        if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
-            task.delay(10, function()
-                if child and child.Parent then child:Destroy() end
-            end)
-        end
-    end
-end)
-
--- ==========================================
--- ฟังก์ชันสร้าง Waypoint ESP
+-- ระบบ Visual & Movement Helper
 -- ==========================================
 local function CreateWaypointESP(index, position)
     if Waypoints[index].Visual then Waypoints[index].Visual:Destroy() end
-    
     local part = Instance.new("Part")
     part.Name = "WP_Marker_" .. index
     part.Size = Vector3.new(2, 2, 2)
@@ -60,7 +47,7 @@ local function CreateWaypointESP(index, position)
     part.Anchored = true
     part.CanCollide = false
     part.Transparency = 0.5
-    part.Color = Color3.fromRGB(255, 255, 0)
+    part.Color = Color3.fromRGB(0, 255, 255)
     part.Material = Enum.Material.Neon
     part.Parent = workspace
     
@@ -75,20 +62,14 @@ local function CreateWaypointESP(index, position)
     tl.BackgroundTransparency = 1
     tl.Text = "WAYPOINT " .. index
     tl.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tl.TextStrokeTransparency = 0
     tl.TextSize = 14
-    
     Waypoints[index].Visual = part
 end
 
--- ==========================================
--- ระบบเคลื่อนที่แบบ Smooth
--- ==========================================
 local function SmoothMove(targetPos)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
-    
     local distance = (targetPos - root.Position).Magnitude
     if distance > 0.1 then
         local direction = (targetPos - root.Position).Unit
@@ -97,15 +78,38 @@ local function SmoothMove(targetPos)
 end
 
 -- ==========================================
--- หมวด 1: Auto Hunter (ตัดระบบสลับอาวุธออก)
+-- หมวด 1: Auto Hunter (กู้คืน Slider/Toggle ครบชุด)
 -- ==========================================
+local CenterLabel = MainTab:CreateLabel("จุดศูนย์กลาง: 0, 7, 0")
+
 MainTab:CreateButton({
-   Name = "กำหนดจุดศูนย์กลาง Hunter",
+   Name = "กำหนดจุดนี้เป็นจุดศูนย์กลาง Hunter",
    Callback = function()
       local char = LocalPlayer.Character
       local root = char and char:FindFirstChild("HumanoidRootPart")
-      if root then CenterPosHunter = root.Position end
+      if root then
+         CenterPosHunter = root.Position
+         CenterLabel:SetText(string.format("พิกัดศูนย์กลาง: %.1f, %.1f, %.1f", CenterPosHunter.X, CenterPosHunter.Y, CenterPosHunter.Z))
+      end
    end,
+})
+
+MainTab:CreateToggle({
+   Name = "โหมดโฟกัสตัวระเบิด (Focus Bloater)",
+   CurrentValue = false,
+   Callback = function(v) FocusBloater = v end,
+})
+
+MainTab:CreateSlider({
+   Name = "ระยะการตรวจจับ (Studs)",
+   Range = {0, 100}, Increment = 1, Suffix = " studs", CurrentValue = 50,
+   Callback = function(v) DetectionRange1 = v end,
+})
+
+MainTab:CreateSlider({
+   Name = "ตั้งค่าเลือดขั้นต่ำ (หนีลง Y-20)",
+   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
+   Callback = function(v) SafeHealth1 = v end,
 })
 
 MainTab:CreateToggle({
@@ -118,73 +122,71 @@ MainTab:CreateToggle({
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             local hum = char and char:FindFirstChild("Humanoid")
+            local charFolder = workspace:FindFirstChild("Characters")
             
-            -- ตรวจเช็คว่ามี Waypoint ไหนเปิดอยู่หรือไม่ (Priority 1)
+            -- Priority 1: Safe Travel Waypoint (ถ้าเปิด Move WP อยู่ให้ไปก่อน)
             local activeWP = nil
             for _, wp in pairs(Waypoints) do
                 if wp.Active and wp.Pos then activeWP = wp.Pos break end
             end
-            
+
             if root and hum then
                 if activeWP then
-                    -- เดินทางไป Waypoint
                     SmoothMove(activeWP)
-                    task.wait(MoveInterval)
                 else
-                    -- เช็คว่าเพิ่งปิด Waypoint มาหรือไม่ (ต้องกลับไป Center)
-                    -- ในที่นี้เราจะรัน Logic Hunter ปกติถ้าไม่มี WP active
-                    -- แต่ถ้าอยู่นอกระยะ หรือ HunterEnabled แต่ไม่มีเป้าหมาย ให้กลับ Center
-                    local charFolder = workspace:FindFirstChild("Characters")
-                    local lockedEnemy = nil
+                    -- Logic Hunter ปกติ
+                    local targetPoint = nil
+                    local targetBloater = nil
                     
-                    -- Logic ค้นหาศัตรูพื้นฐาน (สั้นลง)
-                    local maxD, furthest = -1, nil
-                    for _, obj in pairs(charFolder:GetChildren()) do
-                        if not Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 then
-                            local dFromCenter = (obj.HumanoidRootPart.Position - CenterPosHunter).Magnitude
-                            if dFromCenter <= DetectionRange1 then
-                                local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
-                                if dMe > maxD then maxD = dMe furthest = obj.HumanoidRootPart end
+                    -- ตรวจสอบ Bloater และความปลอดภัย
+                    local isDanger = (hum.Health < SafeHealth1)
+                    
+                    if isDanger then
+                        targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
+                    else
+                        -- ค้นหาศัตรู
+                        local maxD, furthest = -1, nil
+                        for _, obj in pairs(charFolder:GetChildren()) do
+                            if not Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 then
+                                local dFromCenter = (obj.HumanoidRootPart.Position - CenterPosHunter).Magnitude
+                                if dFromCenter <= DetectionRange1 then
+                                    local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
+                                    if dMe > maxD then maxD = dMe furthest = obj.HumanoidRootPart end
+                                end
                             end
                         end
+                        targetPoint = furthest and Vector3.new(furthest.Position.X, -7, furthest.Position.Z) or CenterPosHunter
                     end
-                    lockedEnemy = furthest
-                    
-                    local targetPoint = lockedEnemy and Vector3.new(lockedEnemy.Position.X, -7, lockedEnemy.Position.Z) or CenterPosHunter
-                    
-                    -- หากเลือดน้อย ให้หนีไป Y -20 ที่ Center
-                    if hum.Health < SafeHealth1 then
-                        targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
-                    end
-                    
                     SmoothMove(targetPoint)
-                    task.wait(MoveInterval)
                 end
-            else
-                task.wait(0.5)
             end
+            task.wait(MoveInterval)
          end
       end)
    end,
 })
 
 -- ==========================================
--- หมวด 3: Other (Safe Travel & Waypoints)
+-- หมวด 3: Other (Anti Lag & Safe Travel Waypoints)
 -- ==========================================
-
 OtherTab:CreateToggle({
    Name = "Anti Lag (ลบ Spit/Boulder)",
    CurrentValue = false,
    Callback = function(v) AntiLagEnabled = v end,
 })
 
+workspace.ChildAdded:Connect(function(child)
+    if AntiLagEnabled then
+        if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
+            task.delay(10, function() if child and child.Parent then child:Destroy() end end)
+        end
+    end
+end)
+
 OtherTab:CreateSlider({
    Name = "Safe Travel Y Axis",
-   Range = {-20, 2},
-   Increment = 1,
-   Suffix = " Y",
-   CurrentValue = -20,
-   Callback = function(Value) TravelY = Value end,
+   Range = {-20, 2}, Increment = 1, Suffix = " Y", CurrentValue = -20,
+   Callback = function(v) TravelY = v end,
 })
 
 OtherTab:CreateSection("Safe Long Distance Waypoints")
@@ -199,7 +201,7 @@ for i = 1, 4 do
              local pos = Vector3.new(root.Position.X, TravelY, root.Position.Z)
              Waypoints[i].Pos = pos
              CreateWaypointESP(i, pos)
-             Rayfield:Notify({Title = "Waypoint Saved", Content = "บันทึกจุดที่ " .. i .. " เรียบร้อยแล้ว", Duration = 2})
+             Rayfield:Notify({Title = "Waypoint Saved", Content = "บันทึกจุดที่ " .. i .. " ที่ Y: " .. TravelY, Duration = 2})
           end
        end,
     })
@@ -208,27 +210,23 @@ for i = 1, 4 do
        Name = "เคลื่อนที่ไป Waypoint " .. i,
        CurrentValue = false,
        Callback = function(Value)
-          -- ปิด WP อื่นๆ เมื่อเปิดอันใหม่ (เพื่อไม่ให้แย่งกัน)
           if Value then
               for idx, wp in pairs(Waypoints) do if idx ~= i then wp.Active = false end end
           end
           Waypoints[i].Active = Value
           
-          -- ระบบ Loop เคลื่อนที่อิสระ (กรณีไม่ได้เปิด Auto Hunt)
           task.spawn(function()
               while Waypoints[i].Active and not HunterEnabled do
-                  if Waypoints[i].Pos then
-                      SmoothMove(Waypoints[i].Pos)
-                  end
+                  if Waypoints[i].Pos then SmoothMove(Waypoints[i].Pos) end
                   task.wait(MoveInterval)
               end
               
-              -- หากปิดปุ่ม ให้ Move กลับไป Center Auto Hunt
+              -- หากปิด Move และไม่ได้เปิด Hunter ให้กลับ Center
               if not Waypoints[i].Active and not HunterEnabled then
-                  local distanceToCenter = (LocalPlayer.Character.HumanoidRootPart.Position - CenterPosHunter).Magnitude
-                  while distanceToCenter > 1 and not Waypoints[i].Active and not HunterEnabled do
+                  local distance = (LocalPlayer.Character.HumanoidRootPart.Position - CenterPosHunter).Magnitude
+                  while distance > 1 and not Waypoints[i].Active and not HunterEnabled do
                       SmoothMove(CenterPosHunter)
-                      distanceToCenter = (LocalPlayer.Character.HumanoidRootPart.Position - CenterPosHunter).Magnitude
+                      distance = (LocalPlayer.Character.HumanoidRootPart.Position - CenterPosHunter).Magnitude
                       task.wait(MoveInterval)
                   end
               end
