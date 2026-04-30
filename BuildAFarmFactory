@@ -1,0 +1,100 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Auto Farm Utility v3",
+   LoadingTitle = "Ultimate Farmer | v6 Pro Custom",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = {
+      Enabled = false
+   }
+})
+
+local Tab = Window:CreateTab("Main Scripts", 4483362458)
+
+-- ตัวแปรควบคุม
+_G.AutoPlant = false
+_G.AutoSell = false
+_G.AutoRollBuy = false
+
+-- 1. Auto Plant (-15 to 15)
+Tab:CreateToggle({
+   Name = "Auto Click Plant",
+   CurrentValue = false,
+   Flag = "TogglePlant",
+   Callback = function(Value)
+      _G.AutoPlant = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoPlant do
+               local playerName = game.Players.LocalPlayer.Name
+               local plotPath = workspace:WaitForChild("Plots"):FindFirstChild(playerName)
+               if plotPath then
+                  local tiles = plotPath:WaitForChild("Tiles")
+                  for a = -15, 15 do
+                     for b = -15, 15 do
+                        if not _G.AutoPlant then break end
+                        local tileName = a .. "_" .. b
+                        local targetTile = tiles:FindFirstChild(tileName)
+                        if targetTile then
+                           game:GetService("ReplicatedStorage"):WaitForChild("Communication"):WaitForChild("ClickPlant"):FireServer(targetTile)
+                        end
+                        task.wait(0.01)
+                     end
+                     if not _G.AutoPlant then break end
+                  end
+               end
+               task.wait(0.5)
+            end
+         end)
+      end
+   end,
+})
+
+-- 2. Auto Sell (Every 5s)
+Tab:CreateToggle({
+   Name = "Auto Sell Crate",
+   CurrentValue = false,
+   Flag = "ToggleSell",
+   Callback = function(Value)
+      _G.AutoSell = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoSell do
+               game:GetService("ReplicatedStorage"):WaitForChild("Communication"):WaitForChild("SellCrate"):FireServer()
+               task.wait(5)
+            end
+         end)
+      end
+   end,
+})
+
+-- 3. Auto Roll & Buy Seeds (1-7)
+Tab:CreateToggle({
+   Name = "Auto Roll & Buy Seeds",
+   CurrentValue = false,
+   Flag = "ToggleRollBuy",
+   Callback = function(Value)
+      _G.AutoRollBuy = Value
+      if Value then
+         task.spawn(function()
+            while _G.AutoRollBuy do
+               -- ขั้นตอนที่ 1: รัน DoRoll
+               pcall(function()
+                  game:GetService("ReplicatedStorage"):WaitForChild("Communication"):WaitForChild("DoRoll"):InvokeServer()
+               end)
+               task.wait(0.1)
+
+               -- ขั้นตอนที่ 2: รัน BuySeeds 1 ถึง 7
+               for c = 1, 7 do
+                  if not _G.AutoRollBuy then break end
+                  
+                  game:GetService("ReplicatedStorage"):WaitForChild("Communication"):WaitForChild("BuySeeds"):FireServer(c)
+                  task.wait(0.1) -- ความไวระดับกำลังดี ไม่หน่วงเครื่อง
+               end
+               
+               task.wait(0.2) -- พักแป๊บหนึ่งก่อนเริ่มลูป Roll ใหม่
+            end
+         end)
+      end
+   end,
+})
