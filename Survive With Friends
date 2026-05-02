@@ -1,0 +1,487 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- // Variables & Services // --
+local Player = game:GetService("Players").LocalPlayer
+local Mouse = Player:GetMouse()
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+-- // Global Settings // --
+local AimSettings = { Enabled = false, FOV = 1000, Transparency = 0, Smoothness = 0.25, MaxRange = 150, TargetPart = "Head", CircleColor = Color3.fromRGB(222, 255, 154) }
+local HitboxSettings = { Enabled = false, Size = 5 } 
+local MovementSettings = { WalkSpeed = 28, WalkSpeedEnabled = false, Noclip = false, InfiniteJump = false, Underground = false } 
+local CombatSettings = { AutoReload = false, AutoAttack = false, AttackRange = 50 }
+local CollectSettings = { PickUpEnabled = false, BackpackEnabled = false, Range = 10, Delay = 0.2 }
+local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantOpen = false }
+local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(255, 255, 255) }
+local DroppedESPSettings = { Enabled = false, TargetType = "All" } -- แก้ไข: เปลี่ยนจาก TargetItem เป็น TargetType
+
+local ESPTable = {}
+local DroppedESPTable = {}
+
+-- // FOV Circle Setup // --
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+FOVCircle.Radius = AimSettings.FOV
+FOVCircle.Filled = false
+FOVCircle.Color = AimSettings.CircleColor
+FOVCircle.Visible = false
+FOVCircle.Thickness = 1
+FOVCircle.Transparency = 1 
+
+-- // [Core Logic] Hitbox Expander Function // --
+local function UpdateHitboxes()
+    local CharFolder = workspace:FindFirstChild("Characters")
+    if not CharFolder then return end
+
+    for _, v in pairs(CharFolder:GetChildren()) do
+        if v ~= Player.Character and not Players:GetPlayerFromCharacter(v) and v.Name ~= "Merchant" and not v:FindFirstChild("Follow") then
+            local Head = v:FindFirstChild("Head")
+            if Head and Head:IsA("BasePart") then
+                if HitboxSettings.Enabled then
+                    Head.Size = Vector3.new(HitboxSettings.Size, HitboxSettings.Size, HitboxSettings.Size)
+                    Head.Transparency = 0.5
+                    Head.CanCollide = false
+                else
+                    Head.Size = Vector3.new(1.2, 1.2, 1.2)
+                    Head.Transparency = 0
+                    Head.CanCollide = true
+                end
+            end
+        end
+    end
+end
+
+-- // [Logic] ESP สำหรับ Dropped Items // --
+local function CreateDroppedESP(part)
+    local itemType = part:GetAttribute("ItemType") or "Item"
+    local itemColor = Color3.fromRGB(255, 255, 255)
+    if itemType == "Fuel" then itemColor = Color3.fromRGB(255, 170, 0)
+    elseif itemType == "Melee" then itemColor = Color3.fromRGB(255, 85, 85)
+    elseif itemType == "Medical" then itemColor = Color3.fromRGB(85, 255, 127)
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = part
+    highlight.FillColor = itemColor
+    highlight.FillTransparency = 0.6
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = part
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 150, 0, 50)
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    
+    local textLabel = Instance.new("TextLabel", billboard)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.TextColor3 = itemColor
+    textLabel.TextSize = 14
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextStrokeTransparency = 0
+    
+    billboard.Parent = part
+    return {Highlight = highlight, Label = textLabel, Billboard = billboard}
+end
+
+-- // [Core Logic] Movement Logic // --
+UserInputService.JumpRequest:Connect(function()
+    if MovementSettings.InfiniteJump and Player.Character and Player.Character:FindFirstChildOfClass("Humanoid") then
+        Player.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if (MovementSettings.Noclip or (MovementSettings.Underground and UserInputService:IsKeyDown(Enum.KeyCode.Q))) and Player.Character then
+        for _, part in pairs(Player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        local Character = Player.Character
+        local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+        local Hum = Character and Character:FindFirstChildOfClass("Humanoid")
+        local Generator = workspace:FindFirstChild("Structures") and workspace.Structures:FindFirstChild("Generator") and workspace.Structures.Generator:FindFirstChild("MainPart")
+        
+        if MovementSettings.Underground and UserInputService:IsKeyDown(Enum.KeyCode.Q) and Root and Hum then
+            local DistanceToGen = Generator and (Root.Position - Generator.Position).Magnitude or math.huge
+            if DistanceToGen > 20 then
+                Root.Velocity = Vector3.new(0, -35, 0)
+                Hum.PlatformStand = true
+            else
+                Hum.PlatformStand = false
+            end
+        elseif Hum and Hum.PlatformStand then
+            Hum.PlatformStand = false
+        end
+        task.wait()
+    end
+end)
+
+-- // Combat Logic // --
+local function GetClosestMonster()
+    local ClosestDistance = math.huge
+    local Target = nil
+    local EquippedTool = Player.Character and Player.Character:FindFirstChildOfClass("Tool")
+    if not EquippedTool or EquippedTool:GetAttribute("Ammo") == nil then return nil end
+    local CharFolder = workspace:FindFirstChild("Characters")
+    if not CharFolder then return nil end
+    local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if not MyRoot then return nil end
+
+    for _, v in pairs(CharFolder:GetChildren()) do
+        if v ~= Player.Character and not Players:GetPlayerFromCharacter(v) and v.Name ~= "Merchant" and not v:FindFirstChild("Follow") then
+            local Humanoid = v:FindFirstChild("Humanoid")
+            local TargetPart = v:FindFirstChild(AimSettings.TargetPart)
+            if Humanoid and TargetPart and Humanoid.Health > 0 then
+                local DistanceFromPlayer = (MyRoot.Position - TargetPart.Position).Magnitude
+                if DistanceFromPlayer <= AimSettings.MaxRange then
+                    local ScreenPoint, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
+                    if OnScreen then
+                        local MouseLocation = UserInputService:GetMouseLocation()
+                        local DistanceFromMouse = (Vector2.new(MouseLocation.X, MouseLocation.Y) - Vector2.new(ScreenPoint.X, ScreenPoint.Y)).Magnitude
+                        if DistanceFromMouse <= AimSettings.FOV then
+                            if DistanceFromPlayer < ClosestDistance then
+                                ClosestDistance = DistanceFromPlayer
+                                Target = v
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return Target
+end
+
+local function ProcessAutoAttack()
+    if not CombatSettings.AutoAttack then return end
+    local Character = Player.Character
+    if not Character then return end
+    local Tool = Character:FindFirstChildOfClass("Tool")
+    if not Tool or Tool:GetAttribute("ToolType") ~= "Melee" then return end
+    local MyRoot = Character:FindFirstChild("HumanoidRootPart")
+    if not MyRoot then return end
+    local TargetsToHit = {}
+    
+    local CharFolder = workspace:FindFirstChild("Characters")
+    if CharFolder then
+        for _, v in pairs(CharFolder:GetChildren()) do
+            if v ~= Character and not Players:GetPlayerFromCharacter(v) and v.Name ~= "Merchant" and not v:FindFirstChild("Follow") then
+                local Hum = v:FindFirstChild("Humanoid")
+                local Root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Head")
+                if Hum and Hum.Health > 0 and Root then
+                    if (MyRoot.Position - Root.Position).Magnitude <= CombatSettings.AttackRange then
+                        table.insert(TargetsToHit, v)
+                    end
+                end
+            end
+        end
+    end
+    
+    local StructFolder = workspace:FindFirstChild("Structures")
+    if StructFolder then
+        for _, v in pairs(StructFolder:GetChildren()) do
+            if v.Name == "Scrap Pile" or v.Name == "Barrel" then
+                local Primary = v:IsA("Model") and v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
+                if Primary and (MyRoot.Position - Primary.Position).Magnitude <= CombatSettings.AttackRange then
+                    table.insert(TargetsToHit, v)
+                end
+            end
+        end
+    end
+
+    if #TargetsToHit > 0 then
+        local SwingRemote = Tool:FindFirstChild("Swing")
+        local HitRemote = Tool:FindFirstChild("HitTargets")
+        if SwingRemote then SwingRemote:FireServer() end
+        if HitRemote then HitRemote:FireServer(TargetsToHit) end
+    end
+end
+
+local function CheckAndReload()
+    if not CombatSettings.AutoReload then return end
+    local Character = Player.Character
+    if not Character then return end
+    for _, Item in pairs(Character:GetChildren()) do
+        if Item:IsA("Tool") and Item:GetAttribute("Ammo") ~= nil then
+            if Item:GetAttribute("Ammo") <= 0 then
+                local ReloadRemote = Item:FindFirstChild("Reload")
+                if ReloadRemote and ReloadRemote:IsA("RemoteFunction") then ReloadRemote:InvokeServer() end
+            end
+        end
+    end
+end
+
+-- // Farming & Other // --
+local function ProcessCollection()
+    local DroppedItems = workspace:FindFirstChild("DroppedItems")
+    if not DroppedItems then return end
+    local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if not MyRoot then return end
+    for _, Item in pairs(DroppedItems:GetChildren()) do
+        local ItemPos = Item:GetPivot().Position
+        if ItemPos then
+            local Distance = (MyRoot.Position - ItemPos).Magnitude
+            if Distance <= CollectSettings.Range then
+                local isFuel = Item:GetAttribute("ItemType") == "Fuel"
+                if CollectSettings.PickUpEnabled and not isFuel then 
+                    ReplicatedStorage.Remotes.Interaction.PickUpItem:FireServer(Item) 
+                end
+                if CollectSettings.BackpackEnabled then 
+                    ReplicatedStorage.Remotes.Tools.AdjustBackpack:FireServer(Item) 
+                end
+                task.wait(CollectSettings.Delay)
+            end
+        end
+    end
+end
+
+local function ProcessInstantOpen()
+    if not OtherSettings.InstantOpen then return end
+    local CratesFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Crates")
+    if CratesFolder then
+        for _, desc in pairs(CratesFolder:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") then
+                desc.HoldDuration = 0
+            end
+        end
+    end
+end
+
+-- // ESP Logic // --
+local function CreateESP(part, isRandomCrate)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPHighlight"
+    highlight.Adornee = part
+    highlight.FillColor = isRandomCrate and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 200, 50)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = part
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESPInfo"
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 200, 0, 100)
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Parent = billboard
+    textLabel.BackgroundTransparency = 1
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.TextColor3 = ESPSettings.TextColor
+    textLabel.TextSize = ESPSettings.TextSize
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextStrokeTransparency = 0
+    
+    billboard.Parent = part
+    return {Highlight = highlight, Label = textLabel, Billboard = billboard, IsCrate = isRandomCrate}
+end
+
+local function UpdateESP()
+    for obj, data in pairs(ESPTable) do
+        if not obj or not obj.Parent then
+            data.Highlight:Destroy()
+            data.Billboard:Destroy()
+            ESPTable[obj] = nil
+            continue
+        end
+
+        if ESPSettings.Enabled then
+            local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+            if MyRoot then
+                local distance = math.floor((MyRoot.Position - obj:GetPivot().Position).Magnitude)
+                local infoText = ""
+                if data.IsCrate then
+                    infoText = "\n[Random Crate]"
+                else
+                    local dropsFolder = obj:FindFirstChild("Drops")
+                    if dropsFolder then
+                        for _, val in pairs(dropsFolder:GetChildren()) do
+                            infoText = infoText .. "\n- " .. tostring(val.Value)
+                        end
+                    end
+                end
+                data.Label.Text = string.format("%s\n[%d Studs]%s", obj.Name, distance, infoText)
+                data.Highlight.Enabled = true
+                data.Billboard.Enabled = true
+            end
+        else
+            data.Highlight.Enabled = false
+            data.Billboard.Enabled = false
+        end
+    end
+end
+
+-- // UI Window // --
+local Window = Rayfield:CreateWindow({
+   Name = "NUNGY PRO | V2.6 FINAL",
+   LoadingTitle = "Applying Fixes & Movement...",
+   LoadingSubtitle = "by Nungy Developer",
+   ConfigurationSaving = { Enabled = true, Folder = "NungyScripts" }
+})
+
+local AimTab = Window:CreateTab("Combat", 4483362458)
+AimTab:CreateToggle({ Name = "Enable Auto Aim (NPC Only)", CurrentValue = false, Callback = function(Value) AimSettings.Enabled = Value; FOVCircle.Visible = Value end })
+AimTab:CreateToggle({ Name = "Auto Attack (Melee Only)", CurrentValue = false, Callback = function(Value) CombatSettings.AutoAttack = Value end })
+AimTab:CreateToggle({ Name = "Auto Reload (When Ammo 0)", CurrentValue = false, Callback = function(Value) CombatSettings.AutoReload = Value end })
+AimTab:CreateToggle({ Name = "Expand Head Hitbox", CurrentValue = false, Callback = function(Value) HitboxSettings.Enabled = Value end })
+AimTab:CreateSlider({ Name = "Hitbox Multiplier", Range = {0, 10}, Increment = 1, Suffix = "x", CurrentValue = 5, Callback = function(Value) HitboxSettings.Size = Value end })
+AimTab:CreateSlider({ Name = "Aim Detection Range", Range = {0, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 150, Callback = function(Value) AimSettings.MaxRange = Value end })
+AimTab:CreateSlider({ Name = "Aim FOV Radius", Range = {0, 1000}, Increment = 10, Suffix = "px", CurrentValue = 1000, Callback = function(Value) AimSettings.FOV = Value; FOVCircle.Radius = Value end })
+AimTab:CreateSlider({ Name = "FOV Transparency", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = 0, Callback = function(Value) AimSettings.Transparency = Value / 100; FOVCircle.Transparency = 1 - (Value/100) end })
+AimTab:CreateSlider({ Name = "Smoothness", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 25, Callback = function(Value) AimSettings.Smoothness = Value / 100 end })
+
+local MoveTab = Window:CreateTab("Movement", 4483362458)
+MoveTab:CreateToggle({ Name = "Enable Loop Walkspeed", CurrentValue = false, Callback = function(Value) MovementSettings.WalkSpeedEnabled = Value end })
+MoveTab:CreateSlider({ Name = "WalkSpeed Value", Range = {28, 33}, Increment = 1, Suffix = "spd", CurrentValue = 28, Callback = function(Value) MovementSettings.WalkSpeed = Value end })
+MoveTab:CreateToggle({ Name = "Noclip (Walk Through Walls)", CurrentValue = false, Callback = function(Value) MovementSettings.Noclip = Value end })
+MoveTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(Value) MovementSettings.InfiniteJump = Value end })
+MoveTab:CreateToggle({ Name = "Underground Fly (Hold Q)", CurrentValue = false, Callback = function(Value) MovementSettings.Underground = Value end }) 
+
+local FarmTab = Window:CreateTab("Farming", 4483362458)
+FarmTab:CreateToggle({ Name = "Auto PickUp (To Hand)", CurrentValue = false, Callback = function(Value) CollectSettings.PickUpEnabled = Value end })
+FarmTab:CreateToggle({ Name = "Auto Store (To Backpack)", CurrentValue = false, Callback = function(Value) CollectSettings.BackpackEnabled = Value end })
+FarmTab:CreateSlider({ Name = "Collection Range", Range = {0, 50}, Increment = 1, Suffix = "Studs", CurrentValue = 10, Callback = function(Value) CollectSettings.Range = Value end })
+
+local OtherTab = Window:CreateTab("Other", 4483362458)
+OtherTab:CreateToggle({ Name = "Auto Repair Structures", CurrentValue = false, Callback = function(Value) OtherSettings.AutoRepair = Value end })
+OtherTab:CreateToggle({ Name = "Instant Open Crates (Hold 0)", CurrentValue = false, Callback = function(Value) OtherSettings.InstantOpen = Value end })
+OtherTab:CreateSlider({ Name = "Repair Distance", Range = {0, 200}, Increment = 5, Suffix = "Studs", CurrentValue = 10, Callback = function(Value) OtherSettings.RepairRange = Value end })
+
+local VisualTabUI = Window:CreateTab("Visual", 4483362458)
+VisualTabUI:CreateSection("Box Scanner")
+VisualTabUI:CreateToggle({ Name = "Enable All Boxes ESP", CurrentValue = false, Callback = function(Value) ESPSettings.Enabled = Value end })
+VisualTabUI:CreateButton({
+    Name = "Clear Fog (Map Mod)",
+    Callback = function()
+        if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Border") then
+            workspace.Map.Border:Destroy()
+        end
+        game:GetService("Lighting"):ClearAllChildren()
+        local FogRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Misc"):WaitForChild("FogTouched")
+        for x = -50, 50 do
+            for y = -50, 50 do
+                FogRemote:FireServer(x, y)
+            end
+            if x % 10 == 0 then task.wait() end
+        end
+    end
+})
+
+-- ## Dropped Items ESP Section ## --
+VisualTabUI:CreateSection("Dropped Items ESP")
+VisualTabUI:CreateToggle({ 
+    Name = "Enable Dropped Items ESP", 
+    CurrentValue = false, 
+    Callback = function(Value) 
+        DroppedESPSettings.Enabled = Value 
+    end 
+})
+
+-- แก้ไข: เปลี่ยน Dropdown ให้เลือกตาม ItemType
+local ItemDropdown = VisualTabUI:CreateDropdown({
+    Name = "Select ItemType Filter",
+    Options = {"All", "Resource", "Fuel", "Medical", "Food", "Melee", "Gun", "Throwable", "Ammo", "Blueprint"},
+    CurrentOption = {"All"},
+    MultipleOptions = false,
+    Callback = function(Option)
+        DroppedESPSettings.TargetType = Option[1]
+    end,
+})
+
+-- // Main Update Loops // --
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+    if MovementSettings.WalkSpeedEnabled and Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        Player.Character.Humanoid.WalkSpeed = MovementSettings.WalkSpeed
+    end
+    if AimSettings.Enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local Target = GetClosestMonster()
+        if Target then
+            local TargetPos = Target[AimSettings.TargetPart].Position
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, TargetPos), AimSettings.Smoothness)
+        end
+    end
+    CheckAndReload()
+end)
+
+task.spawn(function()
+    while true do
+        UpdateHitboxes()
+        if CombatSettings.AutoAttack then ProcessAutoAttack() end
+        if CollectSettings.PickUpEnabled or CollectSettings.BackpackEnabled then ProcessCollection() end
+        if OtherSettings.InstantOpen then ProcessInstantOpen() end
+        
+        -- Box/Structure ESP
+        if ESPSettings.Enabled then
+            local Structures = workspace:FindFirstChild("Structures")
+            if Structures then
+                for _, obj in pairs(Structures:GetChildren()) do
+                    if obj:FindFirstChild("Drops") and not ESPTable[obj] then
+                        ESPTable[obj] = CreateESP(obj, false)
+                    end
+                end
+            end
+            local Crates = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Crates")
+            if Crates then
+                for _, crate in pairs(Crates:GetChildren()) do
+                    if crate:FindFirstChild("Prompt") and not ESPTable[crate] then
+                        ESPTable[crate] = CreateESP(crate, true)
+                    end
+                end
+            end
+        end
+        UpdateESP()
+
+        -- Dropped Items ESP with Filter (แก้ไข: เช็คที่ Attribute ItemType)
+        local DroppedFolder = workspace:FindFirstChild("DroppedItems")
+        if DroppedESPSettings.Enabled and DroppedFolder then
+            for _, item in pairs(DroppedFolder:GetChildren()) do
+                local currentItemType = item:GetAttribute("ItemType") or "None"
+                local isTarget = (DroppedESPSettings.TargetType == "All" or currentItemType == DroppedESPSettings.TargetType)
+                
+                if isTarget then
+                    if not DroppedESPTable[item] then
+                        DroppedESPTable[item] = CreateDroppedESP(item)
+                    end
+                    local data = DroppedESPTable[item]
+                    local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                    if MyRoot then
+                        local dist = math.floor((MyRoot.Position - item:GetPivot().Position).Magnitude)
+                        data.Label.Text = string.format("%s\n[%d Studs]", item.Name, dist)
+                        data.Highlight.Enabled = true
+                        data.Billboard.Enabled = true
+                    end
+                else
+                    if DroppedESPTable[item] then
+                        DroppedESPTable[item].Highlight.Enabled = false
+                        DroppedESPTable[item].Billboard.Enabled = false
+                    end
+                end
+            end
+        end
+
+        -- Cleanup (แก้ไข: เช็คเงื่อนไข ItemType)
+        for item, data in pairs(DroppedESPTable) do
+            local currentItemType = item and item:GetAttribute("ItemType") or "None"
+            local isTarget = (DroppedESPSettings.TargetType == "All" or currentItemType == DroppedESPSettings.TargetType)
+            if not item or not item.Parent or not DroppedESPSettings.Enabled or not isTarget then
+                if data.Highlight then data.Highlight:Destroy() end
+                if data.Billboard then data.Billboard:Destroy() end
+                DroppedESPTable[item] = nil
+            end
+        end
+        
+        task.wait(0.5)
+    end
+end)
