@@ -1,5 +1,4 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
 -- // Variables & Services // --
 local Player = game:GetService("Players").LocalPlayer
 local Mouse = Player:GetMouse()
@@ -12,15 +11,16 @@ local Players = game:GetService("Players")
 -- // Global Settings // --
 local AimSettings = { Enabled = false, FOV = 1000, Transparency = 0, Smoothness = 0.25, MaxRange = 150, TargetPart = "Head", CircleColor = Color3.fromRGB(222, 255, 154) }
 local HitboxSettings = { Enabled = false, Size = 5 } 
-local MovementSettings = { WalkSpeed = 28, WalkSpeedEnabled = false, Noclip = false, InfiniteJump = false, Underground = false } 
+local MovementSettings = { WalkSpeed = 28, WalkSpeedEnabled = false, Noclip = false, InfiniteJump = false, Underground = false, Fly = false } 
 local CombatSettings = { AutoReload = false, AutoAttack = false, AttackRange = 50 }
 local CollectSettings = { PickUpEnabled = false, BackpackEnabled = false, Range = 10, Delay = 0.2 }
-local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantOpen = false }
+local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantOpen = false, InstantFixing = false, AutoFarmPower = false, UndergroundDepth = -10, FarmSpeed = 0.05 }
 local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(0, 100, 0) }
 local DroppedESPSettings = { Enabled = false, TargetTypes = {"All"} } 
 
 local ESPTable = {}
 local DroppedESPTable = {}
+local VisitedPowerBoxes = {}
 
 -- // FOV Circle Setup // --
 local FOVCircle = Drawing.new("Circle")
@@ -55,9 +55,8 @@ local function UpdateHitboxes()
     end
 end
 
--- // [Logic] ESP สำหรับ Dropped Items (แก้ไขการดึง Attribute รองรับ ItemType และ ToolType) // --
+-- // [Logic] ESP สำหรับ Dropped Items // --
 local function CreateDroppedESP(part)
-    -- ดึงค่าจาก ItemType หรือ ToolType อย่างใดอย่างหนึ่ง
     local itemType = part:GetAttribute("ItemType") or part:GetAttribute("ToolType") or "Item"
     local itemColor = Color3.fromRGB(255, 255, 255)
     
@@ -106,10 +105,17 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 RunService.Stepped:Connect(function()
-    if (MovementSettings.Noclip or (MovementSettings.Underground and UserInputService:IsKeyDown(Enum.KeyCode.Q))) and Player.Character then
+    if (MovementSettings.Noclip or (MovementSettings.Underground and UserInputService:IsKeyDown(Enum.KeyCode.Q)) or OtherSettings.AutoFarmPower or MovementSettings.Fly) and Player.Character then
         for _, part in pairs(Player.Character:GetDescendants()) do
             if part:IsA("BasePart") then part.CanCollide = false end
         end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if (MovementSettings.Fly or OtherSettings.AutoFarmPower) and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+        local Root = Player.Character.HumanoidRootPart
+        Root.Velocity = Vector3.new(0, 0, 0)
     end
 end)
 
@@ -128,10 +134,101 @@ task.spawn(function()
             else
                 Hum.PlatformStand = false
             end
-        elseif Hum and Hum.PlatformStand then
+        elseif (Hum and Hum.PlatformStand) and not OtherSettings.AutoFarmPower and not MovementSettings.Fly then
             Hum.PlatformStand = false
         end
         task.wait()
+    end
+end)
+
+-- // Power Plant Auto Farm Logic [DYNAMIC PATHS FIX] // --
+local function GetPowerBoxes()
+    local Boxes = {}
+    local Tiles = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Tiles")
+    
+    if Tiles then
+        -- ไล่หาในทุกลูกของ Tiles เพื่อหา Power Box (แก้ปัญหาตัวเลข Index เปลี่ยน)
+        for _, tile in pairs(Tiles:GetChildren()) do
+            local Box = tile:FindFirstChild("Power Box")
+            if Box then
+                table.insert(Boxes, Box)
+            end
+        end
+    end
+    return Boxes
+end
+
+local function ProcessPowerFixing()
+    if not (OtherSettings.InstantFixing or OtherSettings.AutoFarmPower) then return end
+    local Boxes = GetPowerBoxes()
+    for _, box in pairs(Boxes) do
+        local Prompt = box:FindFirstChild("Prompt")
+        if Prompt then
+            Prompt.HoldDuration = 0
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        if OtherSettings.AutoFarmPower then
+            local Character = Player.Character
+            local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+            local Hum = Character and Character:FindFirstChildOfClass("Humanoid")
+            if Root and Hum then
+                local Boxes = GetPowerBoxes()
+                local ClosestBox = nil
+                local MinDist = math.huge
+                
+                for _, box in pairs(Boxes) do
+                    if box:FindFirstChild("Prompt") and not VisitedPowerBoxes[box] then
+                        local dist = (Root.Position - box.Prompt.Parent:GetPivot().Position).Magnitude
+                        if dist < MinDist then
+                            MinDist = dist
+                            ClosestBox = box
+                        end
+                    end
+                end
+
+                if ClosestBox then
+                    Hum.PlatformStand = true 
+                    local TargetPos = ClosestBox.Prompt.Parent:GetPivot().Position
+                    local GoalY = TargetPos.Y + OtherSettings.UndergroundDepth
+                    
+                    while math.abs(Root.Position.Y - GoalY) > 0.5 and OtherSettings.AutoFarmPower do
+                        local yDirection = (GoalY > Root.Position.Y) and 1 or -1
+                        Root.CFrame = CFrame.new(Root.Position.X, Root.Position.Y + (yDirection * 1.5), Root.Position.Z)
+                        task.wait(OtherSettings.FarmSpeed)
+                    end
+
+                    local UndergroundPos = Vector3.new(TargetPos.X, GoalY, TargetPos.Z)
+                    while (Vector2.new(Root.Position.X, Root.Position.Z) - Vector2.new(UndergroundPos.X, UndergroundPos.Z)).Magnitude > 1 and OtherSettings.AutoFarmPower do
+                        local Direction = (UndergroundPos - Root.Position).Unit
+                        Root.CFrame = CFrame.new(Root.Position + Direction * 1.5)
+                        task.wait(OtherSettings.FarmSpeed)
+                    end
+                    
+                    if OtherSettings.AutoFarmPower then
+                        Root.CFrame = CFrame.lookAt(Root.Position, Vector3.new(TargetPos.X, Root.Position.Y, TargetPos.Z))
+                        for i = 1, 6 do
+                            if not OtherSettings.AutoFarmPower then break end
+                            fireproximityprompt(ClosestBox.Prompt)
+                            task.wait(0.5)
+                        end
+                        VisitedPowerBoxes[ClosestBox] = true
+                    end
+                else
+                    local ValidBoxesCount = #Boxes
+                    local VisitedCount = 0
+                    for _, _ in pairs(VisitedPowerBoxes) do VisitedCount = VisitedCount + 1 end
+
+                    if VisitedCount >= ValidBoxesCount and ValidBoxesCount > 0 then
+                        VisitedPowerBoxes = {} 
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
     end
 end)
 
@@ -299,8 +396,8 @@ end
 local function UpdateESP()
     for obj, data in pairs(ESPTable) do
         if not obj or not obj.Parent then
-            data.Highlight:Destroy()
-            data.Billboard:Destroy()
+            if data.Highlight then data.Highlight:Destroy() end
+            if data.Billboard then data.Billboard:Destroy() end
             ESPTable[obj] = nil
             continue
         end
@@ -331,45 +428,57 @@ local function UpdateESP()
     end
 end
 
--- // UI Window // --
+-- // UI Window & Settings Persistence // --
 local Window = Rayfield:CreateWindow({
    Name = "NUNGY PRO | V2.6 FINAL",
    LoadingTitle = "Applying Fixes & Movement...",
    LoadingSubtitle = "by Nungy Developer",
-   ConfigurationSaving = { Enabled = true, Folder = "NungyScripts" }
+   ConfigurationSaving = {
+      Enabled = true,
+      Folder = "NungyScripts",
+      FileName = "UserConfig_" .. Player.UserId
+   },
+   KeybindSource = "X"
 })
 
 local AimTab = Window:CreateTab("Combat", 4483362458)
-AimTab:CreateToggle({ Name = "Enable Auto Aim (NPC Only)", CurrentValue = false, Callback = function(Value) AimSettings.Enabled = Value; FOVCircle.Visible = Value end })
-AimTab:CreateToggle({ Name = "Auto Attack (Melee Only)", CurrentValue = false, Callback = function(Value) CombatSettings.AutoAttack = Value end })
-AimTab:CreateToggle({ Name = "Auto Reload (When Ammo 0)", CurrentValue = false, Callback = function(Value) CombatSettings.AutoReload = Value end })
-AimTab:CreateToggle({ Name = "Expand Head Hitbox", CurrentValue = false, Callback = function(Value) HitboxSettings.Enabled = Value end })
-AimTab:CreateSlider({ Name = "Hitbox Multiplier", Range = {0, 10}, Increment = 1, Suffix = "x", CurrentValue = 5, Callback = function(Value) HitboxSettings.Size = Value end })
-AimTab:CreateSlider({ Name = "Aim Detection Range", Range = {0, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 150, Callback = function(Value) AimSettings.MaxRange = Value end })
-AimTab:CreateSlider({ Name = "Aim FOV Radius", Range = {0, 1000}, Increment = 10, Suffix = "px", CurrentValue = 1000, Callback = function(Value) AimSettings.FOV = Value; FOVCircle.Radius = Value end })
-AimTab:CreateSlider({ Name = "FOV Transparency", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = 0, Callback = function(Value) AimSettings.Transparency = Value / 100; FOVCircle.Transparency = 1 - (Value/100) end })
-AimTab:CreateSlider({ Name = "Smoothness", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 25, Callback = function(Value) AimSettings.Smoothness = Value / 100 end })
+AimTab:CreateToggle({ Name = "Enable Auto Aim (NPC Only)", CurrentValue = false, Flag = "AimToggle", Callback = function(Value) AimSettings.Enabled = Value; FOVCircle.Visible = Value end })
+AimTab:CreateToggle({ Name = "Auto Attack (Melee Only)", CurrentValue = false, Flag = "AttackToggle", Callback = function(Value) CombatSettings.AutoAttack = Value end })
+AimTab:CreateToggle({ Name = "Auto Reload (When Ammo 0)", CurrentValue = false, Flag = "ReloadToggle", Callback = function(Value) CombatSettings.AutoReload = Value end })
+AimTab:CreateToggle({ Name = "Expand Head Hitbox", CurrentValue = false, Flag = "HitboxToggle", Callback = function(Value) HitboxSettings.Enabled = Value end })
+AimTab:CreateSlider({ Name = "Hitbox Multiplier", Range = {0, 10}, Increment = 1, Suffix = "x", CurrentValue = 5, Flag = "HitboxSize", Callback = function(Value) HitboxSettings.Size = Value end })
+AimTab:CreateSlider({ Name = "Aim Detection Range", Range = {0, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 150, Flag = "AimRange", Callback = function(Value) AimSettings.MaxRange = Value end })
+AimTab:CreateSlider({ Name = "Aim FOV Radius", Range = {0, 1000}, Increment = 10, Suffix = "px", CurrentValue = 1000, Flag = "AimFOV", Callback = function(Value) AimSettings.FOV = Value; FOVCircle.Radius = Value end })
+AimTab:CreateSlider({ Name = "FOV Transparency", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = 0, Flag = "FOVTrans", Callback = function(Value) AimSettings.Transparency = Value / 100; FOVCircle.Transparency = 1 - (Value/100) end })
+AimTab:CreateSlider({ Name = "Smoothness", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 25, Flag = "Smooth", Callback = function(Value) AimSettings.Smoothness = Value / 100 end })
 
 local MoveTab = Window:CreateTab("Movement", 4483362458)
-MoveTab:CreateToggle({ Name = "Enable Loop Walkspeed", CurrentValue = false, Callback = function(Value) MovementSettings.WalkSpeedEnabled = Value end })
-MoveTab:CreateSlider({ Name = "WalkSpeed Value", Range = {28, 33}, Increment = 1, Suffix = "spd", CurrentValue = 28, Callback = function(Value) MovementSettings.WalkSpeed = Value end })
-MoveTab:CreateToggle({ Name = "Noclip (Walk Through Walls)", CurrentValue = false, Callback = function(Value) MovementSettings.Noclip = Value end })
-MoveTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(Value) MovementSettings.InfiniteJump = Value end })
-MoveTab:CreateToggle({ Name = "Underground Fly (Hold Q)", CurrentValue = false, Callback = function(Value) MovementSettings.Underground = Value end }) 
+MoveTab:CreateToggle({ Name = "Enable Loop Walkspeed", CurrentValue = false, Flag = "WalkToggle", Callback = function(Value) MovementSettings.WalkSpeedEnabled = Value end })
+MoveTab:CreateSlider({ Name = "WalkSpeed Value", Range = {28, 100}, Increment = 1, Suffix = "spd", CurrentValue = 28, Flag = "WalkVal", Callback = function(Value) MovementSettings.WalkSpeed = Value end })
+MoveTab:CreateToggle({ Name = "Fly (Noclip Included)", CurrentValue = false, Flag = "FlyToggle", Callback = function(Value) MovementSettings.Fly = Value if Player.Character and Player.Character:FindFirstChild("Humanoid") then Player.Character.Humanoid.PlatformStand = Value end end })
+MoveTab:CreateToggle({ Name = "Noclip (Walk Through Walls)", CurrentValue = false, Flag = "NoclipToggle", Callback = function(Value) MovementSettings.Noclip = Value end })
+MoveTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Flag = "JumpToggle", Callback = function(Value) MovementSettings.InfiniteJump = Value end })
+MoveTab:CreateToggle({ Name = "Underground Fly (Hold Q)", CurrentValue = false, Flag = "UnderToggle", Callback = function(Value) MovementSettings.Underground = Value end }) 
 
 local FarmTab = Window:CreateTab("Farming", 4483362458)
-FarmTab:CreateToggle({ Name = "Auto PickUp (To Hand)", CurrentValue = false, Callback = function(Value) CollectSettings.PickUpEnabled = Value end })
-FarmTab:CreateToggle({ Name = "Auto Store (To Backpack)", CurrentValue = false, Callback = function(Value) CollectSettings.BackpackEnabled = Value end })
-FarmTab:CreateSlider({ Name = "Collection Range", Range = {0, 50}, Increment = 1, Suffix = "Studs", CurrentValue = 10, Callback = function(Value) CollectSettings.Range = Value end })
+FarmTab:CreateSection("General Farm")
+FarmTab:CreateToggle({ Name = "Auto PickUp (To Hand)", CurrentValue = false, Flag = "PickToggle", Callback = function(Value) CollectSettings.PickUpEnabled = Value end })
+FarmTab:CreateToggle({ Name = "Auto Store (To Backpack)", CurrentValue = false, Flag = "StoreToggle", Callback = function(Value) CollectSettings.BackpackEnabled = Value end })
+FarmTab:CreateSlider({ Name = "Collection Range", Range = {0, 50}, Increment = 1, Suffix = "Studs", CurrentValue = 10, Flag = "CollRange", Callback = function(Value) CollectSettings.Range = Value end })
+FarmTab:CreateSection("Power Plant Farm")
+FarmTab:CreateToggle({ Name = "Auto Farm Power Plant", CurrentValue = false, Flag = "PowerFarm", Callback = function(Value) OtherSettings.AutoFarmPower = Value if not Value and Player.Character and Player.Character:FindFirstChild("Humanoid") then Player.Character.Humanoid.PlatformStand = false end end })
+FarmTab:CreateSlider({ Name = "Movement Speed (s/1stud)", Range = {0.01, 1}, Increment = 0.01, Suffix = "s", CurrentValue = 0.05, Flag = "FarmSpeed", Callback = function(Value) OtherSettings.FarmSpeed = Value end })
+FarmTab:CreateSlider({ Name = "Underground Depth Offset", Range = {-15, 10}, Increment = 1, Suffix = " Studs", CurrentValue = -10, Flag = "DepthOffset", Callback = function(Value) OtherSettings.UndergroundDepth = Value end })
 
 local OtherTab = Window:CreateTab("Other", 4483362458)
-OtherTab:CreateToggle({ Name = "Auto Repair Structures", CurrentValue = false, Callback = function(Value) OtherSettings.AutoRepair = Value end })
-OtherTab:CreateToggle({ Name = "Instant Open Crates (Hold 0)", CurrentValue = false, Callback = function(Value) OtherSettings.InstantOpen = Value end })
-OtherTab:CreateSlider({ Name = "Repair Distance", Range = {0, 200}, Increment = 5, Suffix = "Studs", CurrentValue = 10, Callback = function(Value) OtherSettings.RepairRange = Value end })
+OtherTab:CreateToggle({ Name = "Instant Fixing Power Plant", CurrentValue = false, Flag = "FixToggle", Callback = function(Value) OtherSettings.InstantFixing = Value end })
+OtherTab:CreateToggle({ Name = "Auto Repair Structures", CurrentValue = false, Flag = "RepairToggle", Callback = function(Value) OtherSettings.AutoRepair = Value end })
+OtherTab:CreateToggle({ Name = "Instant Open Crates (Hold 0)", CurrentValue = false, Flag = "OpenToggle", Callback = function(Value) OtherSettings.InstantOpen = Value end })
+OtherTab:CreateSlider({ Name = "Repair Distance", Range = {0, 200}, Increment = 5, Suffix = "Studs", CurrentValue = 10, Flag = "RepRange", Callback = function(Value) OtherSettings.RepairRange = Value end })
 
 local VisualTabUI = Window:CreateTab("Visual", 4483362458)
 VisualTabUI:CreateSection("Box Scanner")
-VisualTabUI:CreateToggle({ Name = "Enable All Boxes ESP", CurrentValue = false, Callback = function(Value) ESPSettings.Enabled = Value end })
+VisualTabUI:CreateToggle({ Name = "Enable All Boxes ESP", CurrentValue = false, Flag = "BoxESP", Callback = function(Value) ESPSettings.Enabled = Value end })
 VisualTabUI:CreateButton({
     Name = "Clear Fog (Map Mod)",
     Callback = function()
@@ -387,21 +496,15 @@ VisualTabUI:CreateButton({
     end
 })
 
--- ## Dropped Items ESP Section ## --
 VisualTabUI:CreateSection("Dropped Items ESP")
-VisualTabUI:CreateToggle({ 
-    Name = "Enable Dropped Items ESP", 
-    CurrentValue = false, 
-    Callback = function(Value) 
-        DroppedESPSettings.Enabled = Value 
-    end 
-})
+VisualTabUI:CreateToggle({ Name = "Enable Dropped Items ESP", CurrentValue = false, Flag = "DropESP", Callback = function(Value) DroppedESPSettings.Enabled = Value end })
 
 local ItemDropdown = VisualTabUI:CreateDropdown({
     Name = "Select ItemType Filter",
     Options = {"All", "Resource", "Fuel", "Medical", "Food", "Melee", "Gun", "Throwable", "Ammo", "Blueprint", "Armor"},
     CurrentOption = {"All"},
     MultipleOptions = true,
+    Flag = "ItemFilter",
     Callback = function(Options)
         DroppedESPSettings.TargetTypes = Options
     end,
@@ -428,9 +531,11 @@ task.spawn(function()
         UpdateHitboxes()
         if CombatSettings.AutoAttack then ProcessAutoAttack() end
         if CollectSettings.PickUpEnabled or CollectSettings.BackpackEnabled then ProcessCollection() end
-        if OtherSettings.InstantOpen then ProcessInstantOpen() end
+        if OtherSettings.InstantOpen or OtherSettings.InstantFixing or OtherSettings.AutoFarmPower then 
+            ProcessInstantOpen() 
+            ProcessPowerFixing()
+        end
         
-        -- Box/Structure ESP
         if ESPSettings.Enabled then
             local Structures = workspace:FindFirstChild("Structures")
             if Structures then
@@ -451,13 +556,10 @@ task.spawn(function()
         end
         UpdateESP()
 
-        -- Dropped Items ESP Filter Logic (แก้ไขการตรวจสอบ ItemType ให้รองรับ ToolType)
         local DroppedFolder = workspace:FindFirstChild("DroppedItems")
         if DroppedESPSettings.Enabled and DroppedFolder then
             for _, item in pairs(DroppedFolder:GetChildren()) do
-                -- ดึงค่าจาก Attribute ไหนก็ได้ที่พบ
                 local currentItemType = item:GetAttribute("ItemType") or item:GetAttribute("ToolType") or "None"
-                
                 local isTarget = false
                 if table.find(DroppedESPSettings.TargetTypes, "All") then
                     isTarget = true
@@ -486,7 +588,6 @@ task.spawn(function()
             end
         end
 
-        -- Cleanup
         for item, data in pairs(DroppedESPTable) do
             local currentItemType = item and (item:GetAttribute("ItemType") or item:GetAttribute("ToolType")) or "None"
             local isTarget = false
@@ -506,3 +607,5 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
+
+Rayfield:LoadConfiguration()
