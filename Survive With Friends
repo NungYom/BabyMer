@@ -1,4 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
 -- // Variables & Services // --
 local Player = game:GetService("Players").LocalPlayer
 local Mouse = Player:GetMouse()
@@ -17,6 +18,27 @@ local CollectSettings = { PickUpEnabled = false, BackpackEnabled = false, Range 
 local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantOpen = false, InstantFixing = false, AutoFarmPower = false, UndergroundDepth = -10, FarmSpeed = 0.05 }
 local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(0, 100, 0) }
 local DroppedESPSettings = { Enabled = false, TargetTypes = {"All"} } 
+
+-- [[ AFK / Hunter Configuration States ]]
+local AllyList = {"Survivor", "Scavenger", "Policeman", "Fighter", "Explorer", "Medic", "Farmer", "Fragger", "Guardian", "Engineer", "Hunter", "Assassin", "Soldier", "Berserker", "Necromancer", "Commander", "Psychic", "Merchant"}
+local SafeHealth1 = 60
+local DetectionRange1 = 50 
+local CenterPosHunter = Vector3.new(0, 7, 0)
+local HunterEnabled = false
+local FocusBloater = false
+local AntiLagEnabled = false
+local IsEating1 = false
+local EatTimer1 = 0
+local StartPosHunter = nil
+local TravelY = -20
+local Waypoints = {
+    {Pos = nil, Active = false, Visual = nil},
+    {Pos = nil, Active = false, Visual = nil},
+    {Pos = nil, Active = false, Visual = nil},
+    {Pos = nil, Active = false, Visual = nil}
+}
+local DefaultInterval = 0.05 
+local FastInterval = 0.02 
 
 local ESPTable = {}
 local DroppedESPTable = {}
@@ -97,7 +119,46 @@ local function CreateDroppedESP(part)
     return {Highlight = highlight, Label = textLabel, Billboard = billboard}
 end
 
--- // [Core Logic] Movement Logic // --
+-- // [Core Logic] Movement & AFK Helpers // --
+local function CreateWaypointESP(index, position)
+    if Waypoints[index].Visual then Waypoints[index].Visual:Destroy() end
+    local part = Instance.new("Part")
+    part.Name = "WP_Marker_" .. index
+    part.Size = Vector3.new(2, 2, 2)
+    part.Position = position
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 0.5
+    part.Color = Color3.fromRGB(0, 255, 255)
+    part.Material = Enum.Material.Neon
+    part.Parent = workspace
+    
+    local bgui = Instance.new("BillboardGui", part)
+    bgui.Adornee = part
+    bgui.Size = UDim2.new(0, 100, 0, 50)
+    bgui.AlwaysOnTop = true
+    bgui.ExtentsOffset = Vector3.new(0, 3, 0)
+    
+    local tl = Instance.new("TextLabel", bgui)
+    tl.Size = UDim2.new(1, 0, 1, 0)
+    tl.BackgroundTransparency = 1
+    tl.Text = "WAYPOINT " .. index
+    tl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tl.TextSize = 14
+    Waypoints[index].Visual = part
+end
+
+local function SmoothMove(targetPos)
+    local char = Player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local distance = (targetPos - root.Position).Magnitude
+    if distance > 0.1 then
+        local direction = (targetPos - root.Position).Unit
+        root.CFrame = CFrame.new(root.Position + (direction * math.min(1, distance)))
+    end
+end
+
 UserInputService.JumpRequest:Connect(function()
     if MovementSettings.InfiniteJump and Player.Character and Player.Character:FindFirstChildOfClass("Humanoid") then
         Player.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
@@ -141,18 +202,14 @@ task.spawn(function()
     end
 end)
 
--- // Power Plant Auto Farm Logic [DYNAMIC PATHS FIX] // --
+-- // Power Plant Auto Farm Logic // --
 local function GetPowerBoxes()
     local Boxes = {}
     local Tiles = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Tiles")
-    
     if Tiles then
-        -- ไล่หาในทุกลูกของ Tiles เพื่อหา Power Box (แก้ปัญหาตัวเลข Index เปลี่ยน)
         for _, tile in pairs(Tiles:GetChildren()) do
             local Box = tile:FindFirstChild("Power Box")
-            if Box then
-                table.insert(Boxes, Box)
-            end
+            if Box then table.insert(Boxes, Box) end
         end
     end
     return Boxes
@@ -163,9 +220,7 @@ local function ProcessPowerFixing()
     local Boxes = GetPowerBoxes()
     for _, box in pairs(Boxes) do
         local Prompt = box:FindFirstChild("Prompt")
-        if Prompt then
-            Prompt.HoldDuration = 0
-        end
+        if Prompt then Prompt.HoldDuration = 0 end
     end
 end
 
@@ -179,35 +234,27 @@ task.spawn(function()
                 local Boxes = GetPowerBoxes()
                 local ClosestBox = nil
                 local MinDist = math.huge
-                
                 for _, box in pairs(Boxes) do
                     if box:FindFirstChild("Prompt") and not VisitedPowerBoxes[box] then
                         local dist = (Root.Position - box.Prompt.Parent:GetPivot().Position).Magnitude
-                        if dist < MinDist then
-                            MinDist = dist
-                            ClosestBox = box
-                        end
+                        if dist < MinDist then MinDist = dist ClosestBox = box end
                     end
                 end
-
                 if ClosestBox then
                     Hum.PlatformStand = true 
                     local TargetPos = ClosestBox.Prompt.Parent:GetPivot().Position
                     local GoalY = TargetPos.Y + OtherSettings.UndergroundDepth
-                    
                     while math.abs(Root.Position.Y - GoalY) > 0.5 and OtherSettings.AutoFarmPower do
                         local yDirection = (GoalY > Root.Position.Y) and 1 or -1
                         Root.CFrame = CFrame.new(Root.Position.X, Root.Position.Y + (yDirection * 1.5), Root.Position.Z)
                         task.wait(OtherSettings.FarmSpeed)
                     end
-
                     local UndergroundPos = Vector3.new(TargetPos.X, GoalY, TargetPos.Z)
                     while (Vector2.new(Root.Position.X, Root.Position.Z) - Vector2.new(UndergroundPos.X, UndergroundPos.Z)).Magnitude > 1 and OtherSettings.AutoFarmPower do
                         local Direction = (UndergroundPos - Root.Position).Unit
                         Root.CFrame = CFrame.new(Root.Position + Direction * 1.5)
                         task.wait(OtherSettings.FarmSpeed)
                     end
-                    
                     if OtherSettings.AutoFarmPower then
                         Root.CFrame = CFrame.lookAt(Root.Position, Vector3.new(TargetPos.X, Root.Position.Y, TargetPos.Z))
                         for i = 1, 6 do
@@ -221,10 +268,7 @@ task.spawn(function()
                     local ValidBoxesCount = #Boxes
                     local VisitedCount = 0
                     for _, _ in pairs(VisitedPowerBoxes) do VisitedCount = VisitedCount + 1 end
-
-                    if VisitedCount >= ValidBoxesCount and ValidBoxesCount > 0 then
-                        VisitedPowerBoxes = {} 
-                    end
+                    if VisitedCount >= ValidBoxesCount and ValidBoxesCount > 0 then VisitedPowerBoxes = {} end
                 end
             end
         end
@@ -277,7 +321,6 @@ local function ProcessAutoAttack()
     local MyRoot = Character:FindFirstChild("HumanoidRootPart")
     if not MyRoot then return end
     local TargetsToHit = {}
-    
     local CharFolder = workspace:FindFirstChild("Characters")
     if CharFolder then
         for _, v in pairs(CharFolder:GetChildren()) do
@@ -292,7 +335,6 @@ local function ProcessAutoAttack()
             end
         end
     end
-    
     local StructFolder = workspace:FindFirstChild("Structures")
     if StructFolder then
         for _, v in pairs(StructFolder:GetChildren()) do
@@ -304,7 +346,6 @@ local function ProcessAutoAttack()
             end
         end
     end
-
     if #TargetsToHit > 0 then
         local SwingRemote = Tool:FindFirstChild("Swing")
         local HitRemote = Tool:FindFirstChild("HitTargets")
@@ -339,12 +380,8 @@ local function ProcessCollection()
             local Distance = (MyRoot.Position - ItemPos).Magnitude
             if Distance <= CollectSettings.Range then
                 local isFuel = (Item:GetAttribute("ItemType") or Item:GetAttribute("ToolType")) == "Fuel"
-                if CollectSettings.PickUpEnabled and not isFuel then 
-                    ReplicatedStorage.Remotes.Interaction.PickUpItem:FireServer(Item) 
-                end
-                if CollectSettings.BackpackEnabled then 
-                    ReplicatedStorage.Remotes.Tools.AdjustBackpack:FireServer(Item) 
-                end
+                if CollectSettings.PickUpEnabled and not isFuel then ReplicatedStorage.Remotes.Interaction.PickUpItem:FireServer(Item) end
+                if CollectSettings.BackpackEnabled then ReplicatedStorage.Remotes.Tools.AdjustBackpack:FireServer(Item) end
                 task.wait(CollectSettings.Delay)
             end
         end
@@ -356,9 +393,7 @@ local function ProcessInstantOpen()
     local CratesFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Crates")
     if CratesFolder then
         for _, desc in pairs(CratesFolder:GetDescendants()) do
-            if desc:IsA("ProximityPrompt") then
-                desc.HoldDuration = 0
-            end
+            if desc:IsA("ProximityPrompt") then desc.HoldDuration = 0 end
         end
     end
 end
@@ -372,14 +407,12 @@ local function CreateESP(part, isRandomCrate)
     highlight.FillTransparency = 0.5
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.Parent = part
-
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "ESPInfo"
     billboard.Adornee = part
     billboard.Size = UDim2.new(0, 200, 0, 100)
     billboard.AlwaysOnTop = true
     billboard.StudsOffset = Vector3.new(0, 3, 0)
-    
     local textLabel = Instance.new("TextLabel")
     textLabel.Parent = billboard
     textLabel.BackgroundTransparency = 1
@@ -388,7 +421,6 @@ local function CreateESP(part, isRandomCrate)
     textLabel.TextSize = ESPSettings.TextSize
     textLabel.Font = Enum.Font.SourceSansBold
     textLabel.TextStrokeTransparency = 0
-    
     billboard.Parent = part
     return {Highlight = highlight, Label = textLabel, Billboard = billboard, IsCrate = isRandomCrate}
 end
@@ -401,20 +433,16 @@ local function UpdateESP()
             ESPTable[obj] = nil
             continue
         end
-
         if ESPSettings.Enabled then
             local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
             if MyRoot then
                 local distance = math.floor((MyRoot.Position - obj:GetPivot().Position).Magnitude)
                 local infoText = ""
-                if data.IsCrate then
-                    infoText = "\n[Random Crate]"
+                if data.IsCrate then infoText = "\n[Random Crate]"
                 else
                     local dropsFolder = obj:FindFirstChild("Drops")
                     if dropsFolder then
-                        for _, val in pairs(dropsFolder:GetChildren()) do
-                            infoText = infoText .. "\n- " .. tostring(val.Value)
-                        end
+                        for _, val in pairs(dropsFolder:GetChildren()) do infoText = infoText .. "\n- " .. tostring(val.Value) end
                     end
                 end
                 data.Label.Text = string.format("%s\n[%d Studs]%s", obj.Name, distance, infoText)
@@ -428,20 +456,194 @@ local function UpdateESP()
     end
 end
 
--- // UI Window & Settings Persistence // --
+-- // UI Window & Tabs // --
 local Window = Rayfield:CreateWindow({
    Name = "NUNGY PRO | V2.6 FINAL",
    LoadingTitle = "Applying Fixes & Movement...",
    LoadingSubtitle = "by Nungy Developer",
-   ConfigurationSaving = {
-      Enabled = true,
-      Folder = "NungyScripts",
-      FileName = "UserConfig_" .. Player.UserId
-   },
+   ConfigurationSaving = { Enabled = true, Folder = "NungyScripts", FileName = "UserConfig_" .. Player.UserId },
    KeybindSource = "X"
 })
 
 local AimTab = Window:CreateTab("Combat", 4483362458)
+local MoveTab = Window:CreateTab("Movement", 4483362458)
+local FarmTab = Window:CreateTab("Farming", 4483362458)
+local VisualTabUI = Window:CreateTab("Visual", 4483362458)
+local AFKTab = Window:CreateTab("AFK", 4483362458) -- หมวดที่รวมใหม่
+local SquareTab = Window:CreateTab("Square Loop Farm", 4483362458)
+local OtherTab = Window:CreateTab("Other Settings", 4483362458)
+
+-- // AFK Tab Logic (Auto Hunter & Other Integration) // --
+AFKTab:CreateSection("Auto Hunter Settings")
+local CenterLabel = AFKTab:CreateLabel("จุดศูนย์กลาง: 0, 7, 0")
+
+AFKTab:CreateButton({
+   Name = "กำหนดจุดนี้เป็นจุดศูนย์กลาง Hunter",
+   Callback = function()
+      local char = Player.Character
+      local root = char and char:FindFirstChild("HumanoidRootPart")
+      if root then
+         CenterPosHunter = root.Position
+         CenterLabel:SetText(string.format("พิกัดศูนย์กลาง: %.1f, %.1f, %.1f", CenterPosHunter.X, CenterPosHunter.Y, CenterPosHunter.Z))
+      end
+   end,
+})
+
+AFKTab:CreateToggle({
+   Name = "โหมดโฟกัสตัวระเบิด (Focus Bloater)",
+   CurrentValue = false,
+   Callback = function(v) FocusBloater = v end,
+})
+
+AFKTab:CreateSlider({
+   Name = "ระยะการตรวจจับ (Studs)",
+   Range = {0, 100}, Increment = 1, Suffix = " studs", CurrentValue = 50,
+   Callback = function(v) DetectionRange1 = v end,
+})
+
+AFKTab:CreateSlider({
+   Name = "ตั้งค่าเลือดขั้นต่ำ (หนีลง Y-20)",
+   Range = {10, 100}, Increment = 1, Suffix = " HP", CurrentValue = 60,
+   Callback = function(v) SafeHealth1 = v end,
+})
+
+AFKTab:CreateToggle({
+   Name = "เริ่มระบบ Auto Hunter",
+   CurrentValue = false,
+   Callback = function(Value)
+      HunterEnabled = Value
+      if Value then
+          local char = Player.Character
+          local root = char and char:FindFirstChild("HumanoidRootPart")
+          if root then StartPosHunter = root.Position end
+      end
+      task.spawn(function()
+         while HunterEnabled do
+            local char = Player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            local charFolder = workspace:FindFirstChild("Characters")
+            local myAttr = charFolder and charFolder:FindFirstChild(Player.Name)
+
+            if root and hum and myAttr then
+                local currentWait = DefaultInterval
+                local targetPoint = nil
+                local lightningModel = workspace:FindFirstChild("Lightning")
+                local isLightningDanger = false
+                if lightningModel then
+                    local lightningPos = lightningModel:GetPivot().Position
+                    if (root.Position - lightningPos).Magnitude <= 30 then isLightningDanger = true end
+                end
+
+                local activeWP = nil
+                for _, wp in pairs(Waypoints) do if wp.Active and wp.Pos then activeWP = wp.Pos break end end
+
+                if isLightningDanger then
+                    targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
+                    currentWait = FastInterval
+                elseif activeWP then
+                    targetPoint = activeWP
+                    currentWait = DefaultInterval
+                else
+                    local hunger = myAttr:GetAttribute("Hunger") or 100
+                    if hunger < 5 then IsEating1 = true EatTimer1 = 0
+                    elseif hunger >= 5 and IsEating1 then
+                        if EatTimer1 == 0 then EatTimer1 = tick() + 2 end
+                        if tick() >= EatTimer1 then IsEating1 = false end
+                    end
+                    local isDangerHP = (hum.Health < SafeHealth1)
+                    local isExplodingNear = false
+                    for _, obj in pairs(charFolder:GetChildren()) do
+                        if obj.Name == "Bloater" and obj:FindFirstChild("HumanoidRootPart") then
+                            if (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30 and obj.HumanoidRootPart:GetAttribute("Speed") == nil then
+                                isExplodingNear = true break
+                            end
+                        end
+                    end
+                    if isDangerHP or isExplodingNear then targetPoint = Vector3.new(CenterPosHunter.X, -20, CenterPosHunter.Z)
+                    elseif IsEating1 then targetPoint = Vector3.new(StartPosHunter.X, -8, StartPosHunter.Z)
+                    else
+                        local targetEnemy = nil
+                        if FocusBloater then
+                            for _, obj in pairs(charFolder:GetChildren()) do
+                                if obj.Name == "Bloater" and obj:FindFirstChild("HumanoidRootPart") then
+                                    local bRoot = obj.HumanoidRootPart
+                                    if (bRoot.Position - CenterPosHunter).Magnitude <= DetectionRange1 and bRoot:GetAttribute("Speed") ~= nil then targetEnemy = bRoot break end
+                                end
+                            end
+                        end
+                        if targetEnemy then targetPoint = Vector3.new(targetEnemy.Position.X, -7, targetEnemy.Position.Z)
+                        else
+                            local maxD, furthest = -1, nil
+                            for _, obj in pairs(charFolder:GetChildren()) do
+                                if not Players:GetPlayerFromCharacter(obj) and not table.find(AllyList, obj.Name) and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 then
+                                    local dFromCenter = (obj.HumanoidRootPart.Position - CenterPosHunter).Magnitude
+                                    if dFromCenter <= DetectionRange1 then
+                                        local dMe = (root.Position - obj.HumanoidRootPart.Position).Magnitude
+                                        if dMe > maxD then maxD = dMe furthest = obj.HumanoidRootPart end
+                                    end
+                                end
+                            end
+                            targetPoint = furthest and Vector3.new(furthest.Position.X, -7, furthest.Position.Z) or CenterPosHunter
+                        end
+                    end
+                end
+                if targetPoint then SmoothMove(targetPoint) end
+                task.wait(currentWait)
+            else task.wait(0.5) end
+         end
+      end)
+   end,
+})
+
+AFKTab:CreateSection("Anti Lag & Waypoints")
+AFKTab:CreateToggle({
+   Name = "Anti Lag (ลบ Spit/Boulder)",
+   CurrentValue = false,
+   Callback = function(v) AntiLagEnabled = v end,
+})
+
+AFKTab:CreateSlider({
+   Name = "Safe Travel Y Axis",
+   Range = {-20, 2}, Increment = 1, Suffix = " Y", CurrentValue = -20,
+   Callback = function(v) TravelY = v end,
+})
+
+for i = 1, 4 do
+    AFKTab:CreateButton({
+       Name = "จดจำพิกัด Waypoint " .. i,
+       Callback = function()
+          local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+          if root then
+             local pos = Vector3.new(root.Position.X, TravelY, root.Position.Z)
+             Waypoints[i].Pos = pos
+             CreateWaypointESP(i, pos)
+          end
+       end,
+    })
+    AFKTab:CreateToggle({
+       Name = "เคลื่อนที่ไป Waypoint " .. i,
+       CurrentValue = false,
+       Callback = function(Value)
+          if Value then for idx, wp in pairs(Waypoints) do if idx ~= i then wp.Active = false end end end
+          Waypoints[i].Active = Value
+          task.spawn(function()
+              while Waypoints[i].Active and not HunterEnabled do
+                  if Waypoints[i].Pos then SmoothMove(Waypoints[i].Pos) end
+                  task.wait(DefaultInterval)
+              end
+              if not Waypoints[i].Active and not HunterEnabled then
+                  while (Player.Character.HumanoidRootPart.Position - CenterPosHunter).Magnitude > 1 and not Waypoints[i].Active and not HunterEnabled do
+                      SmoothMove(CenterPosHunter)
+                      task.wait(DefaultInterval)
+                  end
+              end
+          end)
+       end,
+    })
+end
+
+-- // Other Sections (Original UI Content) // --
 AimTab:CreateToggle({ Name = "Enable Auto Aim (NPC Only)", CurrentValue = false, Flag = "AimToggle", Callback = function(Value) AimSettings.Enabled = Value; FOVCircle.Visible = Value end })
 AimTab:CreateToggle({ Name = "Auto Attack (Melee Only)", CurrentValue = false, Flag = "AttackToggle", Callback = function(Value) CombatSettings.AutoAttack = Value end })
 AimTab:CreateToggle({ Name = "Auto Reload (When Ammo 0)", CurrentValue = false, Flag = "ReloadToggle", Callback = function(Value) CombatSettings.AutoReload = Value end })
@@ -452,7 +654,6 @@ AimTab:CreateSlider({ Name = "Aim FOV Radius", Range = {0, 1000}, Increment = 10
 AimTab:CreateSlider({ Name = "FOV Transparency", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = 0, Flag = "FOVTrans", Callback = function(Value) AimSettings.Transparency = Value / 100; FOVCircle.Transparency = 1 - (Value/100) end })
 AimTab:CreateSlider({ Name = "Smoothness", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 25, Flag = "Smooth", Callback = function(Value) AimSettings.Smoothness = Value / 100 end })
 
-local MoveTab = Window:CreateTab("Movement", 4483362458)
 MoveTab:CreateToggle({ Name = "Enable Loop Walkspeed", CurrentValue = false, Flag = "WalkToggle", Callback = function(Value) MovementSettings.WalkSpeedEnabled = Value end })
 MoveTab:CreateSlider({ Name = "WalkSpeed Value", Range = {28, 100}, Increment = 1, Suffix = "spd", CurrentValue = 28, Flag = "WalkVal", Callback = function(Value) MovementSettings.WalkSpeed = Value end })
 MoveTab:CreateToggle({ Name = "Fly (Noclip Included)", CurrentValue = false, Flag = "FlyToggle", Callback = function(Value) MovementSettings.Fly = Value if Player.Character and Player.Character:FindFirstChild("Humanoid") then Player.Character.Humanoid.PlatformStand = Value end end })
@@ -460,7 +661,6 @@ MoveTab:CreateToggle({ Name = "Noclip (Walk Through Walls)", CurrentValue = fals
 MoveTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Flag = "JumpToggle", Callback = function(Value) MovementSettings.InfiniteJump = Value end })
 MoveTab:CreateToggle({ Name = "Underground Fly (Hold Q)", CurrentValue = false, Flag = "UnderToggle", Callback = function(Value) MovementSettings.Underground = Value end }) 
 
-local FarmTab = Window:CreateTab("Farming", 4483362458)
 FarmTab:CreateSection("General Farm")
 FarmTab:CreateToggle({ Name = "Auto PickUp (To Hand)", CurrentValue = false, Flag = "PickToggle", Callback = function(Value) CollectSettings.PickUpEnabled = Value end })
 FarmTab:CreateToggle({ Name = "Auto Store (To Backpack)", CurrentValue = false, Flag = "StoreToggle", Callback = function(Value) CollectSettings.BackpackEnabled = Value end })
@@ -470,44 +670,34 @@ FarmTab:CreateToggle({ Name = "Auto Farm Power Plant", CurrentValue = false, Fla
 FarmTab:CreateSlider({ Name = "Movement Speed (s/1stud)", Range = {0.01, 1}, Increment = 0.01, Suffix = "s", CurrentValue = 0.05, Flag = "FarmSpeed", Callback = function(Value) OtherSettings.FarmSpeed = Value end })
 FarmTab:CreateSlider({ Name = "Underground Depth Offset", Range = {-15, 10}, Increment = 1, Suffix = " Studs", CurrentValue = -10, Flag = "DepthOffset", Callback = function(Value) OtherSettings.UndergroundDepth = Value end })
 
-local OtherTab = Window:CreateTab("Other", 4483362458)
 OtherTab:CreateToggle({ Name = "Instant Fixing Power Plant", CurrentValue = false, Flag = "FixToggle", Callback = function(Value) OtherSettings.InstantFixing = Value end })
 OtherTab:CreateToggle({ Name = "Auto Repair Structures", CurrentValue = false, Flag = "RepairToggle", Callback = function(Value) OtherSettings.AutoRepair = Value end })
 OtherTab:CreateToggle({ Name = "Instant Open Crates (Hold 0)", CurrentValue = false, Flag = "OpenToggle", Callback = function(Value) OtherSettings.InstantOpen = Value end })
 OtherTab:CreateSlider({ Name = "Repair Distance", Range = {0, 200}, Increment = 5, Suffix = "Studs", CurrentValue = 10, Flag = "RepRange", Callback = function(Value) OtherSettings.RepairRange = Value end })
 
-local VisualTabUI = Window:CreateTab("Visual", 4483362458)
 VisualTabUI:CreateSection("Box Scanner")
 VisualTabUI:CreateToggle({ Name = "Enable All Boxes ESP", CurrentValue = false, Flag = "BoxESP", Callback = function(Value) ESPSettings.Enabled = Value end })
 VisualTabUI:CreateButton({
     Name = "Clear Fog (Map Mod)",
     Callback = function()
-        if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Border") then
-            workspace.Map.Border:Destroy()
-        end
+        if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Border") then workspace.Map.Border:Destroy() end
         game:GetService("Lighting"):ClearAllChildren()
-        local FogRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Misc"):WaitForChild("FogTouched")
+        local FogRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Misc"):WaitForChild("FogTouched")
         for x = -50, 50 do
-            for y = -50, 50 do
-                FogRemote:FireServer(x, y)
-            end
+            for y = -50, 50 do FogRemote:FireServer(x, y) end
             if x % 10 == 0 then task.wait() end
         end
     end
 })
-
 VisualTabUI:CreateSection("Dropped Items ESP")
 VisualTabUI:CreateToggle({ Name = "Enable Dropped Items ESP", CurrentValue = false, Flag = "DropESP", Callback = function(Value) DroppedESPSettings.Enabled = Value end })
-
-local ItemDropdown = VisualTabUI:CreateDropdown({
+VisualTabUI:CreateDropdown({
     Name = "Select ItemType Filter",
     Options = {"All", "Resource", "Fuel", "Medical", "Food", "Melee", "Gun", "Throwable", "Ammo", "Blueprint", "Armor"},
     CurrentOption = {"All"},
     MultipleOptions = true,
     Flag = "ItemFilter",
-    Callback = function(Options)
-        DroppedESPSettings.TargetTypes = Options
-    end,
+    Callback = function(Options) DroppedESPSettings.TargetTypes = Options end,
 })
 
 -- // Main Update Loops // --
@@ -526,6 +716,14 @@ RunService.RenderStepped:Connect(function()
     CheckAndReload()
 end)
 
+workspace.ChildAdded:Connect(function(child)
+    if AntiLagEnabled then
+        if child.Name == "Spit" or child.Name == "Boulder" or child.Name == "BlightSpit" then
+            task.delay(10, function() if child and child.Parent then child:Destroy() end end)
+        end
+    end
+end)
+
 task.spawn(function()
     while true do
         UpdateHitboxes()
@@ -540,17 +738,13 @@ task.spawn(function()
             local Structures = workspace:FindFirstChild("Structures")
             if Structures then
                 for _, obj in pairs(Structures:GetChildren()) do
-                    if obj:FindFirstChild("Drops") and not ESPTable[obj] then
-                        ESPTable[obj] = CreateESP(obj, false)
-                    end
+                    if obj:FindFirstChild("Drops") and not ESPTable[obj] then ESPTable[obj] = CreateESP(obj, false) end
                 end
             end
             local Crates = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Crates")
             if Crates then
                 for _, crate in pairs(Crates:GetChildren()) do
-                    if crate:FindFirstChild("Prompt") and not ESPTable[crate] then
-                        ESPTable[crate] = CreateESP(crate, true)
-                    end
+                    if crate:FindFirstChild("Prompt") and not ESPTable[crate] then ESPTable[crate] = CreateESP(crate, true) end
                 end
             end
         end
@@ -560,17 +754,10 @@ task.spawn(function()
         if DroppedESPSettings.Enabled and DroppedFolder then
             for _, item in pairs(DroppedFolder:GetChildren()) do
                 local currentItemType = item:GetAttribute("ItemType") or item:GetAttribute("ToolType") or "None"
-                local isTarget = false
-                if table.find(DroppedESPSettings.TargetTypes, "All") then
-                    isTarget = true
-                elseif table.find(DroppedESPSettings.TargetTypes, currentItemType) then
-                    isTarget = true
-                end
+                local isTarget = table.find(DroppedESPSettings.TargetTypes, "All") or table.find(DroppedESPSettings.TargetTypes, currentItemType)
                 
                 if isTarget then
-                    if not DroppedESPTable[item] then
-                        DroppedESPTable[item] = CreateDroppedESP(item)
-                    end
+                    if not DroppedESPTable[item] then DroppedESPTable[item] = CreateDroppedESP(item) end
                     local data = DroppedESPTable[item]
                     local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
                     if MyRoot and data and data.Label then
@@ -579,31 +766,19 @@ task.spawn(function()
                         data.Highlight.Enabled = true
                         data.Billboard.Enabled = true
                     end
-                else
-                    if DroppedESPTable[item] then
-                        DroppedESPTable[item].Highlight.Enabled = false
-                        DroppedESPTable[item].Billboard.Enabled = false
-                    end
+                elseif DroppedESPTable[item] then
+                    DroppedESPTable[item].Highlight.Enabled = false
+                    DroppedESPTable[item].Billboard.Enabled = false
                 end
             end
         end
-
         for item, data in pairs(DroppedESPTable) do
-            local currentItemType = item and (item:GetAttribute("ItemType") or item:GetAttribute("ToolType")) or "None"
-            local isTarget = false
-            if table.find(DroppedESPSettings.TargetTypes, "All") then
-                isTarget = true
-            elseif table.find(DroppedESPSettings.TargetTypes, currentItemType) then
-                isTarget = true
-            end
-
-            if not item or not item.Parent or not DroppedESPSettings.Enabled or not isTarget then
+            if not item or not item.Parent or not DroppedESPSettings.Enabled then
                 if data.Highlight then data.Highlight:Destroy() end
                 if data.Billboard then data.Billboard:Destroy() end
                 DroppedESPTable[item] = nil
             end
         end
-        
         task.wait(0.5)
     end
 end)
