@@ -16,8 +16,8 @@ local MovementSettings = { WalkSpeed = 28, WalkSpeedEnabled = false, Noclip = fa
 local CombatSettings = { AutoReload = false, AutoAttack = false, AttackRange = 50 }
 local CollectSettings = { PickUpEnabled = false, BackpackEnabled = false, Range = 10, Delay = 0.2 }
 local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantOpen = false }
-local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(255, 255, 255) }
-local DroppedESPSettings = { Enabled = false, TargetType = "All" } -- แก้ไข: เปลี่ยนจาก TargetItem เป็น TargetType
+local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(0, 100, 0) }
+local DroppedESPSettings = { Enabled = false, TargetTypes = {"All"} } 
 
 local ESPTable = {}
 local DroppedESPTable = {}
@@ -55,13 +55,22 @@ local function UpdateHitboxes()
     end
 end
 
--- // [Logic] ESP สำหรับ Dropped Items // --
+-- // [Logic] ESP สำหรับ Dropped Items (แก้ไขการดึง Attribute รองรับ ItemType และ ToolType) // --
 local function CreateDroppedESP(part)
-    local itemType = part:GetAttribute("ItemType") or "Item"
+    -- ดึงค่าจาก ItemType หรือ ToolType อย่างใดอย่างหนึ่ง
+    local itemType = part:GetAttribute("ItemType") or part:GetAttribute("ToolType") or "Item"
     local itemColor = Color3.fromRGB(255, 255, 255)
-    if itemType == "Fuel" then itemColor = Color3.fromRGB(255, 170, 0)
-    elseif itemType == "Melee" then itemColor = Color3.fromRGB(255, 85, 85)
-    elseif itemType == "Medical" then itemColor = Color3.fromRGB(85, 255, 127)
+    
+    if itemType == "Resource" then itemColor = Color3.fromRGB(112, 128, 144)
+    elseif itemType == "Fuel" then itemColor = Color3.fromRGB(255, 140, 0)
+    elseif itemType == "Medical" then itemColor = Color3.fromRGB(151, 0, 0)
+    elseif itemType == "Food" then itemColor = Color3.fromRGB(184, 134, 11)
+    elseif itemType == "Melee" then itemColor = Color3.fromRGB(148, 0, 211)
+    elseif itemType == "Gun" then itemColor = Color3.fromRGB(91, 154, 76) 
+    elseif itemType == "Throwable" then itemColor = Color3.fromRGB(107, 50, 124) 
+    elseif itemType == "Ammo" then itemColor = Color3.fromRGB(255, 215, 0)
+    elseif itemType == "Blueprint" then itemColor = Color3.fromRGB(0, 0, 205)
+    elseif itemType == "Armor" then itemColor = Color3.fromRGB(109, 110, 108) 
     end
 
     local highlight = Instance.new("Highlight")
@@ -232,7 +241,7 @@ local function ProcessCollection()
         if ItemPos then
             local Distance = (MyRoot.Position - ItemPos).Magnitude
             if Distance <= CollectSettings.Range then
-                local isFuel = Item:GetAttribute("ItemType") == "Fuel"
+                local isFuel = (Item:GetAttribute("ItemType") or Item:GetAttribute("ToolType")) == "Fuel"
                 if CollectSettings.PickUpEnabled and not isFuel then 
                     ReplicatedStorage.Remotes.Interaction.PickUpItem:FireServer(Item) 
                 end
@@ -388,14 +397,13 @@ VisualTabUI:CreateToggle({
     end 
 })
 
--- แก้ไข: เปลี่ยน Dropdown ให้เลือกตาม ItemType
 local ItemDropdown = VisualTabUI:CreateDropdown({
     Name = "Select ItemType Filter",
-    Options = {"All", "Resource", "Fuel", "Medical", "Food", "Melee", "Gun", "Throwable", "Ammo", "Blueprint"},
+    Options = {"All", "Resource", "Fuel", "Medical", "Food", "Melee", "Gun", "Throwable", "Ammo", "Blueprint", "Armor"},
     CurrentOption = {"All"},
-    MultipleOptions = false,
-    Callback = function(Option)
-        DroppedESPSettings.TargetType = Option[1]
+    MultipleOptions = true,
+    Callback = function(Options)
+        DroppedESPSettings.TargetTypes = Options
     end,
 })
 
@@ -443,12 +451,19 @@ task.spawn(function()
         end
         UpdateESP()
 
-        -- Dropped Items ESP with Filter (แก้ไข: เช็คที่ Attribute ItemType)
+        -- Dropped Items ESP Filter Logic (แก้ไขการตรวจสอบ ItemType ให้รองรับ ToolType)
         local DroppedFolder = workspace:FindFirstChild("DroppedItems")
         if DroppedESPSettings.Enabled and DroppedFolder then
             for _, item in pairs(DroppedFolder:GetChildren()) do
-                local currentItemType = item:GetAttribute("ItemType") or "None"
-                local isTarget = (DroppedESPSettings.TargetType == "All" or currentItemType == DroppedESPSettings.TargetType)
+                -- ดึงค่าจาก Attribute ไหนก็ได้ที่พบ
+                local currentItemType = item:GetAttribute("ItemType") or item:GetAttribute("ToolType") or "None"
+                
+                local isTarget = false
+                if table.find(DroppedESPSettings.TargetTypes, "All") then
+                    isTarget = true
+                elseif table.find(DroppedESPSettings.TargetTypes, currentItemType) then
+                    isTarget = true
+                end
                 
                 if isTarget then
                     if not DroppedESPTable[item] then
@@ -456,7 +471,7 @@ task.spawn(function()
                     end
                     local data = DroppedESPTable[item]
                     local MyRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-                    if MyRoot then
+                    if MyRoot and data and data.Label then
                         local dist = math.floor((MyRoot.Position - item:GetPivot().Position).Magnitude)
                         data.Label.Text = string.format("%s\n[%d Studs]", item.Name, dist)
                         data.Highlight.Enabled = true
@@ -471,10 +486,16 @@ task.spawn(function()
             end
         end
 
-        -- Cleanup (แก้ไข: เช็คเงื่อนไข ItemType)
+        -- Cleanup
         for item, data in pairs(DroppedESPTable) do
-            local currentItemType = item and item:GetAttribute("ItemType") or "None"
-            local isTarget = (DroppedESPSettings.TargetType == "All" or currentItemType == DroppedESPSettings.TargetType)
+            local currentItemType = item and (item:GetAttribute("ItemType") or item:GetAttribute("ToolType")) or "None"
+            local isTarget = false
+            if table.find(DroppedESPSettings.TargetTypes, "All") then
+                isTarget = true
+            elseif table.find(DroppedESPSettings.TargetTypes, currentItemType) then
+                isTarget = true
+            end
+
             if not item or not item.Parent or not DroppedESPSettings.Enabled or not isTarget then
                 if data.Highlight then data.Highlight:Destroy() end
                 if data.Billboard then data.Billboard:Destroy() end
