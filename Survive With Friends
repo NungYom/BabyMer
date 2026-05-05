@@ -16,7 +16,7 @@ local MovementSettings = { WalkSpeed = 28, WalkSpeedEnabled = false, Noclip = fa
 local CombatSettings = { AutoReload = false, AutoAttack = false, AttackRange = 50 }
 local CollectSettings = { PickUpEnabled = false, BackpackEnabled = false, Range = 10, Delay = 0.2 }
 -- [แก้ไข] รวมปุ่ม Interact
-local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantInteractAll = false, AutoFarmPower = false, UndergroundDepth = -10, FarmSpeed = 0.05 }
+local OtherSettings = { AutoRepair = false, RepairRange = 10, InstantInteractAll = false, AutoFarmPower = false, UndergroundDepth = -10, FarmSpeed = 0.05, AntiLag = false }
 local ESPSettings = { Enabled = false, TextSize = 16, TextColor = Color3.fromRGB(0, 100, 0) }
 local DroppedESPSettings = { Enabled = false, TargetTypes = {"All"} } 
 
@@ -429,6 +429,22 @@ local function UpdateESP()
     end
 end
 
+-- // [Anti Lag] ลบโมเดล projectile ที่ไม่มีชื่อ (Boulder, BlightSpit, Spit) หลัง 10 วินาที // --
+-- หมายเหตุ: โมเดลเหล่านี้ถูกสร้างโดยไม่มี Name ปกติ แต่มี ClassName เป็น Model หรือ Part
+-- ใช้ ChildAdded แทนการ scan loop เพื่อไม่ต้องวนหา children ทั้งหมดทุก frame
+local AntiLagTargetNames = { Boulder = true, BlightSpit = true, Spit = true }
+
+workspace.ChildAdded:Connect(function(child)
+    if not OtherSettings.AntiLag then return end
+    if AntiLagTargetNames[child.Name] then
+        task.delay(10, function()
+            if child and child.Parent then
+                child:Destroy()
+            end
+        end)
+    end
+end)
+
 -- // UI Window & Tabs // --
 local Window = Rayfield:CreateWindow({
    Name = "NUNGY PRO | V2.6 FINAL",
@@ -651,6 +667,24 @@ OtherTab:CreateToggle({
         end
     end 
 })
+OtherTab:CreateSection("Performance")
+OtherTab:CreateToggle({
+    Name = "Anti Lag (ลบ Boulder / Spit / BlightSpit)",
+    CurrentValue = false,
+    Flag = "AntiLagToggle",
+    Callback = function(Value)
+        OtherSettings.AntiLag = Value
+        -- เมื่อเปิด ลบของที่ค้างอยู่ใน workspace แล้วทันที
+        if Value then
+            for _, child in pairs(workspace:GetChildren()) do
+                if AntiLagTargetNames[child.Name] then
+                    child:Destroy()
+                end
+            end
+        end
+    end
+})
+OtherTab:CreateSection("Structures")
 OtherTab:CreateToggle({ Name = "Auto Repair Structures", CurrentValue = false, Flag = "RepairToggle", Callback = function(Value) OtherSettings.AutoRepair = Value end })
 OtherTab:CreateSlider({ Name = "Repair Distance", Range = {0, 200}, Increment = 5, Suffix = "Studs", CurrentValue = 10, Flag = "RepRange", Callback = function(Value) OtherSettings.RepairRange = Value end })
 
