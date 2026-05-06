@@ -13,32 +13,34 @@ local Window = Rayfield:CreateWindow({
 
 -- Variables
 local _G = {
-    AutoAttack = false,
-    AttackSpeed = 0 -- 0 คือรัวที่สุดเท่าที่ Task จะทำได้
+    AutoAttackNearest = false,
+    AutoAttackAll = false,
+    AttackSpeed = 0 
 }
 
 local Player = game.Players.LocalPlayer
 local Remote = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
 local MonsterFolder = workspace:WaitForChild("ClientMonsters")
 
--- Function: ค้นหามอนสเตอร์ที่ใกล้ที่สุดและดึง ID
+-- Function: ดึง ID จากชื่อมอนสเตอร์
+local function getMonsterID(monsterName)
+    return tonumber(string.match(monsterName, "%d+"))
+end
+
+-- Function: ค้นหามอนสเตอร์ที่ใกล้ที่สุด
 local function getNearestMonsterID()
     local nearestID = nil
     local shortestDistance = math.huge
 
     for _, monster in pairs(MonsterFolder:GetChildren()) do
-        if monster:IsA("Model") or monster:IsA("BasePart") then
-            -- คำนวณระยะทาง
-            local rootPart = monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChildWhichIsA("BasePart")
-            if rootPart then
-                local distance = (Player.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
-                if distance < shortestDistance then
-                    -- ดึงตัวเลขจากชื่อ (เช่น Monster_9 -> 9)
-                    local idStr = string.match(monster.Name, "%d+")
-                    if idStr then
-                        shortestDistance = distance
-                        nearestID = tonumber(idStr)
-                    end
+        local rootPart = monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChildWhichIsA("BasePart")
+        if rootPart then
+            local distance = (Player.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+            if distance < shortestDistance then
+                local id = getMonsterID(monster.Name)
+                if id then
+                    shortestDistance = distance
+                    nearestID = id
                 end
             end
         end
@@ -47,34 +49,54 @@ local function getNearestMonsterID()
 end
 
 -- Main Tab
-local Tab = Window:CreateTab("Combat", 4483362458) -- ไอคอนรูปดาบ
+local Tab = Window:CreateTab("Combat", 4483362458)
 
-local Toggle = Tab:CreateToggle({
+-- ปุ่ม 1: ตีตัวที่ใกล้ที่สุด (เดิม)
+Tab:CreateToggle({
    Name = "Auto Attack (Nearest)",
    CurrentValue = false,
-   Flag = "AutoAttackToggle",
+   Flag = "NearestToggle",
    Callback = function(Value)
-      _G.AutoAttack = Value
-      
+      _G.AutoAttackNearest = Value
       if Value then
-          -- เริ่ม Loop การโจมตีแบบรัว
           task.spawn(function()
-              while _G.AutoAttack do
+              while _G.AutoAttackNearest do
                   local targetID = getNearestMonsterID()
-                  
                   if targetID then
-                      local args = {
-                          "AttackMonsterChannel",
-                          { targetID }
-                      }
-                      
-                      -- รัน Remote รัวๆ (ใช้ pcall เพื่อป้องกัน Error เวลาเซิร์ฟเวอร์ตอบสนองไม่ทัน)
                       pcall(function()
-                          Remote:InvokeServer(unpack(args))
+                          Remote:InvokeServer("AttackMonsterChannel", {targetID})
                       end)
                   end
-                  
-                  -- ใช้ task.wait() เพื่อความเสถียร (0 คือรัวที่สุดใน 1 frame)
+                  task.wait(_G.AttackSpeed)
+              end
+          end)
+      end
+   end,
+})
+
+-- ปุ่ม 2: ตีทุกตัวในเซิร์ฟเวอร์ (ใหม่!)
+Tab:CreateToggle({
+   Name = "Auto Attack (All Monsters)",
+   CurrentValue = false,
+   Flag = "AllToggle",
+   Callback = function(Value)
+      _G.AutoAttackAll = Value
+      if Value then
+          task.spawn(function()
+              while _G.AutoAttackAll do
+                  -- วนลูปตีมอนสเตอร์ทุกตัวที่มีอยู่ใน Folder
+                  for _, monster in pairs(MonsterFolder:GetChildren()) do
+                      if not _G.AutoAttackAll then break end -- ตรวจสอบว่าปิด Toggle หรือยัง
+                      
+                      local targetID = getMonsterID(monster.Name)
+                      if targetID then
+                          pcall(function()
+                              Remote:InvokeServer("AttackMonsterChannel", {targetID})
+                          end)
+                      end
+                      -- ใส่ wait เล็กน้อยเพื่อไม่ให้ Remote โดนเตะ (Spam Protection)
+                      -- ถ้าอยากให้รัวสุดๆ ให้ปรับเป็น task.wait() หรือใส่ค่า 0
+                  end
                   task.wait(_G.AttackSpeed)
               end
           end)
@@ -83,8 +105,8 @@ local Toggle = Tab:CreateToggle({
 })
 
 Rayfield:Notify({
-   Title = "Script Loaded",
-   Content = "พร้อมใช้งานแล้วครับ!",
+   Title = "Script Updated",
+   Content = "เพิ่มโหมดโจมตีทั้งหมดเรียบร้อยแล้ว",
    Duration = 5,
    Image = 4483362458,
 })
