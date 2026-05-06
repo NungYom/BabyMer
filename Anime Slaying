@@ -1,0 +1,90 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Professional Auto-Farm | Rayfield",
+   LoadingTitle = "Loading Script...",
+   LoadingSubtitle = "by Expert Scripter",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "AutoFarmConfig",
+      FileName = "MainConfig"
+   }
+})
+
+-- Variables
+local _G = {
+    AutoAttack = false,
+    AttackSpeed = 0 -- 0 คือรัวที่สุดเท่าที่ Task จะทำได้
+}
+
+local Player = game.Players.LocalPlayer
+local Remote = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+local MonsterFolder = workspace:WaitForChild("ClientMonsters")
+
+-- Function: ค้นหามอนสเตอร์ที่ใกล้ที่สุดและดึง ID
+local function getNearestMonsterID()
+    local nearestID = nil
+    local shortestDistance = math.huge
+
+    for _, monster in pairs(MonsterFolder:GetChildren()) do
+        if monster:IsA("Model") or monster:IsA("BasePart") then
+            -- คำนวณระยะทาง
+            local rootPart = monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChildWhichIsA("BasePart")
+            if rootPart then
+                local distance = (Player.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+                if distance < shortestDistance then
+                    -- ดึงตัวเลขจากชื่อ (เช่น Monster_9 -> 9)
+                    local idStr = string.match(monster.Name, "%d+")
+                    if idStr then
+                        shortestDistance = distance
+                        nearestID = tonumber(idStr)
+                    end
+                end
+            end
+        end
+    end
+    return nearestID
+end
+
+-- Main Tab
+local Tab = Window:CreateTab("Combat", 4483362458) -- ไอคอนรูปดาบ
+
+local Toggle = Tab:CreateToggle({
+   Name = "Auto Attack (Nearest)",
+   CurrentValue = false,
+   Flag = "AutoAttackToggle",
+   Callback = function(Value)
+      _G.AutoAttack = Value
+      
+      if Value then
+          -- เริ่ม Loop การโจมตีแบบรัว
+          task.spawn(function()
+              while _G.AutoAttack do
+                  local targetID = getNearestMonsterID()
+                  
+                  if targetID then
+                      local args = {
+                          "AttackMonsterChannel",
+                          { targetID }
+                      }
+                      
+                      -- รัน Remote รัวๆ (ใช้ pcall เพื่อป้องกัน Error เวลาเซิร์ฟเวอร์ตอบสนองไม่ทัน)
+                      pcall(function()
+                          Remote:InvokeServer(unpack(args))
+                      end)
+                  end
+                  
+                  -- ใช้ task.wait() เพื่อความเสถียร (0 คือรัวที่สุดใน 1 frame)
+                  task.wait(_G.AttackSpeed)
+              end
+          end)
+      end
+   end,
+})
+
+Rayfield:Notify({
+   Title = "Script Loaded",
+   Content = "พร้อมใช้งานแล้วครับ!",
+   Duration = 5,
+   Image = 4483362458,
+})
