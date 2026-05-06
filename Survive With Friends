@@ -26,6 +26,7 @@ local SafeHealth1 = 60
 local DetectionRange1 = 50 
 local CenterPosHunter = Vector3.new(0, -20, 0)
 local HunterEnabled = false
+local HunterWeaponEnabled = false
 local FocusBloater = false
 local AntiLagEnabled = false
 local IsEating1 = false
@@ -451,7 +452,6 @@ local Window = Rayfield:CreateWindow({
    LoadingTitle = "Applying Fixes & Movement...",
    LoadingSubtitle = "by Nungy Developer",
    ConfigurationSaving = { Enabled = true, Folder = "NungyScripts", FileName = "UserConfig_" .. Player.UserId },
-   KeybindSource = "X"
 })
 
 local AimTab = Window:CreateTab("Combat", 4483362458)
@@ -615,6 +615,106 @@ AFKTab:CreateToggle({
                 if targetPoint then SmoothMove(targetPoint) end
                 task.wait(currentWait)
             else task.wait(0.5) end
+         end
+      end)
+   end,
+})
+
+AFKTab:CreateToggle({
+   Name = "Auto Hunter With Weapon(2) and Skill(3)",
+   CurrentValue = false,
+   Callback = function(Value)
+      HunterWeaponEnabled = Value
+      if not Value then return end
+      task.spawn(function()
+         -- ติดตามเวลาที่อยู่ "ในโหมดต่อสู้" ต่อเนื่อง (Y ขึ้นมาแล้ว + มีเป้าหมาย + ไม่มีอันตราย)
+         local combatStableSince = nil
+
+         while HunterWeaponEnabled do
+            local char = Player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            local charFolder = workspace:FindFirstChild("Characters")
+            local myAttr = charFolder and charFolder:FindFirstChild(Player.Name)
+
+            if root and hum and myAttr then
+               -- ตรวจสอบเงื่อนไขอันตราย (เหมือน Hunter หลัก)
+               local lightningModel = workspace:FindFirstChild("Lightning")
+               local isLightningDanger = false
+               if lightningModel then
+                  if (root.Position - lightningModel:GetPivot().Position).Magnitude <= 30 then
+                     isLightningDanger = true
+                  end
+               end
+
+               local isExplodingNear = false
+               for _, obj in pairs(charFolder:GetChildren()) do
+                  if obj.Name == "Bloater" and obj:FindFirstChild("HumanoidRootPart") then
+                     if (root.Position - obj.HumanoidRootPart.Position).Magnitude <= 30
+                        and obj.HumanoidRootPart:GetAttribute("Speed") == nil then
+                        isExplodingNear = true
+                        break
+                     end
+                  end
+               end
+
+               local isDangerHP = hum.Health < SafeHealth1
+               local hunger = myAttr:GetAttribute("Hunger") or 100
+               local isAnyDanger = isLightningDanger or isExplodingNear or isDangerHP or hunger < 5
+
+               -- ตรวจสอบว่า "อยู่ในโหมดต่อสู้" หรือไม่
+               -- เงื่อนไข: มีเป้าหมาย + Y สูงกว่า -15 (ขึ้นมาต่อสู้แล้ว) + ไม่มีอันตราย
+               local hasTarget = CurrentHunterTarget
+                  and CurrentHunterTarget.Parent
+                  and CurrentHunterTarget:FindFirstChild("Humanoid")
+                  and CurrentHunterTarget.Humanoid.Health > 0
+               local isAboveGround = root.Position.Y > -15
+
+               if hasTarget and isAboveGround and not isAnyDanger then
+                  -- เริ่มจับเวลา stable
+                  if combatStableSince == nil then
+                     combatStableSince = tick()
+                  end
+
+                  -- ถ้า stable นานพอ 2 วินาที → ยิง skill sequence
+                  if tick() - combatStableSince >= 2 then
+                     combatStableSince = nil -- reset เพื่อรอ cooldown รอบหน้า
+
+                     -- กด 3 (สวมใส่ skill)
+                     local uis = game:GetService("UserInputService")
+                     local vInput = game:GetService("VirtualInputManager")
+
+                     vInput:SendKeyEvent(true, Enum.KeyCode.Three, false, nil)
+                     task.wait(0.05)
+                     vInput:SendKeyEvent(false, Enum.KeyCode.Three, false, nil)
+                     task.wait(0.5)
+
+                     -- คลิกกลางหน้าจอ 2 ที ภายใน 0.5 วิ
+                     local screenCenter = Vector2.new(
+                        Camera.ViewportSize.X / 2,
+                        Camera.ViewportSize.Y / 2
+                     )
+                     vInput:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, nil, 0)
+                     task.wait(0.05)
+                     vInput:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, nil, 0)
+                     task.wait(0.2)
+                     vInput:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, nil, 0)
+                     task.wait(0.05)
+                     vInput:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, nil, 0)
+                     task.wait(0.2)
+
+                     -- กด 2 (กลับมาใช้อาวุธ)
+                     vInput:SendKeyEvent(true, Enum.KeyCode.Two, false, nil)
+                     task.wait(0.05)
+                     vInput:SendKeyEvent(false, Enum.KeyCode.Two, false, nil)
+                  end
+               else
+                  -- ไม่อยู่ในโหมดต่อสู้ → reset timer
+                  combatStableSince = nil
+               end
+            end
+
+            task.wait(0.1)
          end
       end)
    end,
