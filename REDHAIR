@@ -1,71 +1,66 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- แจ้งสถานะใน Console
+print("------------------------------------------")
+print("Gemini Pro: Distance-Based Auto Attack")
+print("Status: Running...")
+print("------------------------------------------")
 
-local Window = Rayfield:CreateWindow({
-   Name = "Ray Field | Pro Edition",
-   LoadingTitle = "Initializing...",
-   LoadingSubtitle = "by Gemini",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "RayfieldConfigs",
-      FileName = "SpammerConfig"
-   }
-})
+local Player = game:GetService("Players").LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local Remote = RS:WaitForChild("BridgeNet"):WaitForChild("dataRemoteEvent")
 
-local MainTab = Window:CreateTab("Main", 4483362458) -- ไอคอนรูปหน้าแรก
-local _G = _G or {}
-_G.AutoClick = false
+-- ระยะที่จะให้สคริปต์เริ่มทำงาน (ปรับเลข 20 เพิ่ม/ลดได้)
+local AttackDistance = 20 
 
--- ข้อมูล Remote ของคุณ
-local args = {
-    {
-        {
-            "General",
-            "Attack",
-            "Click",
-            {
-                ["d8e32c09-ba4f-4fb3-befd-d0afb7f4e9fb"] = true
-            },
-            n = 4
-        },
-        "\002"
-    }
-}
-
-local Remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet"):WaitForChild("dataRemoteEvent")
-
--- ฟังก์ชันรันลูป
-local function startLoop()
-    task.spawn(function()
-        while _G.AutoClick do
-            -- ส่ง Remote ทันที (Unpack ไว้ข้างนอกเพื่อความเร็วเพิ่มขึ้นอีกนิด)
-            Remote:FireServer(unpack(args))
-            
-            -- ปรับแต่งความเร็วตรงนี้: task.wait() คือเร็วมาก ถ้าเอาออกเกมอาจค้างได้
-            task.wait() 
+-- ฟังก์ชันหาตัวมอนสเตอร์ที่ใกล้ที่สุด
+local function getNearestMonster()
+    local target = nil
+    local dist = AttackDistance
+    
+    -- สมมติว่ามอนสเตอร์อยู่ใน Workspace (ต้องเช็คชื่อ Folder มอนสเตอร์ในเกมอีกที)
+    for _, v in pairs(game.Workspace:GetChildren()) do
+        -- เช็คว่าเป็นตัวที่มีเลือด (มักจะมี Humanoid) และไม่ใช่ตัวเรา
+        if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v ~= Player.Character then
+            local magnitude = (Player.Character.HumanoidRootPart.Position - v.HumanoidRootPart.Position).magnitude
+            if magnitude < dist then
+                dist = magnitude
+                target = v
+            end
         end
-    end)
+    end
+    return target
 end
 
--- ปุ่มเปิด/ปิด
-MainTab:CreateToggle({
-   Name = "Auto Attack (Ultra Fast)",
-   CurrentValue = false,
-   Flag = "AttackToggle",
-   Callback = function(Value)
-      _G.AutoClick = Value
-      if Value then
-          startLoop()
-          Rayfield:Notify({Title = "Status", Content = "Enabled Loop", Duration = 2})
-      else
-          Rayfield:Notify({Title = "Status", Content = "Disabled Loop", Duration = 2})
-      end
-   end,
-})
-
--- ปุ่มปิด GUI
-MainTab:CreateButton({
-   Name = "Destroy UI",
-   Callback = function()
-      Rayfield:Destroy()
-   end,
-})
+-- ลูปการทำงาน
+task.spawn(function()
+    while true do
+        local target = getNearestMonster()
+        
+        if target then
+            -- สร้าง Args โดยใช้ ID ของมอนสเตอร์ที่เจอ
+            -- หมายเหตุ: ID ต้องดึงจาก Attributes หรือชื่อ ตามที่เกมกำหนด
+            -- ตรงนี้ผมใช้รูปแบบ Remote ที่นายให้มาตอนแรก
+            local monsterID = target:GetAttribute("ID") or target.Name -- ปรับตามความเหมาะสมของเกม
+            
+            local args = {
+                {
+                    {
+                        "General",
+                        "Attack",
+                        "Click",
+                        {
+                            [tostring(monsterID)] = true
+                        },
+                        n = 4
+                    },
+                    "\002"
+                }
+            }
+            
+            pcall(function()
+                Remote:FireServer(unpack(args))
+            end)
+        end
+        
+        task.wait(0.1) -- ความเร็วในการสแกนและตี (0.1 = 10 ครั้งต่อวิ)
+    end
+end)
