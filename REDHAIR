@@ -1,0 +1,71 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Ray Field | Pro Edition",
+   LoadingTitle = "Initializing...",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "RayfieldConfigs",
+      FileName = "SpammerConfig"
+   }
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458) -- ไอคอนรูปหน้าแรก
+local _G = _G or {}
+_G.AutoClick = false
+
+-- ข้อมูล Remote ของคุณ
+local args = {
+    {
+        {
+            "General",
+            "Attack",
+            "Click",
+            {
+                ["d8e32c09-ba4f-4fb3-befd-d0afb7f4e9fb"] = true
+            },
+            n = 4
+        },
+        "\002"
+    }
+}
+
+local Remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet"):WaitForChild("dataRemoteEvent")
+
+-- ฟังก์ชันรันลูป
+local function startLoop()
+    task.spawn(function()
+        while _G.AutoClick do
+            -- ส่ง Remote ทันที (Unpack ไว้ข้างนอกเพื่อความเร็วเพิ่มขึ้นอีกนิด)
+            Remote:FireServer(unpack(args))
+            
+            -- ปรับแต่งความเร็วตรงนี้: task.wait() คือเร็วมาก ถ้าเอาออกเกมอาจค้างได้
+            task.wait() 
+        end
+    end)
+end
+
+-- ปุ่มเปิด/ปิด
+MainTab:CreateToggle({
+   Name = "Auto Attack (Ultra Fast)",
+   CurrentValue = false,
+   Flag = "AttackToggle",
+   Callback = function(Value)
+      _G.AutoClick = Value
+      if Value then
+          startLoop()
+          Rayfield:Notify({Title = "Status", Content = "Enabled Loop", Duration = 2})
+      else
+          Rayfield:Notify({Title = "Status", Content = "Disabled Loop", Duration = 2})
+      end
+   end,
+})
+
+-- ปุ่มปิด GUI
+MainTab:CreateButton({
+   Name = "Destroy UI",
+   Callback = function()
+      Rayfield:Destroy()
+   end,
+})
