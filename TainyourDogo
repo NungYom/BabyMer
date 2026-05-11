@@ -1,81 +1,130 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Bolt Farm Pro",
-   LoadingTitle = "Loading System...",
+   Name = "Medal & NPC Farm Pro",
+   LoadingTitle = "Initializing Combat System...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = { Enabled = false }
 })
 
-local _G = { AutoFarm = false }
+-- ข้อมูลตัวแปรเซ็ตติ้ง
+local _G = {
+    MedalFarm = false,
+    YOffset = 5,
+    SafePoint = Vector3.new(0.956054688, 174, -27.058403),
+    CurrentTarget = nil,
+    IsHealing = false
+}
 
--- ฟังก์ชันหาตำแหน่งที่ถูกต้องเพื่อวาร์ปไป
-local function getBoltTarget(boltModel)
-    if boltModel:IsA("Model") then
-        return boltModel.PrimaryPart or boltModel:FindFirstChildWhichIsA("BasePart")
-    elseif boltModel:IsA("BasePart") then
-        return boltModel
+-- ตัวแปรอ้างอิง Service และผู้เล่น
+local lp = game:GetService("Players").LocalPlayer
+local rs = game:GetService("ReplicatedStorage")
+local pveFolder = workspace:WaitForChild("PVEDogs")
+
+-- ฟังก์ชันคำนวณระยะทางแบบ 2D (ตัดแกน Y)
+local function getDistance2D(pos1, pos2)
+    return (Vector2.new(pos1.X, pos1.Z) - Vector2.new(pos2.X, pos2.Z)).Magnitude
+end
+
+-- ฟังก์ชันหา NPC ที่เลือดเยอะที่สุด
+local function getStrongestNPC()
+    local maxHealth = -1
+    local target = nil
+    for _, npc in pairs(pveFolder:GetChildren()) do
+        local hum = npc:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 and hum.Health > maxHealth then
+            maxHealth = hum.Health
+            target = npc
+        end
+    end
+    return target
+end
+
+-- ฟังก์ชันหาผู้เล่นคนอื่นในระยะ AtkRange
+local function getNearbyPlayer()
+    local range = lp:FindFirstChild("PlayerAtkRange") and lp.PlayerAtkRange.Value or 50
+    local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+
+    for _, p in pairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = getDistance2D(myRoot.Position, p.Character.HumanoidRootPart.Position)
+            if dist <= range then
+                return p
+            end
+        end
     end
     return nil
 end
 
-local Tab = Window:CreateTab("Main", 4483362458)
+-- สร้าง UI
+local Tab = Window:CreateTab("Medal Farm", 4483362458)
 
 Tab:CreateToggle({
-   Name = "Auto Farm (Loop All Bolts)",
+   Name = "Auto Medal Farm (PvE + PvP)",
    CurrentValue = false,
-   Flag = "FarmToggle",
+   Flag = "MedalToggle",
    Callback = function(Value)
-      _G.AutoFarm = Value
-      
+      _G.MedalFarm = Value
       if Value then
           task.spawn(function()
-              while _G.AutoFarm do
-                  -- ตรวจสอบ Path ให้ตรงตามโครงสร้างของคุณ
-                  -- จากรูป Path น่าจะเป็น workspace.MainScene["1"].FunctionFolder
-                  local folder = workspace:FindFirstChild("MainScene") 
-                      and workspace.MainScene:FindFirstChild("1") 
-                      and workspace.MainScene["1"]:FindFirstChild("FunctionFolder")
+              while _G.MedalFarm do
+                  local char = lp.Character
+                  local root = char and char:FindFirstChild("HumanoidRootPart")
+                  local hpValue = lp:FindFirstChild("PlayerHP") and lp.PlayerHP.Value or 100
+                  local maxHpValue = lp:FindFirstChild("PlayerTotalHP") and lp.PlayerTotalHP.Value or 100
+                  
+                  -- 1. เช็คสถานะเลือด (Safety First)
+                  if hpValue < (maxHpValue * 0.6) or _G.IsHealing then
+                      _G.IsHealing = true
+                      root.CFrame = CFrame.new(_G.SafePoint)
+                      if hpValue >= maxHpValue then _G.IsHealing = false end
+                      task.wait(0.5)
+                  
+                  else
+                      -- 2. เช็คผู้เล่นใกล้ๆ (PvP Priority)
+                      local pvpTarget = getNearbyPlayer()
+                      if pvpTarget then
+                          local args = { "Player selects the target", { pvpTarget } }
+                          rs:WaitForChild("Msg"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
+                          task.wait(0.1)
+                      
+                      else
+                          -- 3. ฟาร์ม NPC (PvE Mode)
+                          if not _G.CurrentTarget or not _G.CurrentTarget:Parent or (_G.CurrentTarget:FindFirstChildOfClass("Humanoid") and _G.CurrentTarget:FindFirstChildOfClass("Humanoid").Health <= 0) then
+                              _G.CurrentTarget = getStrongestNPC()
+                          end
 
-                  if folder then
-                      local bolts = folder:GetChildren()
-                      local foundAny = false
-
-                      for _, obj in ipairs(bolts) do
-                          if not _G.AutoFarm then break end
-                          
-                          -- เช็คว่าชื่อมีคำว่า Bolt และยังอยู่ใน Folder
-                          if string.find(obj.Name, "Bolt") then
-                              local target = getBoltTarget(obj)
-                              
-                              if target then
-                                  foundAny = true
-                                  local character = game.Players.LocalPlayer.Character
-                                  local root = character and character:FindFirstChild("HumanoidRootPart")
+                          if _G.CurrentTarget then
+                              local targetRoot = _G.CurrentTarget:FindFirstChild("HumanoidRootPart")
+                              if targetRoot then
+                                  -- Teleport ไปใต้ตัวศัตรู
+                                  root.CFrame = targetRoot.CFrame * CFrame.new(0, -_G.YOffset, 0)
+                                  task.wait(1) -- รอ 1 วิตามเงื่อนไขที่กำหนด
                                   
-                                  if root then
-                                      -- วาร์ปไปที่น็อต
-                                      root.CFrame = target.CFrame
-                                      
-                                      -- รอให้น็อตหายไป (ถูกเก็บ) หรือรอสักครู่ป้องกันการเด้งกลับ
-                                      local timeout = 0
-                                      repeat 
-                                          task.wait(0.1) 
-                                          timeout = timeout + 0.1
-                                      until not obj:IsDescendantOf(folder) or not _G.AutoFarm or timeout > 2
-                                  end
+                                  -- ส่งคำสั่งตี
+                                  local args = { _G.CurrentTarget, 0 }
+                                  rs:WaitForChild("Remotes"):WaitForChild("GuardianDogDamageEvent"):FireServer(unpack(args))
                               end
                           end
+                          task.wait(0.1)
                       end
-                      
-                      if not foundAny then task.wait(1) end -- ถ้าน็อตยังไม่เกิดให้รอ 1 วิ
-                  else
-                      warn("ไม่เจอโฟลเดอร์เก็บน็อต! ตรวจสอบ Path ในสคริปต์")
-                      task.wait(2)
                   end
-                  task.wait(0.1)
+                  task.wait(0.05)
               end
           end)
       end
+   end,
+})
+
+Tab:CreateSlider({
+   Name = "TP Offset (Under NPC)",
+   Range = {0, 50},
+   Increment = 1,
+   Suffix = "Studs",
+   CurrentValue = 5,
+   Flag = "YOffsetSlider",
+   Callback = function(Value)
+      _G.YOffset = Value
    end,
 })
