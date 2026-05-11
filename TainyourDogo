@@ -1,130 +1,149 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Medal & NPC Farm Pro",
-   LoadingTitle = "Initializing Combat System...",
-   LoadingSubtitle = "by Gemini",
+   Name = "Professional Auto-Farm",
+   LoadingTitle = "Loading Gemini Hub...",
+   LoadingSubtitle = "Stable Version",
    ConfigurationSaving = { Enabled = false }
 })
 
--- ข้อมูลตัวแปรเซ็ตติ้ง
+-- Global Variables
 local _G = {
-    MedalFarm = false,
+    AutoBolt = false,
+    AutoMedal = false,
     YOffset = 5,
     SafePoint = Vector3.new(0.956054688, 174, -27.058403),
-    CurrentTarget = nil,
     IsHealing = false
 }
 
--- ตัวแปรอ้างอิง Service และผู้เล่น
-local lp = game:GetService("Players").LocalPlayer
-local rs = game:GetService("ReplicatedStorage")
-local pveFolder = workspace:WaitForChild("PVEDogs")
-
--- ฟังก์ชันคำนวณระยะทางแบบ 2D (ตัดแกน Y)
-local function getDistance2D(pos1, pos2)
-    return (Vector2.new(pos1.X, pos1.Z) - Vector2.new(pos2.X, pos2.Z)).Magnitude
-end
+local Player = game.Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
 
 -- ฟังก์ชันหา NPC ที่เลือดเยอะที่สุด
 local function getStrongestNPC()
-    local maxHealth = -1
+    local folder = workspace:FindFirstChild("PVEDogs")
+    if not folder then return nil end
     local target = nil
-    for _, npc in pairs(pveFolder:GetChildren()) do
-        local hum = npc:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health > 0 and hum.Health > maxHealth then
-            maxHealth = hum.Health
-            target = npc
+    local maxHealth = -1
+    for _, v in pairs(folder:GetChildren()) do
+        local hum = v:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 then
+            if hum.Health > maxHealth then
+                maxHealth = hum.Health
+                target = v
+            end
         end
     end
     return target
 end
 
--- ฟังก์ชันหาผู้เล่นคนอื่นในระยะ AtkRange
-local function getNearbyPlayer()
-    local range = lp:FindFirstChild("PlayerAtkRange") and lp.PlayerAtkRange.Value or 50
-    local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
+-- สร้าง Tabs
+local Tab1 = Window:CreateTab("Bolt Farm", 4483362458)
+local Tab2 = Window:CreateTab("Medal Farm", 4483362458)
 
-    for _, p in pairs(game:GetService("Players"):GetPlayers()) do
-        if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local dist = getDistance2D(myRoot.Position, p.Character.HumanoidRootPart.Position)
-            if dist <= range then
-                return p
-            end
-        end
-    end
-    return nil
-end
-
--- สร้าง UI
-local Tab = Window:CreateTab("Medal Farm", 4483362458)
-
-Tab:CreateToggle({
-   Name = "Auto Medal Farm (PvE + PvP)",
+-- [ AUTO BOLT ]
+Tab1:CreateToggle({
+   Name = "Auto Farm Bolts",
    CurrentValue = false,
-   Flag = "MedalToggle",
+   Flag = "BoltToggle",
    Callback = function(Value)
-      _G.MedalFarm = Value
+      _G.AutoBolt = Value
       if Value then
           task.spawn(function()
-              while _G.MedalFarm do
-                  local char = lp.Character
-                  local root = char and char:FindFirstChild("HumanoidRootPart")
-                  local hpValue = lp:FindFirstChild("PlayerHP") and lp.PlayerHP.Value or 100
-                  local maxHpValue = lp:FindFirstChild("PlayerTotalHP") and lp.PlayerTotalHP.Value or 100
-                  
-                  -- 1. เช็คสถานะเลือด (Safety First)
-                  if hpValue < (maxHpValue * 0.6) or _G.IsHealing then
-                      _G.IsHealing = true
-                      root.CFrame = CFrame.new(_G.SafePoint)
-                      if hpValue >= maxHpValue then _G.IsHealing = false end
-                      task.wait(0.5)
-                  
-                  else
-                      -- 2. เช็คผู้เล่นใกล้ๆ (PvP Priority)
-                      local pvpTarget = getNearbyPlayer()
-                      if pvpTarget then
-                          local args = { "Player selects the target", { pvpTarget } }
-                          rs:WaitForChild("Msg"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
-                          task.wait(0.1)
-                      
-                      else
-                          -- 3. ฟาร์ม NPC (PvE Mode)
-                          if not _G.CurrentTarget or not _G.CurrentTarget:Parent or (_G.CurrentTarget:FindFirstChildOfClass("Humanoid") and _G.CurrentTarget:FindFirstChildOfClass("Humanoid").Health <= 0) then
-                              _G.CurrentTarget = getStrongestNPC()
-                          end
-
-                          if _G.CurrentTarget then
-                              local targetRoot = _G.CurrentTarget:FindFirstChild("HumanoidRootPart")
-                              if targetRoot then
-                                  -- Teleport ไปใต้ตัวศัตรู
-                                  root.CFrame = targetRoot.CFrame * CFrame.new(0, -_G.YOffset, 0)
-                                  task.wait(1) -- รอ 1 วิตามเงื่อนไขที่กำหนด
+              while _G.AutoBolt do
+                  pcall(function()
+                      local folder = workspace:FindFirstChild("MainScene") and workspace.MainScene:FindFirstChild("1") and workspace.MainScene["1"]:FindFirstChild("FunctionFolder")
+                      if folder then
+                          for _, obj in pairs(folder:GetChildren()) do
+                              if not _G.AutoBolt then break end
+                              if string.find(obj.Name, "Bolt") then
+                                  local char = Player.Character
+                                  local root = char and char:FindFirstChild("HumanoidRootPart")
+                                  local targetPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
                                   
-                                  -- ส่งคำสั่งตี
-                                  local args = { _G.CurrentTarget, 0 }
-                                  rs:WaitForChild("Remotes"):WaitForChild("GuardianDogDamageEvent"):FireServer(unpack(args))
+                                  if root and targetPart then
+                                      root.CFrame = targetPart.CFrame
+                                      task.wait(0.3) -- รอเก็บน็อต
+                                  end
                               end
                           end
-                          task.wait(0.1)
                       end
-                  end
-                  task.wait(0.05)
+                  end)
+                  task.wait(0.1)
               end
           end)
       end
    end,
 })
 
-Tab:CreateSlider({
-   Name = "TP Offset (Under NPC)",
+-- [ AUTO MEDAL ]
+Tab2:CreateToggle({
+   Name = "Auto Farm Medal (PvE/PvP)",
+   CurrentValue = false,
+   Flag = "MedalToggle",
+   Callback = function(Value)
+      _G.AutoMedal = Value
+      if Value then
+          task.spawn(function()
+              while _G.AutoMedal do
+                  pcall(function()
+                      local char = Player.Character
+                      local root = char and char:FindFirstChild("HumanoidRootPart")
+                      if not root then return end
+
+                      -- ดึงค่า HP
+                      local hp = Player:FindFirstChild("PlayerHP") and Player.PlayerHP.Value or 100
+                      local maxHp = Player:FindFirstChild("PlayerTotalHP") and Player.PlayerTotalHP.Value or 100
+
+                      -- 1. เช็คเลือด (Heal)
+                      if hp < (maxHp * 0.6) or _G.IsHealing then
+                          _G.IsHealing = true
+                          root.CFrame = CFrame.new(_G.SafePoint)
+                          if hp >= maxHp then _G.IsHealing = false end
+                      else
+                          -- 2. เช็คผู้เล่น (PvP)
+                          local atkRange = Player:FindFirstChild("PlayerAtkRange") and Player.PlayerAtkRange.Value or 50
+                          local pvpTarget = nil
+                          for _, p in pairs(game.Players:GetPlayers()) do
+                              if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                                  local pRoot = p.Character.HumanoidRootPart
+                                  local dist = (Vector2.new(root.Position.X, root.Position.Z) - Vector2.new(pRoot.Position.X, pRoot.Position.Z)).Magnitude
+                                  if dist <= atkRange then
+                                      pvpTarget = p
+                                      break
+                                  end
+                              end
+                          end
+
+                          if pvpTarget then
+                              local remote = RS:FindFirstChild("Msg") and RS.Msg:FindFirstChild("RemoteEvent")
+                              if remote then
+                                  remote:FireServer("Player selects the target", {pvpTarget})
+                              end
+                          else
+                              -- 3. ตี NPC (PvE)
+                              local targetNPC = getStrongestNPC()
+                              if targetNPC and targetNPC:FindFirstChild("HumanoidRootPart") then
+                                  root.CFrame = targetNPC.HumanoidRootPart.CFrame * CFrame.new(0, -_G.YOffset, 0)
+                                  local remote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("GuardianDogDamageEvent")
+                                  if remote then
+                                      remote:FireServer(targetNPC, 0)
+                                  end
+                              end
+                          end
+                      end
+                  end)
+                  task.wait(0.1)
+              end
+          end)
+      end
+   end,
+})
+
+Tab2:CreateSlider({
+   Name = "Y-Offset (Under NPC)",
    Range = {0, 50},
    Increment = 1,
-   Suffix = "Studs",
    CurrentValue = 5,
-   Flag = "YOffsetSlider",
-   Callback = function(Value)
-      _G.YOffset = Value
-   end,
+   Callback = function(v) _G.YOffset = v end
 })
