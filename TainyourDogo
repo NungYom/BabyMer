@@ -1,0 +1,81 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Bolt Farm Pro",
+   LoadingTitle = "Loading System...",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = { Enabled = false }
+})
+
+local _G = { AutoFarm = false }
+
+-- ฟังก์ชันหาตำแหน่งที่ถูกต้องเพื่อวาร์ปไป
+local function getBoltTarget(boltModel)
+    if boltModel:IsA("Model") then
+        return boltModel.PrimaryPart or boltModel:FindFirstChildWhichIsA("BasePart")
+    elseif boltModel:IsA("BasePart") then
+        return boltModel
+    end
+    return nil
+end
+
+local Tab = Window:CreateTab("Main", 4483362458)
+
+Tab:CreateToggle({
+   Name = "Auto Farm (Loop All Bolts)",
+   CurrentValue = false,
+   Flag = "FarmToggle",
+   Callback = function(Value)
+      _G.AutoFarm = Value
+      
+      if Value then
+          task.spawn(function()
+              while _G.AutoFarm do
+                  -- ตรวจสอบ Path ให้ตรงตามโครงสร้างของคุณ
+                  -- จากรูป Path น่าจะเป็น workspace.MainScene["1"].FunctionFolder
+                  local folder = workspace:FindFirstChild("MainScene") 
+                      and workspace.MainScene:FindFirstChild("1") 
+                      and workspace.MainScene["1"]:FindFirstChild("FunctionFolder")
+
+                  if folder then
+                      local bolts = folder:GetChildren()
+                      local foundAny = false
+
+                      for _, obj in ipairs(bolts) do
+                          if not _G.AutoFarm then break end
+                          
+                          -- เช็คว่าชื่อมีคำว่า Bolt และยังอยู่ใน Folder
+                          if string.find(obj.Name, "Bolt") then
+                              local target = getBoltTarget(obj)
+                              
+                              if target then
+                                  foundAny = true
+                                  local character = game.Players.LocalPlayer.Character
+                                  local root = character and character:FindFirstChild("HumanoidRootPart")
+                                  
+                                  if root then
+                                      -- วาร์ปไปที่น็อต
+                                      root.CFrame = target.CFrame
+                                      
+                                      -- รอให้น็อตหายไป (ถูกเก็บ) หรือรอสักครู่ป้องกันการเด้งกลับ
+                                      local timeout = 0
+                                      repeat 
+                                          task.wait(0.1) 
+                                          timeout = timeout + 0.1
+                                      until not obj:IsDescendantOf(folder) or not _G.AutoFarm or timeout > 2
+                                  end
+                              end
+                          end
+                      end
+                      
+                      if not foundAny then task.wait(1) end -- ถ้าน็อตยังไม่เกิดให้รอ 1 วิ
+                  else
+                      warn("ไม่เจอโฟลเดอร์เก็บน็อต! ตรวจสอบ Path ในสคริปต์")
+                      task.wait(2)
+                  end
+                  task.wait(0.1)
+              end
+          end)
+      end
+   end,
+})
