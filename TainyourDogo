@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Professional Auto-Farm",
+   Name = "Professional Auto-Farm | Pro Custom",
    LoadingTitle = "Loading Gemini Hub...",
-   LoadingSubtitle = "Stable Version",
+   LoadingSubtitle = "Final Stable Version",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -11,9 +11,10 @@ local Window = Rayfield:CreateWindow({
 local _G = {
     AutoBolt = false,
     AutoMedal = false,
-    YOffset = 5,
+    YOffset = 4, -- เปลี่ยน Default เป็น 4
     SafePoint = Vector3.new(0.956054688, 174, -27.058403),
-    IsHealing = false
+    IsHealing = false,
+    LastTarget = nil -- ใช้เช็คว่าตัวเดิมตายหรือยัง
 }
 
 local Player = game.Players.LocalPlayer
@@ -63,7 +64,7 @@ Tab1:CreateToggle({
                                   
                                   if root and targetPart then
                                       root.CFrame = targetPart.CFrame
-                                      task.wait(0.3) -- รอเก็บน็อต
+                                      task.wait(0.3)
                                   end
                               end
                           end
@@ -91,7 +92,6 @@ Tab2:CreateToggle({
                       local root = char and char:FindFirstChild("HumanoidRootPart")
                       if not root then return end
 
-                      -- ดึงค่า HP
                       local hp = Player:FindFirstChild("PlayerHP") and Player.PlayerHP.Value or 100
                       local maxHp = Player:FindFirstChild("PlayerTotalHP") and Player.PlayerTotalHP.Value or 100
 
@@ -101,7 +101,7 @@ Tab2:CreateToggle({
                           root.CFrame = CFrame.new(_G.SafePoint)
                           if hp >= maxHp then _G.IsHealing = false end
                       else
-                          -- 2. เช็คผู้เล่น (PvP)
+                          -- 2. เช็คผู้เล่น (PvP Priority)
                           local atkRange = Player:FindFirstChild("PlayerAtkRange") and Player.PlayerAtkRange.Value or 50
                           local pvpTarget = nil
                           for _, p in pairs(game.Players:GetPlayers()) do
@@ -120,14 +120,30 @@ Tab2:CreateToggle({
                               if remote then
                                   remote:FireServer("Player selects the target", {pvpTarget})
                               end
+                              task.wait(0.1)
                           else
                               -- 3. ตี NPC (PvE)
                               local targetNPC = getStrongestNPC()
-                              if targetNPC and targetNPC:FindFirstChild("HumanoidRootPart") then
-                                  root.CFrame = targetNPC.HumanoidRootPart.CFrame * CFrame.new(0, -_G.YOffset, 0)
-                                  local remote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("GuardianDogDamageEvent")
-                                  if remote then
-                                      remote:FireServer(targetNPC, 0)
+                              
+                              if not targetNPC then
+                                  -- หากไม่พบศัตรู ให้ไปรอที่จุดปลอดภัย
+                                  root.CFrame = CFrame.new(_G.SafePoint)
+                                  task.wait(0.5)
+                              else
+                                  -- เช็คว่าเป้าหมายเดิมตายไปหรือยัง (เพื่อวาร์ปกลับไปพัก 1 วิ)
+                                  if _G.LastTarget and _G.LastTarget ~= targetNPC then
+                                      root.CFrame = CFrame.new(_G.SafePoint)
+                                      task.wait(1) -- พัก 1 วินาทีก่อนตีตัวใหม่
+                                  end
+                                  
+                                  _G.LastTarget = targetNPC
+                                  
+                                  if targetNPC:FindFirstChild("HumanoidRootPart") then
+                                      root.CFrame = targetNPC.HumanoidRootPart.CFrame * CFrame.new(0, -_G.YOffset, 0)
+                                      local remote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("GuardianDogDamageEvent")
+                                      if remote then
+                                          remote:FireServer(targetNPC, 0)
+                                      end
                                   end
                               end
                           end
@@ -144,6 +160,13 @@ Tab2:CreateSlider({
    Name = "Y-Offset (Under NPC)",
    Range = {0, 50},
    Increment = 1,
-   CurrentValue = 5,
+   CurrentValue = 4, -- Default 4
    Callback = function(v) _G.YOffset = v end
+})
+
+Rayfield:Notify({
+   Title = "System Loaded",
+   Content = "พร้อมใช้งาน: ระบบพักจุดปลอดภัยหลังฆ่า NPC เปิดใช้งานแล้ว",
+   Duration = 5,
+   Image = 4483362458,
 })
