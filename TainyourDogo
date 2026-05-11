@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Professional Auto-Farm | Pro Custom",
+   Name = "ไอน้อง พี่มาละ",
    LoadingTitle = "Loading Gemini Hub...",
    LoadingSubtitle = "Final Stable Version",
    ConfigurationSaving = { Enabled = false }
@@ -12,7 +12,7 @@ local _G = {
     AutoBolt = false,
     AutoMedal = false,
     YOffset = 4, -- เปลี่ยน Default เป็น 4
-    SafePoint = Vector3.new(0.956054688, 174, -27.058403),
+    SafePoint = Vector3.new(0.956054688, 174, -105.058403),
     IsHealing = false,
     LastTarget = nil -- ใช้เช็คว่าตัวเดิมตายหรือยัง
 }
