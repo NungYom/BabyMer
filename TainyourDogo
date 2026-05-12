@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "ไอน้อง พี่มาละ",
+   Name = "FARM",
    LoadingTitle = "Loading Gemini Hub...",
    LoadingSubtitle = "Final Stable Version",
    ConfigurationSaving = { Enabled = false }
@@ -11,10 +11,11 @@ local Window = Rayfield:CreateWindow({
 local _G = {
     AutoBolt = false,
     AutoMedal = false,
-    YOffset = 4, -- เปลี่ยน Default เป็น 4
-    SafePoint = Vector3.new(0.956054688, 174, -105.058403),
+    YOffset = 4, 
+    SafePoint = Vector3.new(0.956054688, 174, 30.058403),
     IsHealing = false,
-    LastTarget = nil -- ใช้เช็คว่าตัวเดิมตายหรือยัง
+    LastTarget = nil,
+    OutsideTimer = 0 -- ตัวนับเวลาสำหรับเช็คการอยู่นอก SafePoint
 }
 
 local Player = game.Players.LocalPlayer
@@ -85,6 +86,7 @@ Tab2:CreateToggle({
    Callback = function(Value)
       _G.AutoMedal = Value
       if Value then
+          _G.OutsideTimer = tick() -- เริ่มจับเวลาครั้งแรก
           task.spawn(function()
               while _G.AutoMedal do
                   pcall(function()
@@ -94,6 +96,19 @@ Tab2:CreateToggle({
 
                       local hp = Player:FindFirstChild("PlayerHP") and Player.PlayerHP.Value or 100
                       local maxHp = Player:FindFirstChild("PlayerTotalHP") and Player.PlayerTotalHP.Value or 100
+
+                      -- ระบบเช็คเวลา: ถ้าอยู่นอก SafePoint นานเกิน 5 วินาที
+                      local currentDist = (root.Position - _G.SafePoint).Magnitude
+                      if currentDist > 5 then
+                          if (tick() - _G.OutsideTimer) > 5 then
+                              root.CFrame = CFrame.new(_G.SafePoint)
+                              task.wait(1) -- พัก 1 วินาที
+                              _G.OutsideTimer = tick() -- Reset เวลาใหม่
+                              return -- กลับไปเริ่มลูปใหม่
+                          end
+                      else
+                          _G.OutsideTimer = tick() -- ถ้ายังอยู่ที่ SafePoint ให้ Reset เวลาไว้ตลอด
+                      end
 
                       -- 1. เช็คเลือด (Heal)
                       if hp < (maxHp * 0.6) or _G.IsHealing then
@@ -126,14 +141,14 @@ Tab2:CreateToggle({
                               local targetNPC = getStrongestNPC()
                               
                               if not targetNPC then
-                                  -- หากไม่พบศัตรู ให้ไปรอที่จุดปลอดภัย
                                   root.CFrame = CFrame.new(_G.SafePoint)
                                   task.wait(0.5)
                               else
-                                  -- เช็คว่าเป้าหมายเดิมตายไปหรือยัง (เพื่อวาร์ปกลับไปพัก 1 วิ)
+                                  -- เช็คว่าเป้าหมายเดิมตายไปหรือยัง (วาร์ปกลับพัก 1 วิ)
                                   if _G.LastTarget and _G.LastTarget ~= targetNPC then
                                       root.CFrame = CFrame.new(_G.SafePoint)
-                                      task.wait(1) -- พัก 1 วินาทีก่อนตีตัวใหม่
+                                      task.wait(1)
+                                      _G.OutsideTimer = tick() -- Reset เวลาเมื่อมีการพัก
                                   end
                                   
                                   _G.LastTarget = targetNPC
@@ -160,13 +175,13 @@ Tab2:CreateSlider({
    Name = "Y-Offset (Under NPC)",
    Range = {0, 50},
    Increment = 1,
-   CurrentValue = 4, -- Default 4
+   CurrentValue = 4,
    Callback = function(v) _G.YOffset = v end
 })
 
 Rayfield:Notify({
    Title = "System Loaded",
-   Content = "พร้อมใช้งาน: ระบบพักจุดปลอดภัยหลังฆ่า NPC เปิดใช้งานแล้ว",
+   Content = "เพิ่มระบบ Safety Timer 5 วินาที เรียบร้อยแล้ว",
    Duration = 5,
    Image = 4483362458,
 })
