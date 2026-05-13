@@ -1,0 +1,102 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Pro Scripter | Auto E-Q Reflex",
+    LoadingTitle = "Initializing System...",
+    LoadingSubtitle = "by Gemini",
+    ConfigurationSaving = {
+        Enabled = false
+    }
+})
+
+-- Services
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local VIM = game:GetService("VirtualInputManager")
+
+local Player = Players.LocalPlayer
+local PlaySlots = workspace:WaitForChild("Center"):WaitForChild("PlaySlots")
+
+-- Variables
+local _G = {
+    AutoE = false,
+    DetectionRadius = 50 -- รัศมีการตรวจจับ (ปรับแต่งได้)
+}
+
+-- Function: ค้นหา AnchorPart ที่ใกล้ที่สุด
+local function getClosestAnchorPart()
+    local closestPart = nil
+    local shortestDistance = math.huge
+    local character = Player.Character
+    
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = character.HumanoidRootPart.Position
+
+    -- วนลูปหาใน PlaySlots ทั้งหมด
+    for _, slot in pairs(PlaySlots:GetChildren()) do
+        local anchor = slot:FindFirstChild("AnchorPart", true) -- ค้นหาแบบ Recursive เผื่อโครงสร้างต่างกัน
+        if anchor and anchor:IsA("BasePart") then
+            local distance = (anchor.Position - myPos).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPart = anchor
+            end
+        end
+    end
+    return closestPart
+end
+
+-- Function: จำลองการกดปุ่ม E 2 ครั้งแบบรวดเร็ว
+local function pressE()
+    VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+    task.wait(0.01) -- หน่วงเวลาสั้นมากๆ เพื่อให้เกมรับรู้
+    VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    
+    task.wait(0.02)
+    
+    VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+    task.wait(0.01)
+    VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+end
+
+-- Main Loop: ตรวจสอบสถานะ Anchored
+local debounce = false
+RunService.Heartbeat:Connect(function()
+    if not _G.AutoE then return end
+    
+    local targetPart = getClosestAnchorPart()
+    
+    if targetPart then
+        -- ตรวจสอบว่าถ้ามัน "ไม่ใช่" Anchored (คือมันขยับได้แล้ว) และยังไม่ได้อยู่ในช่วงรอหน่วง (Debounce)
+        if targetPart.Anchored == false and not debounce then
+            debounce = true
+            pressE()
+            
+            -- รอสักพักก่อนจะทำงานต่อ เพื่อไม่ให้สคริปต์กดรัวค้างเกินไปหลังจากทำงานเสร็จ
+            task.wait(0.5) 
+            debounce = false
+        end
+    end
+end)
+
+-- UI Setup
+local MainTab = Window:CreateTab("Auto Scripts", 4483362458) -- ไอคอนรูปสายฟ้า
+
+MainTab:CreateToggle({
+    Name = "Auto Press E (Unanchored Detection)",
+    CurrentValue = false,
+    Flag = "AutoE_Toggle", 
+    Callback = function(Value)
+        _G.AutoE = Value
+        if Value then
+            Rayfield:Notify({
+                Title = "System Activated",
+                Content = "เริ่มการตรวจจับ AnchorPart ที่ใกล้ที่สุด",
+                Duration = 2,
+                Image = 4483362458,
+            })
+        end
+    end,
+})
+
+MainTab:CreateLabel("ระบบจะกด E 2 ครั้งทันทีที่ Part เลิก Anchored")
