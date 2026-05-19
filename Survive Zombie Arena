@@ -1,0 +1,59 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "VoidShard Farmer",
+   LoadingTitle = "Loading Script...",
+   LoadingSubtitle = "by Professional Collaborator",
+   KeySystem = false,
+})
+
+local Tab = Window:CreateTab("Main", nil)
+local ToggleEnabled = false
+local StartPosition = nil
+
+Tab:CreateToggle({
+   Name = "Auto Farm VoidShards",
+   CurrentValue = false,
+   Flag = "AutoFarmToggle",
+   Callback = function(Value)
+      ToggleEnabled = Value
+      
+      if ToggleEnabled then
+         -- จำจุดเริ่มต้นที่ผู้เล่นกดเปิด
+         StartPosition = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+         
+         -- เริ่มลูปการทำงาน
+         task.spawn(function()
+            while ToggleEnabled do
+               local workspace = game:GetService("Workspace")
+               local parts = {}
+               
+               -- รวบรวมชิ้นส่วนทั้งหมดที่มีชื่อว่า VoidShardPart
+               for _, obj in pairs(workspace:GetDescendants()) do
+                  if obj:IsA("BasePart") and obj.Name == "VoidShardPart" then
+                     table.insert(parts, obj)
+                  end
+               end
+               
+               -- ทำการ Teleport ไปแต่ละจุด
+               for _, part in pairs(parts) do
+                  if not ToggleEnabled then break end
+                  game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = part.CFrame
+                  task.wait(0.1) -- Delay ระหว่างแต่ละ Part
+               end
+               
+               -- เมื่อครบทุกจุดแล้ว กลับไปยังจุดเดิม
+               if ToggleEnabled and StartPosition then
+                  game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = StartPosition
+                  
+                  -- เพิ่ม Delay 10 วินาทีก่อนเริ่มลูปใหม่
+                  task.wait(10)
+               end
+            end
+         end)
+      else
+         -- เมื่อปิด Toggle
+         StartPosition = nil
+      end
+   end,
+})
