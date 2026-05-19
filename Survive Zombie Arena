@@ -1,59 +1,77 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "VoidShard Farmer",
+   Name = "VoidShard & Spin Bot",
    LoadingTitle = "Loading Script...",
    LoadingSubtitle = "by Professional Collaborator",
    KeySystem = false,
 })
 
 local Tab = Window:CreateTab("Main", nil)
-local ToggleEnabled = false
+
+-- ตัวแปรสถานะ
+local AutoFarmEnabled = false
+local AutoSpinEnabled = false
 local StartPosition = nil
 
+-- Toggle สำหรับ Teleport (เก็บของ)
 Tab:CreateToggle({
    Name = "Auto Farm VoidShards",
    CurrentValue = false,
    Flag = "AutoFarmToggle",
    Callback = function(Value)
-      ToggleEnabled = Value
-      
-      if ToggleEnabled then
-         -- จำจุดเริ่มต้นที่ผู้เล่นกดเปิด
+      AutoFarmEnabled = Value
+      if AutoFarmEnabled then
          StartPosition = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-         
-         -- เริ่มลูปการทำงาน
          task.spawn(function()
-            while ToggleEnabled do
+            while AutoFarmEnabled do
                local workspace = game:GetService("Workspace")
                local parts = {}
-               
-               -- รวบรวมชิ้นส่วนทั้งหมดที่มีชื่อว่า VoidShardPart
                for _, obj in pairs(workspace:GetDescendants()) do
                   if obj:IsA("BasePart") and obj.Name == "VoidShardPart" then
                      table.insert(parts, obj)
                   end
                end
                
-               -- ทำการ Teleport ไปแต่ละจุด
                for _, part in pairs(parts) do
-                  if not ToggleEnabled then break end
+                  if not AutoFarmEnabled then break end
                   game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = part.CFrame
-                  task.wait(0.1) -- Delay ระหว่างแต่ละ Part
+                  task.wait(0.1)
                end
                
-               -- เมื่อครบทุกจุดแล้ว กลับไปยังจุดเดิม
-               if ToggleEnabled and StartPosition then
+               if AutoFarmEnabled and StartPosition then
                   game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = StartPosition
-                  
-                  -- เพิ่ม Delay 10 วินาทีก่อนเริ่มลูปใหม่
                   task.wait(10)
                end
             end
          end)
       else
-         -- เมื่อปิด Toggle
          StartPosition = nil
+      end
+   end,
+})
+
+-- Toggle สำหรับ Auto Spin
+Tab:CreateToggle({
+   Name = "Auto Spin GalacticRequest",
+   CurrentValue = false,
+   Flag = "AutoSpinToggle",
+   Callback = function(Value)
+      AutoSpinEnabled = Value
+      if AutoSpinEnabled then
+         task.spawn(function()
+            while AutoSpinEnabled do
+               local success, err = pcall(function()
+                  game:GetService("ReplicatedStorage"):WaitForChild("EventRemotes"):WaitForChild("GalacticRequestSpin"):InvokeServer()
+               end)
+               
+               if not success then
+                  warn("Spin Error: " .. tostring(err))
+               end
+               
+               task.wait(0.1)
+            end
+         end)
       end
    end,
 })
