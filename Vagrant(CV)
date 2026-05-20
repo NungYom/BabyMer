@@ -1,0 +1,53 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local playerCharactersFolder = workspace:WaitForChild("Spawned"):WaitForChild("PlayerCharacters")
+
+local lockedTarget = nil
+local targetList = {}
+local currentIndex = 0
+
+-- ฟังก์ชันหาตัวละครใกล้สุดและเรียงลำดับ
+local function updateTargetList()
+	targetList = {}
+	local myChar = playerCharactersFolder:FindFirstChild(player.Name)
+	if not myChar then return end
+	
+	local myPos = myChar:FindFirstChild("HumanoidRootPart") and myChar.HumanoidRootPart.Position or player.Character.HumanoidRootPart.Position
+
+	for _, char in pairs(playerCharactersFolder:GetChildren()) do
+		if char.Name ~= player.Name and char:FindFirstChild("Head") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+			local dist = (char.HumanoidRootPart.Position - myPos).Magnitude
+			table.insert(targetList, {character = char, distance = dist})
+		end
+	end
+
+	table.sort(targetList, function(a, b) return a.distance < b.distance end)
+end
+
+-- กด V เพื่อเปลี่ยนเป้าหมาย
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.V then
+		updateTargetList()
+		if #targetList > 0 then
+			currentIndex = (currentIndex % #targetList) + 1
+			lockedTarget = targetList[currentIndex].character
+		end
+	elseif input.KeyCode == Enum.KeyCode.C then
+		lockedTarget = nil
+		currentIndex = 0
+	end
+end)
+
+-- ทำงานทุกเฟรมเพื่อล็อคหัว
+RunService.RenderStepped:Connect(function()
+	if lockedTarget and lockedTarget:FindFirstChild("Head") then
+		local headPos = lockedTarget.Head.Position
+		camera.CFrame = CFrame.new(camera.CFrame.Position, headPos)
+	end
+end)
