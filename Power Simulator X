@@ -1,0 +1,96 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Window = Rayfield:CreateWindow({
+    Name = "Auto Training & Combat Pro",
+    LoadingTitle = "Loading System...",
+    ConfigurationSaving = { Enabled = true, FileName = "AutoConfig" }
+})
+
+local TrainTab = Window:CreateTab("Training", "dumbbell")
+local CombatTab = Window:CreateTab("Combat", "swords")
+
+-- ตัวแปรตั้งค่า
+local Toggles = { Strength = false, Durability = false, Energy = false, Psychic = false, AutoAttack = false }
+local CombatSettings = { Offset = 0 } -- ปรับค่าเริ่มต้นเป็น 0 ตามที่ต้องการ
+
+-- ฟังก์ชันหา NPC ที่ใกล้ที่สุดและยังมีชีวิตอยู่
+local function getClosestNPC()
+    local closest = nil
+    local shortestDistance = math.huge
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+
+    for _, obj in pairs(workspace:GetChildren()) do
+        -- เช็คว่าเป็น Model, มี HumanoidRootPart, มี npcId, และเลือดต้องมากกว่า 0
+        if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") and obj:GetAttribute("npcId") then
+            local health = obj:GetAttribute("Health") or 1 -- ถ้าหา Attribute Health ไม่เจอให้ถือว่ามีชีวิตอยู่
+            
+            if health > 0 then
+                local distance = (obj.HumanoidRootPart.Position - myRoot.Position).Magnitude
+                if distance < 100 and distance < shortestDistance then
+                    shortestDistance = distance
+                    closest = obj
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- --- ระบบ Training ---
+local function startTraining(statName, toggleKey)
+    spawn(function()
+        while Toggles[toggleKey] do
+            local args = { statName, 1 }
+            game:GetService("ReplicatedStorage"):WaitForChild("Remote"):WaitForChild("Training"):WaitForChild("Train"):FireServer(unpack(args))
+            task.wait(0.1)
+        end
+    end)
+end
+
+TrainTab:CreateToggle({ Name = "Auto Strength", Callback = function(v) Toggles.Strength = v; if v then startTraining("Strength", "Strength") end end })
+TrainTab:CreateToggle({ Name = "Auto Durability", Callback = function(v) Toggles.Durability = v; if v then startTraining("Durability", "Durability") end end })
+TrainTab:CreateToggle({ Name = "Auto Energy", Callback = function(v) Toggles.Energy = v; if v then startTraining("Energy", "Energy") end end })
+TrainTab:CreateToggle({ Name = "Auto Psychic", Callback = function(v) Toggles.Psychic = v; if v then startTraining("Psychic", "Psychic") end end })
+
+-- --- ระบบ Auto Combat ---
+CombatTab:CreateToggle({
+    Name = "Auto Attack & TP Closest",
+    CurrentValue = false,
+    Callback = function(Value)
+        Toggles.AutoAttack = Value
+        if Value then
+            spawn(function()
+                while Toggles.AutoAttack do
+                    local target = getClosestNPC()
+                    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    
+                    if target and myRoot then
+                        -- โจมตี
+                        local args = {{ npcId = target:GetAttribute("npcId"), id = "NpcHit", dir = Vector3.new(0, 0, 0) }}
+                        game:GetService("ReplicatedStorage"):WaitForChild("NpcRemoteEvent"):FireServer(unpack(args))
+                        
+                        -- เทเลพอร์ตไปใต้เท้าเป้าหมาย
+                        local targetPos = target.HumanoidRootPart.CFrame
+                        myRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - CombatSettings.Offset, targetPos.Z)
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Teleport Offset (Depth)",
+    Range = {0, 50},
+    Increment = 1,
+    CurrentValue = 0, -- ปรับค่าเริ่มต้นเป็น 0
+    Callback = function(Value)
+        CombatSettings.Offset = Value
+    end
+})
+
+Rayfield:LoadConfiguration()
