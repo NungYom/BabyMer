@@ -1,6 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Window = Rayfield:CreateWindow({
     Name = "Auto Training & Combat Pro",
@@ -12,10 +13,15 @@ local TrainTab = Window:CreateTab("Training", "dumbbell")
 local CombatTab = Window:CreateTab("Combat", "swords")
 
 -- ตัวแปรตั้งค่า
-local Toggles = { Strength = false, Durability = false, Energy = false, Psychic = false, AutoAttack = false }
-local CombatSettings = { Offset = 0 } -- ปรับค่าเริ่มต้นเป็น 0 ตามที่ต้องการ
+local Toggles = { 
+    Strength = false, Durability = false, Energy = false, Psychic = false, 
+    AutoAttack = false, AutoBoss = false 
+}
+local CombatSettings = { Offset = 0 }
 
--- ฟังก์ชันหา NPC ที่ใกล้ที่สุดและยังมีชีวิตอยู่
+-- ==========================================
+-- ฟังก์ชันสำหรับหา NPC ทั่วไป (ของเดิม)
+-- ==========================================
 local function getClosestNPC()
     local closest = nil
     local shortestDistance = math.huge
@@ -23,10 +29,8 @@ local function getClosestNPC()
     if not myRoot then return nil end
 
     for _, obj in pairs(workspace:GetChildren()) do
-        -- เช็คว่าเป็น Model, มี HumanoidRootPart, มี npcId, และเลือดต้องมากกว่า 0
         if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") and obj:GetAttribute("npcId") then
-            local health = obj:GetAttribute("Health") or 1 -- ถ้าหา Attribute Health ไม่เจอให้ถือว่ามีชีวิตอยู่
-            
+            local health = obj:GetAttribute("Health") or 1
             if health > 0 then
                 local distance = (obj.HumanoidRootPart.Position - myRoot.Position).Magnitude
                 if distance < 100 and distance < shortestDistance then
@@ -39,12 +43,14 @@ local function getClosestNPC()
     return closest
 end
 
--- --- ระบบ Training ---
+-- ==========================================
+-- ระบบ Training (ของเดิม)
+-- ==========================================
 local function startTraining(statName, toggleKey)
     spawn(function()
         while Toggles[toggleKey] do
             local args = { statName, 1 }
-            game:GetService("ReplicatedStorage"):WaitForChild("Remote"):WaitForChild("Training"):WaitForChild("Train"):FireServer(unpack(args))
+            ReplicatedStorage:WaitForChild("Remote"):WaitForChild("Training"):WaitForChild("Train"):FireServer(unpack(args))
             task.wait(0.1)
         end
     end)
@@ -55,7 +61,9 @@ TrainTab:CreateToggle({ Name = "Auto Durability", Callback = function(v) Toggles
 TrainTab:CreateToggle({ Name = "Auto Energy", Callback = function(v) Toggles.Energy = v; if v then startTraining("Energy", "Energy") end end })
 TrainTab:CreateToggle({ Name = "Auto Psychic", Callback = function(v) Toggles.Psychic = v; if v then startTraining("Psychic", "Psychic") end end })
 
--- --- ระบบ Auto Combat ---
+-- ==========================================
+-- ระบบ Auto Combat (มอนสเตอร์ทั่วไป)
+-- ==========================================
 CombatTab:CreateToggle({
     Name = "Auto Attack & TP Closest",
     CurrentValue = false,
@@ -68,11 +76,9 @@ CombatTab:CreateToggle({
                     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     
                     if target and myRoot then
-                        -- โจมตี
                         local args = {{ npcId = target:GetAttribute("npcId"), id = "NpcHit", dir = Vector3.new(0, 0, 0) }}
-                        game:GetService("ReplicatedStorage"):WaitForChild("NpcRemoteEvent"):FireServer(unpack(args))
+                        ReplicatedStorage:WaitForChild("NpcRemoteEvent"):FireServer(unpack(args))
                         
-                        -- เทเลพอร์ตไปใต้เท้าเป้าหมาย
                         local targetPos = target.HumanoidRootPart.CFrame
                         myRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - CombatSettings.Offset, targetPos.Z)
                     end
@@ -87,9 +93,109 @@ CombatTab:CreateSlider({
     Name = "Teleport Offset (Depth)",
     Range = {0, 50},
     Increment = 1,
-    CurrentValue = 0, -- ปรับค่าเริ่มต้นเป็น 0
+    CurrentValue = 0,
     Callback = function(Value)
         CombatSettings.Offset = Value
+    end
+})
+
+-- ==========================================
+-- ระบบ Auto Dark Surge (สู้บอสใหม่)
+-- ==========================================
+local AutoBossToggle -- ประกาศตัวแปรก่อนเพื่อให้เรียกใช้ตอนปิดปุ่มได้
+
+local function startAutoBoss()
+    spawn(function()
+        local packetRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Packet"):WaitForChild("RemoteEvent")
+        
+        while Toggles.AutoBoss do
+            local char = LocalPlayer.Character
+            local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+            local myHum = char and char:FindFirstChild("Humanoid")
+            local boss = workspace:FindFirstChild("Dark Surge")
+            
+            -- 1. ตรวจสอบว่าบอสยังอยู่และเลือด > 0 หรือไม่
+            if not boss or (boss:GetAttribute("CurrentHealth") and boss:GetAttribute("CurrentHealth") <= 0) then
+                Toggles.AutoBoss = false
+                if AutoBossToggle then
+                    AutoBossToggle:Set(false) -- สั่งปิดปุ่มใน UI อัตโนมัติ
+                end
+                break
+            end
+            
+            if myRoot and myHum then
+                local myHealthPercent = myHum.Health / myHum.MaxHealth
+                local bossHitBox = boss:FindFirstChild("HitBox")
+                local targetCFrame = nil
+                
+                -- 2. เช็คเลือดผู้เล่น (ต่ำกว่า 50% ต้องฮีล)
+                if myHealthPercent <= 0.5 then
+                    local arenaSetup = workspace:FindFirstChild("ArenaSetup")
+                    local closestOrb = nil
+                    local shortestOrbDist = math.huge
+                    
+                    -- หา healthorb ที่ใกล้ที่สุด
+                    if arenaSetup then
+                        for _, v in pairs(arenaSetup:GetChildren()) do
+                            if v.Name == "healthorb" and v:IsA("BasePart") then
+                                local dist = (v.Position - myRoot.Position).Magnitude
+                                if dist < shortestOrbDist then
+                                    shortestOrbDist = dist
+                                    closestOrb = v
+                                end
+                            end
+                        end
+                    end
+                    
+                    if closestOrb then
+                        -- มี Orb ให้เก็บ -> TP ไปเก็บ Orb
+                        targetCFrame = closestOrb.CFrame
+                    elseif bossHitBox then
+                        -- ไม่มี Orb -> TP ไปลอยเหนือลานบอส 100 studs (รอเลือดเด้งหรือรอ Orb เกิด)
+                        targetCFrame = CFrame.new(bossHitBox.Position + Vector3.new(0, 100, 0))
+                    end
+                    
+                -- 3. เลือด > 50% พร้อมลุย
+                else
+                    local mobProjectiles = workspace:FindFirstChild("MobProjectiles")
+                    local healingShard = mobProjectiles and mobProjectiles:FindFirstChild("HealingShard")
+                    
+                    if healingShard and healingShard:IsA("BasePart") then
+                        -- มีคริสตัลฮีลบอสโผล่มา -> TP ไปตีคริสตัลก่อน
+                        targetCFrame = healingShard.CFrame
+                    elseif bossHitBox then
+                        -- ไม่มีคริสตัล -> TP ไปตีบอส
+                        targetCFrame = bossHitBox.CFrame
+                    end
+                end
+                
+                -- สั่ง Teleport
+                if targetCFrame then
+                    myRoot.CFrame = targetCFrame
+                end
+                
+                -- 4. ลูปรันสกิล (ยิงรัวๆทุก 0.1 วิ ใส่จุดหมายที่เรากำลัง TP ไป)
+                pcall(function()
+                    local skill1Args = { buffer.fromstring("{\022\129\220\177\1969\176\127E\018FgD") }
+                    local skill2Args = { buffer.fromstring("d") }
+                    packetRemote:FireServer(unpack(skill1Args))
+                    packetRemote:FireServer(unpack(skill2Args))
+                end)
+            end
+            
+            task.wait(0.1)
+        end
+    end)
+end
+
+AutoBossToggle = CombatTab:CreateToggle({
+    Name = "Auto Dark Surge (Boss)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Toggles.AutoBoss = Value
+        if Value then
+            startAutoBoss()
+        end
     end
 })
 
