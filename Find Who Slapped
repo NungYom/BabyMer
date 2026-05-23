@@ -1,0 +1,80 @@
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- สร้าง ScreenGui
+local screenGui = Instance.new("ScreenGui", playerGui)
+screenGui.Name = "AutoToolGui"
+
+-- สร้าง Frame เก็บปุ่ม
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 160, 0, 120)
+frame.Position = UDim2.new(0.5, -80, 0.8, 0)
+frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+frame.Draggable = true
+
+-- ฟังก์ชันสร้างปุ่ม
+local function createButton(name, position, color)
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(0, 140, 0, 40)
+    btn.Position = position
+    btn.Text = name
+    btn.BackgroundColor3 = color
+    return btn
+end
+
+local btnAuto = createButton("Auto Press: OFF", UDim2.new(0, 10, 0, 10), Color3.fromRGB(255, 50, 50))
+local btnSlap = createButton("Choose Slapper", UDim2.new(0, 10, 0, 60), Color3.fromRGB(50, 150, 255))
+
+-- ระบบ Auto Press A-Z
+local isRunning = false
+local keys = {Enum.KeyCode.A, Enum.KeyCode.B, Enum.KeyCode.C, Enum.KeyCode.D, Enum.KeyCode.E, Enum.KeyCode.F, Enum.KeyCode.G, Enum.KeyCode.H, Enum.KeyCode.I, Enum.KeyCode.J, Enum.KeyCode.K, Enum.KeyCode.L, Enum.KeyCode.M, Enum.KeyCode.N, Enum.KeyCode.O, Enum.KeyCode.P, Enum.KeyCode.Q, Enum.KeyCode.R, Enum.KeyCode.S, Enum.KeyCode.T, Enum.KeyCode.U, Enum.KeyCode.V, Enum.KeyCode.W, Enum.KeyCode.X, Enum.KeyCode.Y, Enum.KeyCode.Z}
+
+btnAuto.MouseButton1Click:Connect(function()
+    isRunning = not isRunning
+    btnAuto.Text = isRunning and "Auto Press: ON" or "Auto Press: OFF"
+    btnAuto.BackgroundColor3 = isRunning and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 50, 50)
+    
+    if isRunning then
+        task.spawn(function()
+            while isRunning do
+                for _, key in ipairs(keys) do
+                    if not isRunning then break end
+                    VirtualInputManager:SendKeyEvent(true, key, false, game)
+                    task.wait(0.001)
+                    VirtualInputManager:SendKeyEvent(false, key, false, game)
+                end
+                task.wait(0.01)
+            end
+        end)
+    end
+end)
+
+-- ระบบหาผู้เล่นใกล้ที่สุดและ FireServer
+btnSlap.MouseButton1Click:Connect(function()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+    if not myRoot then return end
+
+    for _, otherPlayer in pairs(Players:GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetRoot = otherPlayer.Character.HumanoidRootPart
+            local distance = (myRoot.Position - targetRoot.Position).Magnitude
+            
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPlayer = otherPlayer.Name
+            end
+        end
+    end
+
+    if closestPlayer then
+        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChooseSlapper"):FireServer(closestPlayer)
+        print("Slapping: " .. closestPlayer)
+    else
+        print("ไม่พบผู้เล่นคนอื่นในระยะ")
+    end
+end)
