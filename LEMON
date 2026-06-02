@@ -1,0 +1,74 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Player = game.Players.LocalPlayer
+
+local Window = Rayfield:CreateWindow({
+   Name = "Simple Collector",
+   LoadingTitle = "Loading...",
+   LoadingSubtitle = "by Pro AI",
+})
+
+local Tab = Window:CreateTab("Main", "scroll")
+
+-- 1. Auto Collect CashDrops
+local TogglingCollect = false
+Tab:CreateToggle({
+   Name = "Auto Bring CashDrops",
+   CurrentValue = false,
+   Callback = function(Value)
+      TogglingCollect = Value
+      if TogglingCollect then
+         task.spawn(function()
+            while TogglingCollect do
+               local folder = workspace:FindFirstChild("CashDrops")
+               if folder and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                  local charPos = Player.Character.HumanoidRootPart.CFrame
+                  for _, item in pairs(folder:GetChildren()) do
+                     if not TogglingCollect then break end
+                     if item:IsA("BasePart") then
+                        item.CFrame = charPos * CFrame.new(0, 0, -3)
+                     elseif item:IsA("Model") then
+                        item:PivotTo(charPos * CFrame.new(0, 0, -3))
+                     end
+                     task.wait(0.1)
+                  end
+               end
+               task.wait(0.5)
+            end
+         end)
+      end
+   end,
+})
+
+-- 2. Auto Bring "Button" (ทั่วทั้งแมพ)
+local TogglingBringButton = false
+Tab:CreateToggle({
+   Name = "Auto Bring All 'Button'",
+   CurrentValue = false,
+   Callback = function(Value)
+      TogglingBringButton = Value
+      if TogglingBringButton then
+         task.spawn(function()
+            while TogglingBringButton do
+               if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                  local charPos = Player.Character.HumanoidRootPart.CFrame
+                  
+                  -- วนลูปหาใน workspace ทั้งหมด
+                  for _, obj in pairs(workspace:GetDescendants()) do
+                     if not TogglingBringButton then break end
+                     
+                     -- ตรวจสอบว่าชื่อคือ "Button"
+                     if obj.Name == "Button" then
+                        if obj:IsA("BasePart") then
+                           obj.CFrame = charPos * CFrame.new(0, 0, -3)
+                        elseif obj:IsA("Model") then
+                           obj:PivotTo(charPos * CFrame.new(0, 0, -3))
+                        end
+                     end
+                  end
+               end
+               task.wait(1) -- ลูปทุก 1 วินาที
+            end
+         end)
+      end
+   end,
+})
