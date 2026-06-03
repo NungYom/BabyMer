@@ -3,80 +3,107 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local Window = Rayfield:CreateWindow({Name = "Pro Auto Farm", LoadingTitle = "Loading...", LoadingSubtitle = "Combat Suite"})
+local Window = Rayfield:CreateWindow({Name = "Pro Auto Farm Suite [Smooth Orbit]", LoadingTitle = "Loading...", LoadingSubtitle = "BodyPosition Stable Mode"})
 local Tab = Window:CreateTab("Combat", nil)
 
--- รายชื่ออาวุธทั้งหมด
+-- Configuration
 local Weapons = {"Snowball", "Raw Cod", "Steak", "Can of Tuna", "Water Bottle", "Cat Food", "Yarn Ball", "Spiked Yarn Ball", "Ricochet Spiked Yarn Ball"}
-
 getgenv().AutoFire = false
 getgenv().AutoSwap = false
+getgenv().OrbitTarget = false
+getgenv().LastOrbitTime = 0
 
--- ปุ่มที่ 1: ยิงปกติ
-Tab:CreateToggle({
-   Name = "Auto Fire (Normal)",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().AutoFire = Value end,
-})
+-- UI Components
+Tab:CreateToggle({Name = "Auto Fire (Normal)", CurrentValue = false, Callback = function(V) getgenv().AutoFire = V end})
+Tab:CreateToggle({Name = "Auto Swap & Fire (Max DPS)", CurrentValue = false, Callback = function(V) getgenv().AutoSwap = V end})
+Tab:CreateToggle({Name = "Orbit Target (Stable Smooth)", CurrentValue = false, Callback = function(V) 
+    getgenv().OrbitTarget = V
+    local char = Workspace:FindFirstChild(Players.LocalPlayer.Name)
+    local humanoid = char and char:FindFirstChild("Humanoid")
+    if humanoid then humanoid.AutoRotate = not V end
+    -- ลบ BodyPosition ทันทีเมื่อปิดโหมด
+    if not V and char and char:FindFirstChild("HumanoidRootPart") then
+        local bp = char.HumanoidRootPart:FindFirstChild("OrbitBP")
+        if bp then bp:Destroy() end
+    end
+end})
 
--- ปุ่มที่ 2: สลับอาวุธยิง
-Tab:CreateToggle({
-   Name = "Auto Swap & Fire (Max DPS)",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().AutoSwap = Value end,
-})
-
--- ฟังก์ชันหาเป้าหมาย
-local function getNearestTarget()
-    local closestPos = nil
+-- Helpers: ฟังก์ชันหาเป้าหมายพร้อมระบบกรอง Skelly Dog
+local function getTarget(mode)
+    local closest = nil
     local shortestDist = math.huge
-    local playerChar = Workspace:FindFirstChild(Players.LocalPlayer.Name)
-    local playerRoot = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
-    if not playerRoot then return nil end
-
     local container = Workspace._Map.Cats.Container
+    local origin = (mode == "orbit") and Vector3.new(0,0,0) or (Workspace:FindFirstChild(Players.LocalPlayer.Name) and Workspace[Players.LocalPlayer.Name].HumanoidRootPart.Position)
+    
+    if not origin then return nil end
+    
     for _, obj in pairs(container:GetChildren()) do
-        local targetPos = (obj:IsA("Model") and (obj.PrimaryPart and obj.PrimaryPart.Position or obj:FindFirstChildWhichIsA("BasePart").Position)) 
-                       or (obj:IsA("BasePart") and obj.Position)
-        if targetPos then
-            local dist = (targetPos - playerRoot.Position).Magnitude
-            if dist < shortestDist then
-                shortestDist = dist
-                closestPos = targetPos
-            end
+        local catName = obj:GetAttribute("Cat")
+        if catName == "Skelly Dog" then continue end
+
+        local pos = (obj:IsA("Model") and (obj.PrimaryPart and obj.PrimaryPart.Position or obj:FindFirstChildWhichIsA("BasePart").Position)) or (obj:IsA("BasePart") and obj.Position)
+        if pos then
+            local dist = (pos - origin).Magnitude
+            if dist < shortestDist then shortestDist = dist; closest = pos end
         end
     end
-    return closestPos, playerRoot.Position
+    return closest
 end
 
--- ลูปการทำงานรวม
+-- Main Loop
 task.spawn(function()
     local weaponIndex = 1
+    local angle = 0
+    
     while task.wait(0.1) do
-        -- โหมดสลับอาวุธ (Auto Swap)
-        if getgenv().AutoSwap then
-            local targetPos, playerPos = getNearestTarget()
-            if targetPos and playerPos then
-                -- 1. สลับอาวุธ
-                local weaponName = Weapons[weaponIndex]
-                ReplicatedStorage:WaitForChild("Events"):WaitForChild("EquipWeapon"):FireServer(weaponName)
-                
-                -- 2. ยิง
-                local direction = (targetPos - playerPos).Unit
-                ReplicatedStorage:WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(Vector3.new(direction.X, direction.Y, direction.Z), true)
-                
-                -- เพิ่ม Index เพื่อวนลูปอาวุธ
-                weaponIndex = (weaponIndex % #Weapons) + 1
-                task.wait(0.6 / #Weapons) -- คำนวณความเร็วให้จบชุดในประมาณ 0.6 วินาที
-            end
+        local char = Workspace:FindFirstChild(Players.LocalPlayer.Name)
+        local root = char and char:FindFirstChild("HumanoidRootPart")
         
-        -- โหมดปกติ (Auto Fire เฉพาะอาวุธที่ถืออยู่)
-        elseif getgenv().AutoFire then
-            local targetPos, playerPos = getNearestTarget()
-            if targetPos and playerPos then
-                local direction = (targetPos - playerPos).Unit
-                ReplicatedStorage:WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(Vector3.new(direction.X, direction.Y, direction.Z), true)
-                task.wait(0.5) -- คูลดาวน์พื้นฐาน
+        -- โหมด Orbit ด้วย BodyPosition (นิ่งและ Smooth)
+        if getgenv().OrbitTarget and char and root then
+            local targetPos = getTarget("orbit")
+            if targetPos then
+                -- สร้างหรืออัปเดต BodyPosition
+                local bp = root:FindFirstChild("OrbitBP")
+                if not bp then
+                    bp = Instance.new("BodyPosition", root)
+                    bp.Name = "OrbitBP"
+                    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bp.P = 10000 
+                    bp.D = 100
+                end
+                
+                -- คำนวณการหมุนตามเวลาที่กำหนด
+                local currentTime = tick()
+                if (currentTime - getgenv().LastOrbitTime) >= 0.5 then
+                    angle = angle + 0.7
+                    getgenv().LastOrbitTime = currentTime
+                end
+                
+                local orbitPos = targetPos + Vector3.new(math.cos(angle)*30, 30, math.sin(angle)*30)
+                
+                -- ปิดการชนเพื่อป้องกันการเบียด
+                for _, p in pairs(char:GetChildren()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+                
+                bp.Position = orbitPos
+                root.CFrame = CFrame.new(root.Position, targetPos) -- หันหน้าหามอน
+            end
+        end
+
+        -- Combat Logic
+        if (getgenv().AutoFire or getgenv().AutoSwap) and root then
+            local targetPos = getTarget("combat")
+            if targetPos then
+                if getgenv().AutoSwap then
+                    ReplicatedStorage:WaitForChild("Events"):WaitForChild("EquipWeapon"):FireServer(Weapons[weaponIndex])
+                    weaponIndex = (weaponIndex % #Weapons) + 1
+                    task.wait(0.05)
+                end
+                
+                local dir = (targetPos - root.Position).Unit
+                ReplicatedStorage:WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(Vector3.new(dir.X, dir.Y, dir.Z), true)
             end
         end
     end
