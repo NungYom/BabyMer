@@ -3,11 +3,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local Window = Rayfield:CreateWindow({Name = "Pro Auto Farm Suite [Smooth Orbit]", LoadingTitle = "Loading...", LoadingSubtitle = "BodyPosition Stable Mode"})
+local Window = Rayfield:CreateWindow({Name = "Pro Auto Farm Suite [Updated]", LoadingTitle = "Loading...", LoadingSubtitle = "Taco Weapon Added"})
 local Tab = Window:CreateTab("Combat", nil)
 
--- Configuration
-local Weapons = {"Snowball", "Raw Cod", "Steak", "Can of Tuna", "Water Bottle", "Cat Food", "Yarn Ball", "Spiked Yarn Ball", "Ricochet Spiked Yarn Ball"}
+-- Configuration (เพิ่ม "Taco" เข้าไปในรายการอาวุธ)
+local Weapons = {"Snowball", "Raw Cod", "Steak", "Can of Tuna", "Water Bottle", "Cat Food", "Yarn Ball", "Spiked Yarn Ball", "Ricochet Spiked Yarn Ball", "Pizza", "Burger", "Cake"}
 getgenv().AutoFire = false
 getgenv().AutoSwap = false
 getgenv().OrbitTarget = false
@@ -21,7 +21,6 @@ Tab:CreateToggle({Name = "Orbit Target (Stable Smooth)", CurrentValue = false, C
     local char = Workspace:FindFirstChild(Players.LocalPlayer.Name)
     local humanoid = char and char:FindFirstChild("Humanoid")
     if humanoid then humanoid.AutoRotate = not V end
-    -- ลบ BodyPosition ทันทีเมื่อปิดโหมด
     if not V and char and char:FindFirstChild("HumanoidRootPart") then
         local bp = char.HumanoidRootPart:FindFirstChild("OrbitBP")
         if bp then bp:Destroy() end
@@ -59,11 +58,10 @@ task.spawn(function()
         local char = Workspace:FindFirstChild(Players.LocalPlayer.Name)
         local root = char and char:FindFirstChild("HumanoidRootPart")
         
-        -- โหมด Orbit ด้วย BodyPosition (นิ่งและ Smooth)
+        -- โหมด Orbit ด้วย BodyPosition
         if getgenv().OrbitTarget and char and root then
             local targetPos = getTarget("orbit")
             if targetPos then
-                -- สร้างหรืออัปเดต BodyPosition
                 local bp = root:FindFirstChild("OrbitBP")
                 if not bp then
                     bp = Instance.new("BodyPosition", root)
@@ -73,22 +71,20 @@ task.spawn(function()
                     bp.D = 100
                 end
                 
-                -- คำนวณการหมุนตามเวลาที่กำหนด
                 local currentTime = tick()
-                if (currentTime - getgenv().LastOrbitTime) >= 0.5 then
+                if (currentTime - getgenv().LastOrbitTime) >= 0.6 then
                     angle = angle + 0.7
                     getgenv().LastOrbitTime = currentTime
                 end
                 
                 local orbitPos = targetPos + Vector3.new(math.cos(angle)*30, 30, math.sin(angle)*30)
                 
-                -- ปิดการชนเพื่อป้องกันการเบียด
                 for _, p in pairs(char:GetChildren()) do
                     if p:IsA("BasePart") then p.CanCollide = false end
                 end
                 
                 bp.Position = orbitPos
-                root.CFrame = CFrame.new(root.Position, targetPos) -- หันหน้าหามอน
+                root.CFrame = CFrame.new(root.Position, targetPos)
             end
         end
 
@@ -98,6 +94,7 @@ task.spawn(function()
             if targetPos then
                 if getgenv().AutoSwap then
                     ReplicatedStorage:WaitForChild("Events"):WaitForChild("EquipWeapon"):FireServer(Weapons[weaponIndex])
+                    -- ตรวจสอบว่าถึงตัวสุดท้ายหรือยัง แล้วเริ่มใหม่ที่ 1
                     weaponIndex = (weaponIndex % #Weapons) + 1
                     task.wait(0.05)
                 end
