@@ -1,35 +1,43 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local Window = Rayfield:CreateWindow({Name = "Auto Farm Fixed", LoadingTitle = "Loading...", LoadingSubtitle = "Fixed version"})
+local Window = Rayfield:CreateWindow({Name = "Pro Auto Farm", LoadingTitle = "Loading...", LoadingSubtitle = "Combat Suite"})
 local Tab = Window:CreateTab("Combat", nil)
 
+-- รายชื่ออาวุธทั้งหมด
+local Weapons = {"Snowball", "Raw Cod", "Steak", "Can of Tuna", "Water Bottle", "Cat Food", "Yarn Ball", "Spiked Yarn Ball", "Ricochet Spiked Yarn Ball"}
+
 getgenv().AutoFire = false
+getgenv().AutoSwap = false
+
+-- ปุ่มที่ 1: ยิงปกติ
 Tab:CreateToggle({
-   Name = "Auto Fire (Fixed)",
+   Name = "Auto Fire (Normal)",
    CurrentValue = false,
    Callback = function(Value) getgenv().AutoFire = Value end,
 })
 
--- ฟังก์ชันหาตำแหน่งที่แม่นยำขึ้น
+-- ปุ่มที่ 2: สลับอาวุธยิง
+Tab:CreateToggle({
+   Name = "Auto Swap & Fire (Max DPS)",
+   CurrentValue = false,
+   Callback = function(Value) getgenv().AutoSwap = Value end,
+})
+
+-- ฟังก์ชันหาเป้าหมาย
 local function getNearestTarget()
     local closestPos = nil
     local shortestDist = math.huge
-    
-    -- อ้างอิงตามที่คุณบอกว่าชื่อผู้เล่นคือชื่อตัวละครใน Workspace
     local playerChar = Workspace:FindFirstChild(Players.LocalPlayer.Name)
     local playerRoot = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
     if not playerRoot then return nil end
 
-    -- โฟลเดอร์มอนสเตอร์ตามโครงสร้างใน image_e5aba1.png
     local container = Workspace._Map.Cats.Container
-    
     for _, obj in pairs(container:GetChildren()) do
-        -- เช็คหาพิกัดตำแหน่งจากวัตถุ (ใช้วิธีหาตำแหน่งจาก Part ที่อยู่ข้างในหรือตัวมันเอง)
         local targetPos = (obj:IsA("Model") and (obj.PrimaryPart and obj.PrimaryPart.Position or obj:FindFirstChildWhichIsA("BasePart").Position)) 
                        or (obj:IsA("BasePart") and obj.Position)
-        
         if targetPos then
             local dist = (targetPos - playerRoot.Position).Magnitude
             if dist < shortestDist then
@@ -41,21 +49,34 @@ local function getNearestTarget()
     return closestPos, playerRoot.Position
 end
 
+-- ลูปการทำงานรวม
 task.spawn(function()
-    while task.wait(0.2) do -- ปรับเพิ่มเวลาเผื่อ Server รับค่าไม่ทัน
-        if getgenv().AutoFire then
+    local weaponIndex = 1
+    while task.wait(0.1) do
+        -- โหมดสลับอาวุธ (Auto Swap)
+        if getgenv().AutoSwap then
             local targetPos, playerPos = getNearestTarget()
-            
             if targetPos and playerPos then
-                -- คำนวณ Direction Vector ให้พุ่งไปที่เป้าหมาย
+                -- 1. สลับอาวุธ
+                local weaponName = Weapons[weaponIndex]
+                ReplicatedStorage:WaitForChild("Events"):WaitForChild("EquipWeapon"):FireServer(weaponName)
+                
+                -- 2. ยิง
                 local direction = (targetPos - playerPos).Unit
+                ReplicatedStorage:WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(Vector3.new(direction.X, direction.Y, direction.Z), true)
                 
-                local args = {
-                    Vector3.new(direction.X, direction.Y, direction.Z),
-                    true
-                }
-                
-                game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(unpack(args))
+                -- เพิ่ม Index เพื่อวนลูปอาวุธ
+                weaponIndex = (weaponIndex % #Weapons) + 1
+                task.wait(0.6 / #Weapons) -- คำนวณความเร็วให้จบชุดในประมาณ 0.6 วินาที
+            end
+        
+        -- โหมดปกติ (Auto Fire เฉพาะอาวุธที่ถืออยู่)
+        elseif getgenv().AutoFire then
+            local targetPos, playerPos = getNearestTarget()
+            if targetPos and playerPos then
+                local direction = (targetPos - playerPos).Unit
+                ReplicatedStorage:WaitForChild("Events"):WaitForChild("WeaponEvent"):FireServer(Vector3.new(direction.X, direction.Y, direction.Z), true)
+                task.wait(0.5) -- คูลดาวน์พื้นฐาน
             end
         end
     end
