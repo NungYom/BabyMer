@@ -1,0 +1,80 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Professional Aimbot Panel",
+   LoadingTitle = "Initializing...",
+   LoadingSubtitle = "by Developer",
+})
+
+local Tab = Window:CreateTab("Combat", nil)
+
+-- ตัวแปรตั้งค่า
+local Settings = {
+    AimbotEnabled = false,
+    FOV = 100,
+    IsHoldingRightClick = false
+}
+
+-- Rayfield UI Elements
+local Toggle = Tab:CreateToggle({
+   Name = "Enable Aimbot",
+   CurrentValue = false,
+   Callback = function(Value)
+      Settings.AimbotEnabled = Value
+   end,
+})
+
+local Slider = Tab:CreateSlider({
+   Name = "FOV Radius",
+   Range = {0, 500},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 100,
+   Callback = function(Value)
+      Settings.FOV = Value
+   end,
+})
+
+-- ระบบตรวจจับการกดคลิกขวา
+local UIS = game:GetService("UserInputService")
+UIS.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        Settings.IsHoldingRightClick = true
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        Settings.IsHoldingRightClick = false
+    end
+end)
+
+-- ระบบ Lock เป้าหมาย
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+
+RunService.RenderStepped:Connect(function()
+    if Settings.AimbotEnabled and Settings.IsHoldingRightClick then
+        local target = nil
+        local minDistance = Settings.FOV
+        local mousePos = UIS:GetMouseLocation()
+
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= Players.LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+                local headPos, onScreen = Camera:WorldToViewportPoint(plr.Character.Head.Position)
+                if onScreen then
+                    local distance = (Vector2.new(headPos.X, headPos.Y) - mousePos).Magnitude
+                    if distance < minDistance then
+                        target = plr.Character.Head
+                        minDistance = distance
+                    end
+                end
+            end
+        end
+
+        if target then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+        end
+    end
+end)
