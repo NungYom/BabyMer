@@ -5,25 +5,33 @@ local LocalPlayer = Players.LocalPlayer
 if game.PlaceId ~= 106763540857326 then warn("Wrong Game!") return end
 
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Hunt Professional | Sequence Mode",
-    LoadingTitle = "Initializing Sequence Logic...",
-    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_Sequence" }
+    Name = "Auto Hunt Professional | Patrol Mode",
+    LoadingTitle = "Initializing Patrol Logic...",
+    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_Patrol" }
 })
 
 local Tab = Window:CreateTab("Main", "sword")
 local AutoHuntToggle = true
 
--- ปุ่ม Numpad Minus (0x21)
-local function TriggerIYSkyHop()
+-- ฟังก์ชันกดปุ่มทั้ง 2 รูปแบบ
+local function TriggerHopSignals()
+    -- Numpad Minus (0x6D)
+    keypress(0x6D)
+    task.wait(0.2)
+    keyrelease(0x6D)
+    
+    task.wait(0.5)
+    
+    -- Page Up (0x21)
     keypress(0x21)
     task.wait(0.2)
     keyrelease(0x21)
 end
 
 local function ExecuteHop()
-    warn("ครบทั้ง 4 จุดแล้วไม่พบมอนสเตอร์ - กำลัง Hop Server...")
-    for i = 1, 10 do
-        TriggerIYSkyHop()
+    warn("ครบ 4 จุดแล้ว - กำลัง Hop Server (Dual Signal)...")
+    for i = 1, 5 do -- ลดจำนวนลูปเหลือ 5 รอบ แต่กด 2 ปุ่มจะทำให้โอกาสติดสูงขึ้น
+        TriggerHopSignals()
         task.wait(1)
     end
 end
@@ -53,43 +61,32 @@ local function RunLogic()
 
     while AutoHuntToggle do
         local success, err = pcall(function()
-            local foundAnyMob = false
-            
-            -- วนเช็คทั้ง 4 จุด
+            -- วนลูปครบ 4 จุด
             for _, pos in pairs(waypoints) do
                 if not AutoHuntToggle then break end
                 
                 local char = LocalPlayer.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     char:PivotTo(pos)
-                    task.wait(2)
+                    task.wait(1.5) -- ดีเลย์หลัง TP ให้โลกโหลด
                     
-                    -- ตีจนกว่าจะไม่มีมอนในจุดนั้น
-                    local startTimer = tick()
-                    while AutoHuntToggle do
-                        local mob = GetNearestMob(pos.Position, 50)
-                        if mob then
-                            foundAnyMob = true -- เจอว่ามีมอนอยู่ในอย่างน้อย 1 จุด
-                            startTimer = tick() -- รีเซ็ตเวลาถอยหลัง
-                            task.wait(1)
-                        else
-                            -- ถ้าไม่เจอเลยเกิน 3 วินาที ให้ไปจุดถัดไป
-                            if (tick() - startTimer) >= 3 then break end
-                            task.wait(0.5)
-                        end
+                    -- ตรวจมอน 1 วินาที ถ้าเจอให้ตีจนกว่าจะหมด
+                    local timeout = tick() + 30 -- กันค้างในจุดเดียวเกิน 30 วิ
+                    while AutoHuntToggle and tick() < timeout and GetNearestMob(pos.Position, 50) do
+                        task.wait(1)
                     end
                 end
             end
             
-            -- ถ้าวนครบ 4 จุดแล้วไม่เจออะไรเลยค่อย Hop
-            if AutoHuntToggle and not foundAnyMob then
+            -- ครบ 4 จุดแล้ว Hop ทันที
+            if AutoHuntToggle then
                 ExecuteHop()
-                task.wait(15)
+                task.wait(20)
             end
         end)
         
         if not success then
-            warn("Loop Error: " .. tostring(err))
+            warn("Patrol Error: " .. tostring(err))
             task.wait(5)
         end
     end
@@ -97,7 +94,7 @@ end
 
 -- UI Setup
 Tab:CreateToggle({
-    Name = "Auto Hunt (Sequence Mode)",
+    Name = "Auto Hunt (Patrol Mode)",
     CurrentValue = true,
     Callback = function(Value)
         AutoHuntToggle = Value
