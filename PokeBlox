@@ -6,24 +6,25 @@ local LocalPlayer = Players.LocalPlayer
 if game.PlaceId ~= 106763540857326 then warn("Wrong Game!") return end
 
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Hunt Professional",
+    Name = "Auto Hunt Professional | PageUp",
     LoadingTitle = "Initializing Stability...",
-    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_Stable" }
+    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_PageUp" }
 })
 
 local Tab = Window:CreateTab("Main", "sword")
-local AutoHuntToggle = true -- ตั้งค่าเป็น true ตั้งแต่เริ่มต้น
+local AutoHuntToggle = true -- Default เป็นเปิด
 
--- ฟังก์ชัน Hop (IY Integration)
+-- ฟังก์ชัน Hop โดยใช้ปุ่ม Page Up (0x21 คือรหัสของ Page Up)
 local function TriggerIYSkyHop()
-    keypress(0x6D)
+    print("ส่งคำสั่ง Hop ผ่าน IY (Page Up)...")
+    keypress(0x21)
     task.wait(0.2)
-    keyrelease(0x6D)
+    keyrelease(0x21)
 end
 
 -- ระบบจัดการ Hop
 local function ExecuteHop()
-    warn("กำลัง Hop Server...")
+    warn("กำลัง Hop Server ด้วย Page Up...")
     for i = 1, 10 do
         TriggerIYSkyHop()
         task.wait(1)
