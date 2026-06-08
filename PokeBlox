@@ -1,0 +1,96 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ตรวจสอบ PlaceID
+if game.PlaceId ~= 106763540857326 then warn("Wrong Game!") return end
+
+local Window = Rayfield:CreateWindow({
+    Name = "Auto Hunt Professional",
+    LoadingTitle = "Initializing Stability...",
+    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_Stable" }
+})
+
+local Tab = Window:CreateTab("Main", "sword")
+local AutoHuntToggle = true -- ตั้งค่าเป็น true ตั้งแต่เริ่มต้น
+
+-- ฟังก์ชัน Hop (IY Integration)
+local function TriggerIYSkyHop()
+    keypress(0x6D)
+    task.wait(0.2)
+    keyrelease(0x6D)
+end
+
+-- ระบบจัดการ Hop
+local function ExecuteHop()
+    warn("กำลัง Hop Server...")
+    for i = 1, 10 do
+        TriggerIYSkyHop()
+        task.wait(1)
+    end
+end
+
+-- ฟังก์ชันหา Mob แบบปลอดภัย
+local function GetNearestMob(origin, radius)
+    local live = workspace:FindFirstChild("Live")
+    if not live then return nil end
+    local client = live:FindFirstChild("Mobs") and live.Mobs:FindFirstChild("Client")
+    if not client then return nil end
+    
+    for _, mob in pairs(client:GetChildren()) do
+        local hrp = mob:FindFirstChild("HumanoidRootPart")
+        if hrp and (hrp.Position - origin).Magnitude <= radius then
+            return hrp
+        end
+    end
+    return nil
+end
+
+-- ลอจิกหลัก
+local function RunLogic()
+    local waypoints = {
+        CFrame.new(932.93, 28.87, -1472.02),
+        CFrame.new(893.79, 28.48, -1341.54),
+        CFrame.new(1574.43, 26.53, 1904.87),
+        CFrame.new(1378.69, 42.22, 1679.54)
+    }
+
+    while AutoHuntToggle do
+        local success, err = pcall(function()
+            for _, pos in pairs(waypoints) do
+                if not AutoHuntToggle then break end
+                
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char:PivotTo(pos)
+                    task.wait(2)
+                    
+                    local timeout = tick() + 60
+                    while AutoHuntToggle and tick() < timeout and GetNearestMob(pos.Position, 60) do
+                        task.wait(1.5)
+                    end
+                end
+            end
+            
+            if AutoHuntToggle then ExecuteHop() task.wait(15) end
+        end)
+        
+        if not success then
+            warn("Loop Error: " .. tostring(err))
+            task.wait(5)
+        end
+    end
+end
+
+-- UI Component
+Tab:CreateToggle({
+    Name = "Auto Hunt (Stable Mode)",
+    CurrentValue = true, -- Default เป็นเปิด
+    Callback = function(Value)
+        AutoHuntToggle = Value
+        if AutoHuntToggle then task.spawn(RunLogic) end
+    end,
+})
+
+-- เริ่มทำงานทันที
+task.spawn(RunLogic)
