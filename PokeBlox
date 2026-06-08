@@ -2,36 +2,32 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- ตรวจสอบ PlaceID
 if game.PlaceId ~= 106763540857326 then warn("Wrong Game!") return end
 
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Hunt Professional | PageUp",
-    LoadingTitle = "Initializing Stability...",
-    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_PageUp" }
+    Name = "Auto Hunt Professional | Sequence Mode",
+    LoadingTitle = "Initializing Sequence Logic...",
+    ConfigurationSaving = { Enabled = true, FileName = "AutoHunt_Sequence" }
 })
 
 local Tab = Window:CreateTab("Main", "sword")
-local AutoHuntToggle = true -- Default เป็นเปิด
+local AutoHuntToggle = true
 
--- ฟังก์ชัน Hop โดยใช้ปุ่ม Page Up (0x21 คือรหัสของ Page Up)
+-- ปุ่ม Numpad Minus (0x21)
 local function TriggerIYSkyHop()
-    print("ส่งคำสั่ง Hop ผ่าน IY (Page Up)...")
     keypress(0x21)
     task.wait(0.2)
     keyrelease(0x21)
 end
 
--- ระบบจัดการ Hop
 local function ExecuteHop()
-    warn("กำลัง Hop Server ด้วย Page Up...")
+    warn("ครบทั้ง 4 จุดแล้วไม่พบมอนสเตอร์ - กำลัง Hop Server...")
     for i = 1, 10 do
         TriggerIYSkyHop()
         task.wait(1)
     end
 end
 
--- ฟังก์ชันหา Mob แบบปลอดภัย
 local function GetNearestMob(origin, radius)
     local live = workspace:FindFirstChild("Live")
     if not live then return nil end
@@ -47,7 +43,6 @@ local function GetNearestMob(origin, radius)
     return nil
 end
 
--- ลอจิกหลัก
 local function RunLogic()
     local waypoints = {
         CFrame.new(932.93, 28.87, -1472.02),
@@ -58,6 +53,9 @@ local function RunLogic()
 
     while AutoHuntToggle do
         local success, err = pcall(function()
+            local foundAnyMob = false
+            
+            -- วนเช็คทั้ง 4 จุด
             for _, pos in pairs(waypoints) do
                 if not AutoHuntToggle then break end
                 
@@ -66,14 +64,28 @@ local function RunLogic()
                     char:PivotTo(pos)
                     task.wait(2)
                     
-                    local timeout = tick() + 60
-                    while AutoHuntToggle and tick() < timeout and GetNearestMob(pos.Position, 60) do
-                        task.wait(1.5)
+                    -- ตีจนกว่าจะไม่มีมอนในจุดนั้น
+                    local startTimer = tick()
+                    while AutoHuntToggle do
+                        local mob = GetNearestMob(pos.Position, 50)
+                        if mob then
+                            foundAnyMob = true -- เจอว่ามีมอนอยู่ในอย่างน้อย 1 จุด
+                            startTimer = tick() -- รีเซ็ตเวลาถอยหลัง
+                            task.wait(1)
+                        else
+                            -- ถ้าไม่เจอเลยเกิน 3 วินาที ให้ไปจุดถัดไป
+                            if (tick() - startTimer) >= 3 then break end
+                            task.wait(0.5)
+                        end
                     end
                 end
             end
             
-            if AutoHuntToggle then ExecuteHop() task.wait(15) end
+            -- ถ้าวนครบ 4 จุดแล้วไม่เจออะไรเลยค่อย Hop
+            if AutoHuntToggle and not foundAnyMob then
+                ExecuteHop()
+                task.wait(15)
+            end
         end)
         
         if not success then
@@ -83,15 +95,14 @@ local function RunLogic()
     end
 end
 
--- UI Component
+-- UI Setup
 Tab:CreateToggle({
-    Name = "Auto Hunt (Stable Mode)",
-    CurrentValue = true, -- Default เป็นเปิด
+    Name = "Auto Hunt (Sequence Mode)",
+    CurrentValue = true,
     Callback = function(Value)
         AutoHuntToggle = Value
         if AutoHuntToggle then task.spawn(RunLogic) end
     end,
 })
 
--- เริ่มทำงานทันที
 task.spawn(RunLogic)
