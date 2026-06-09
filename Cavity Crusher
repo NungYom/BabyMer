@@ -1,0 +1,91 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Plot Farming Hub",
+   LoadingTitle = "Loading Script...",
+   LoadingSubtitle = "by Gemini",
+})
+
+local Tab = Window:CreateTab("Auto Farm")
+
+-- ตัวแปรสถานะ
+local autoCollect = false
+local autoLevel = false
+
+-- ฟังก์ชันดึง Plot ของเจ้าของ
+local function getMyPlot()
+    local player = game.Players.LocalPlayer
+    local plotsFolder = game.Workspace:FindFirstChild("Plots")
+    if plotsFolder then
+        for i = 1, 6 do
+            local plot = plotsFolder:FindFirstChild("Plot" .. i)
+            if plot and plot:GetAttribute("OwnerUserId") == player.UserId then
+                return plot
+            end
+        end
+    end
+    return nil
+end
+
+-- 1. Auto Collect Money
+Tab:CreateToggle({
+   Name = "Auto Collect Money",
+   CurrentValue = false,
+   Callback = function(Value)
+      autoCollect = Value
+      if autoCollect then
+         spawn(function()
+            while autoCollect do
+               local myPlot = getMyPlot()
+               if myPlot then
+                  local lowerPlots = myPlot:FindFirstChild("LowerPlots")
+                  if lowerPlots then
+                     for j = 1, 30 do
+                        if not autoCollect then break end
+                        local lowerPlot = lowerPlots:FindFirstChild("LowerPlots." .. string.format("%03d", j))
+                        local collectPart = lowerPlot and lowerPlot:FindFirstChild("CalciumCollect") and lowerPlot.CalciumCollect:FindFirstChild("Part")
+                        
+                        if collectPart then
+                           local char = game.Players.LocalPlayer.Character
+                           if char and char:FindFirstChild("HumanoidRootPart") then
+                               collectPart.CFrame = char.HumanoidRootPart.CFrame
+                           end
+                        end
+                     end
+                  end
+               end
+               task.wait(3)
+            end
+         end)
+      end
+   end,
+})
+
+-- 2. Auto Level Up
+Tab:CreateToggle({
+   Name = "Auto Level Up",
+   CurrentValue = false,
+   Callback = function(Value)
+      autoLevel = Value
+      if autoLevel then
+         spawn(function()
+            while autoLevel do
+               local myPlot = getMyPlot()
+               if myPlot then
+                  local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and 
+                                 game:GetService("ReplicatedStorage").Remotes:FindFirstChild("LevelUpTooth")
+                  
+                  if remote then
+                     for j = 1, 30 do
+                        if not autoLevel then break end
+                        remote:FireServer(string.format("LowerPlots.%03d", j))
+                        task.wait(0.1)
+                     end
+                  end
+               end
+               task.wait(0.1)
+            end
+         end)
+      end
+   end,
+})
