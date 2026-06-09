@@ -11,6 +11,7 @@ local Tab = Window:CreateTab("Auto Farm")
 -- ตัวแปรสถานะ
 local autoCollect = false
 local autoLevel = false
+local autoRebirth = false
 
 -- ฟังก์ชันดึง Plot ของเจ้าของ
 local function getMyPlot()
@@ -84,6 +85,28 @@ Tab:CreateToggle({
                   end
                end
                task.wait(0.1)
+            end
+         end)
+      end
+   end,
+})
+
+-- 3. Auto Rebirth
+Tab:CreateToggle({
+   Name = "Auto Rebirth",
+   CurrentValue = false,
+   Callback = function(Value)
+      autoRebirth = Value
+      if autoRebirth then
+         spawn(function()
+            while autoRebirth do
+               local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and 
+                              game:GetService("ReplicatedStorage").Remotes:FindFirstChild("RequestRebirth")
+               
+               if remote then
+                  remote:FireServer()
+               end
+               task.wait(1) -- รันทุกๆ 1 วินาที
             end
          end)
       end
