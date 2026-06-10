@@ -6,14 +6,18 @@ local Window = Rayfield:CreateWindow({
    LoadingSubtitle = "by Gemini",
 })
 
-local Tab = Window:CreateTab("Auto Farm")
+-- จัดระเบียบหน้า Tab
+local FarmTab = Window:CreateTab("Auto Farm")
+local ShopTab = Window:CreateTab("Auto Shop")
 
--- ตัวแปรสถานะ
-local autoCollect = false
-local autoLevel = false
-local autoRebirth = false
+-- ตัวแปรเก็บสถานะการซื้อ
+local buySettings = {
+    Capsule = {KingMolarCapsule = false, NebuliteCapsule = false, GlitchfangCapsule = false},
+    Tooth = {Twinkle = false, Ladybug = false, Fruitopia = false, Voidcore = false, Celestialino = false},
+    PlotSkin = {WingPlotSkin = false, GrasshopperPlotSkin = false, PinkPlotSkin = false, RainbowPlotSkin = false, GalaxyPlotSkin = false}
+}
 
--- ฟังก์ชันดึง Plot ของเจ้าของ
+-- ฟังก์ชันดึง Plot
 local function getMyPlot()
     local player = game.Players.LocalPlayer
     local plotsFolder = game.Workspace:FindFirstChild("Plots")
@@ -28,10 +32,10 @@ local function getMyPlot()
     return nil
 end
 
--- 1. Auto Collect Money
-Tab:CreateToggle({
+-- 1. Auto Collect (ปรับ Logic: ดึงมา 1 วิ แล้วส่งคืน รอ 3 วิแล้วค่อยทำใหม่)
+local autoCollect = false
+FarmTab:CreateToggle({
    Name = "Auto Collect Money",
-   CurrentValue = false,
    Callback = function(Value)
       autoCollect = Value
       if autoCollect then
@@ -41,74 +45,89 @@ Tab:CreateToggle({
                if myPlot then
                   local lowerPlots = myPlot:FindFirstChild("LowerPlots")
                   if lowerPlots then
+                     local collectedParts = {}
+                     -- ดึงมา
                      for j = 1, 30 do
-                        if not autoCollect then break end
-                        local lowerPlot = lowerPlots:FindFirstChild("LowerPlots." .. string.format("%03d", j))
-                        local collectPart = lowerPlot and lowerPlot:FindFirstChild("CalciumCollect") and lowerPlot.CalciumCollect:FindFirstChild("Part")
-                        
-                        if collectPart then
-                           local char = game.Players.LocalPlayer.Character
-                           if char and char:FindFirstChild("HumanoidRootPart") then
-                               collectPart.CFrame = char.HumanoidRootPart.CFrame
-                           end
+                        local p = lowerPlots:FindFirstChild("LowerPlots." .. string.format("%03d", j))
+                        local part = p and p:FindFirstChild("CalciumCollect") and p.CalciumCollect:FindFirstChild("Part")
+                        if part then
+                           table.insert(collectedParts, {obj = part, pos = part.CFrame})
+                           part.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
                         end
                      end
-                  end
-               end
-               task.wait(3)
-            end
-         end)
-      end
-   end,
-})
-
--- 2. Auto Level Up
-Tab:CreateToggle({
-   Name = "Auto Level Up",
-   CurrentValue = false,
-   Callback = function(Value)
-      autoLevel = Value
-      if autoLevel then
-         spawn(function()
-            while autoLevel do
-               local myPlot = getMyPlot()
-               if myPlot then
-                  local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and 
-                                 game:GetService("ReplicatedStorage").Remotes:FindFirstChild("LevelUpTooth")
-                  
-                  if remote then
-                     for j = 1, 30 do
-                        if not autoLevel then break end
-                        remote:FireServer(string.format("LowerPlots.%03d", j))
-                        task.wait(0.1)
+                     task.wait(1) -- ค้างไว้ 1 วิ
+                     -- ส่งคืน
+                     for _, data in pairs(collectedParts) do
+                        data.obj.CFrame = data.pos
                      end
                   end
                end
-               task.wait(0.1)
+               task.wait(3) -- รอ 3 วิ
             end
          end)
       end
    end,
 })
 
--- 3. Auto Rebirth
-Tab:CreateToggle({
-   Name = "Auto Rebirth",
-   CurrentValue = false,
-   Callback = function(Value)
-      autoRebirth = Value
-      if autoRebirth then
-         spawn(function()
-            while autoRebirth do
-               local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and 
-                              game:GetService("ReplicatedStorage").Remotes:FindFirstChild("RequestRebirth")
-               
-               if remote then
-                  remote:FireServer()
-               end
-               task.wait(1) -- รันทุกๆ 1 วินาที
+-- 2. Auto Level Up (เหมือนเดิม)
+local autoLevel = false
+FarmTab:CreateToggle({Name = "Auto Level Up", Callback = function(V) autoLevel = V end})
+spawn(function()
+    while true do
+        if autoLevel then
+            local myPlot = getMyPlot()
+            if myPlot then
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("LevelUpTooth")
+                for j = 1, 30 do
+                    if not autoLevel then break end
+                    remote:FireServer(string.format("LowerPlots.%03d", j))
+                    task.wait(0.1)
+                end
             end
-         end)
-      end
-   end,
-})
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- 3. Auto Rebirth
+local autoRebirth = false
+FarmTab:CreateToggle({Name = "Auto Rebirth", Callback = function(V) autoRebirth = V end})
+spawn(function()
+    while true do
+        if autoRebirth then
+            local r = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("RequestRebirth")
+            if r then r:FireServer() end
+        end
+        task.wait(1)
+    end
+end)
+
+-- 4. Auto Buy (ใน ShopTab)
+for category, items in pairs(buySettings) do
+    ShopTab:CreateSection(category)
+    for itemName, _ in pairs(items) do
+        ShopTab:CreateToggle({
+            Name = "Buy " .. itemName,
+            Callback = function(V) buySettings[category][itemName] = V end
+        })
+    end
+end
+
+-- ระบบลูปซื้อแยกตามประเภท
+spawn(function()
+    while true do
+        for cat, items in pairs(buySettings) do
+            for name, enabled in pairs(items) do
+                if enabled then
+                    local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+                    if cat == "Capsule" then
+                        remotes:WaitForChild("BuyCapsule"):FireServer(name, false)
+                    else
+                        remotes:WaitForChild("FairyShopBuyItem"):FireServer(name)
+                    end
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
