@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Farming Hub",
+   Name = "Plot Farming Hub(NameFixed)",
    LoadingTitle = "Loading Script...",
    LoadingSubtitle = "by Gemini",
 })
@@ -13,7 +13,7 @@ local ShopTab = Window:CreateTab("Auto Shop")
 -- ตัวแปรเก็บสถานะการซื้อ
 local buySettings = {
     Capsule = {KingMolarCapsule = false, NebuliteCapsule = false, GlitchfangCapsule = false},
-    Tooth = {Twinkle = false, Ladybug = false, Fruitopia = false, Voidcore = false, Celestialino = false},
+    Tooth = {TwinkleDirect = false, LadybugDirect = false, FruitopiaDirect = false, VoidcoreDirect = false, CelestialinoDirect = false},
     PlotSkin = {WingPlotSkin = false, GrasshopperPlotSkin = false, PinkPlotSkin = false, RainbowPlotSkin = false, GalaxyPlotSkin = false}
 }
 
