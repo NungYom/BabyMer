@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Plot Farming Hub(NameFixed)",
+   Name = "Plot Farming Hub",
    LoadingTitle = "Loading Script...",
    LoadingSubtitle = "by Gemini",
 })
@@ -10,7 +10,7 @@ local Window = Rayfield:CreateWindow({
 local FarmTab = Window:CreateTab("Auto Farm")
 local ShopTab = Window:CreateTab("Auto Shop")
 
--- ตัวแปรเก็บสถานะการซื้อ
+-- ตัวแปรเก็บสถานะการซื้อ (อัปเดตชื่อ Tooth ให้มี Direct ต่อท้าย)
 local buySettings = {
     Capsule = {KingMolarCapsule = false, NebuliteCapsule = false, GlitchfangCapsule = false},
     Tooth = {TwinkleDirect = false, LadybugDirect = false, FruitopiaDirect = false, VoidcoreDirect = false, CelestialinoDirect = false},
@@ -67,7 +67,7 @@ FarmTab:CreateToggle({
    end,
 })
 
--- 2. Auto Collect Lucky Blocks (ใหม่)
+-- 2. Auto Collect Lucky Blocks
 local autoPickup = false
 FarmTab:CreateToggle({
     Name = "Auto Collect Lucky Blocks",
@@ -92,7 +92,32 @@ FarmTab:CreateToggle({
     end,
 })
 
--- 3. Auto Level Up
+-- 3. Instant Pickup (ปรับ HoldDuration = 0)
+local instantPickup = false
+FarmTab:CreateToggle({
+    Name = "Instant Pickup (Hold = 0)",
+    Callback = function(Value)
+        instantPickup = Value
+        if instantPickup then
+            spawn(function()
+                while instantPickup do
+                    local folder = game.Workspace:FindFirstChild("LocalLuckyBlocks")
+                    if folder then
+                        for _, block in pairs(folder:GetChildren()) do
+                            local prompt = block:FindFirstChildWhichIsA("ProximityPrompt", true)
+                            if prompt and prompt.HoldDuration ~= 0 then
+                                prompt.HoldDuration = 0
+                            end
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end,
+})
+
+-- 4. Auto Level Up
 local autoLevel = false
 FarmTab:CreateToggle({Name = "Auto Level Up", Callback = function(V) autoLevel = V end})
 spawn(function()
@@ -112,7 +137,7 @@ spawn(function()
     end
 end)
 
--- 4. Auto Rebirth
+-- 5. Auto Rebirth
 local autoRebirth = false
 FarmTab:CreateToggle({Name = "Auto Rebirth", Callback = function(V) autoRebirth = V end})
 spawn(function()
@@ -125,7 +150,7 @@ spawn(function()
     end
 end)
 
--- 5. Auto Buy
+-- 6. Auto Buy
 for category, items in pairs(buySettings) do
     ShopTab:CreateSection(category)
     for itemName, _ in pairs(items) do
