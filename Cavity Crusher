@@ -32,7 +32,7 @@ local function getMyPlot()
     return nil
 end
 
--- 1. Auto Collect (ปรับ Logic: ดึงมา 1 วิ แล้วส่งคืน รอ 3 วิแล้วค่อยทำใหม่)
+-- 1. Auto Collect Money
 local autoCollect = false
 FarmTab:CreateToggle({
    Name = "Auto Collect Money",
@@ -46,7 +46,6 @@ FarmTab:CreateToggle({
                   local lowerPlots = myPlot:FindFirstChild("LowerPlots")
                   if lowerPlots then
                      local collectedParts = {}
-                     -- ดึงมา
                      for j = 1, 30 do
                         local p = lowerPlots:FindFirstChild("LowerPlots." .. string.format("%03d", j))
                         local part = p and p:FindFirstChild("CalciumCollect") and p.CalciumCollect:FindFirstChild("Part")
@@ -55,21 +54,45 @@ FarmTab:CreateToggle({
                            part.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
                         end
                      end
-                     task.wait(1) -- ค้างไว้ 1 วิ
-                     -- ส่งคืน
+                     task.wait(1)
                      for _, data in pairs(collectedParts) do
                         data.obj.CFrame = data.pos
                      end
                   end
                end
-               task.wait(3) -- รอ 3 วิ
+               task.wait(3)
             end
          end)
       end
    end,
 })
 
--- 2. Auto Level Up (เหมือนเดิม)
+-- 2. Auto Collect Lucky Blocks (ใหม่)
+local autoPickup = false
+FarmTab:CreateToggle({
+    Name = "Auto Collect Lucky Blocks",
+    Callback = function(Value)
+        autoPickup = Value
+        if autoPickup then
+            spawn(function()
+                while autoPickup do
+                    local folder = game.Workspace:FindFirstChild("LocalLuckyBlocks")
+                    if folder then
+                        for _, block in pairs(folder:GetChildren()) do
+                            local prompt = block:FindFirstChildWhichIsA("ProximityPrompt", true) 
+                            if prompt then
+                                fireproximityprompt(prompt)
+                            end
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end,
+})
+
+-- 3. Auto Level Up
 local autoLevel = false
 FarmTab:CreateToggle({Name = "Auto Level Up", Callback = function(V) autoLevel = V end})
 spawn(function()
@@ -89,7 +112,7 @@ spawn(function()
     end
 end)
 
--- 3. Auto Rebirth
+-- 4. Auto Rebirth
 local autoRebirth = false
 FarmTab:CreateToggle({Name = "Auto Rebirth", Callback = function(V) autoRebirth = V end})
 spawn(function()
@@ -102,7 +125,7 @@ spawn(function()
     end
 end)
 
--- 4. Auto Buy (ใน ShopTab)
+-- 5. Auto Buy
 for category, items in pairs(buySettings) do
     ShopTab:CreateSection(category)
     for itemName, _ in pairs(items) do
@@ -113,7 +136,6 @@ for category, items in pairs(buySettings) do
     end
 end
 
--- ระบบลูปซื้อแยกตามประเภท
 spawn(function()
     while true do
         for cat, items in pairs(buySettings) do
