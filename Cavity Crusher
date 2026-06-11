@@ -10,7 +10,7 @@ local Window = Rayfield:CreateWindow({
 local FarmTab = Window:CreateTab("Auto Farm")
 local ShopTab = Window:CreateTab("Auto Shop")
 
--- ตัวแปรเก็บสถานะการซื้อ (อัปเดตชื่อ Tooth ให้มี Direct ต่อท้าย)
+-- ตัวแปรเก็บสถานะการซื้อ
 local buySettings = {
     Capsule = {KingMolarCapsule = false, NebuliteCapsule = false, GlitchfangCapsule = false},
     Tooth = {TwinkleDirect = false, LadybugDirect = false, FruitopiaDirect = false, VoidcoreDirect = false, CelestialinoDirect = false},
@@ -92,7 +92,7 @@ FarmTab:CreateToggle({
     end,
 })
 
--- 3. Instant Pickup (ปรับ HoldDuration = 0)
+-- 3. Instant Pickup
 local instantPickup = false
 FarmTab:CreateToggle({
     Name = "Instant Pickup (Hold = 0)",
@@ -117,7 +117,65 @@ FarmTab:CreateToggle({
     end,
 })
 
--- 4. Auto Level Up
+-- 4. Auto Attack (Target HP Logic)
+local autoAttack = false
+FarmTab:CreateToggle({
+    Name = "Auto Attack Enemies",
+    Callback = function(Value)
+        autoAttack = Value
+        if autoAttack then
+            spawn(function()
+                local currentTarget = nil
+                while autoAttack do
+                    local player = game.Players.LocalPlayer
+                    local myPlot = getMyPlot()
+                    
+                    -- เช็คว่า Target ปัจจุบันยังมีชีวิตอยู่ไหม (อ่านจาก Attribute HP)
+                    local isTargetAlive = false
+                    if currentTarget and currentTarget.Parent then
+                        local hp = currentTarget:GetAttribute("HP")
+                        if hp and hp > 0 then
+                            isTargetAlive = true
+                        end
+                    end
+
+                    if isTargetAlive then
+                        -- ตีตัวเดิมจนตาย
+                        if currentTarget:FindFirstChild("RootPart") then
+                            player.Character.HumanoidRootPart.CFrame = currentTarget.RootPart.CFrame
+                            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("BrushSwingFire"):FireServer()
+                        end
+                    else
+                        -- หาเป้าหมายใหม่ใน Plot
+                        currentTarget = nil
+                        if myPlot then
+                            local plotBase = myPlot:FindFirstChild("Base")
+                            if plotBase then
+                                local plotPos = plotBase.Position
+                                local plotSize = plotBase.Size
+                                
+                                for _, enemy in pairs(workspace:GetChildren()) do
+                                    if not autoAttack then break end
+                                    local hp = enemy:GetAttribute("HP")
+                                    if enemy:FindFirstChild("RootPart") and enemy:GetAttribute("OwnerUserId") == player.UserId and hp and hp > 0 then
+                                        local pos = enemy.RootPart.Position
+                                        if math.abs(pos.X - plotPos.X) < plotSize.X/2 and math.abs(pos.Z - plotPos.Z) < plotSize.Z/2 then
+                                            currentTarget = enemy
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+-- 5. Auto Level Up
 local autoLevel = false
 FarmTab:CreateToggle({Name = "Auto Level Up", Callback = function(V) autoLevel = V end})
 spawn(function()
@@ -137,7 +195,7 @@ spawn(function()
     end
 end)
 
--- 5. Auto Rebirth
+-- 6. Auto Rebirth
 local autoRebirth = false
 FarmTab:CreateToggle({Name = "Auto Rebirth", Callback = function(V) autoRebirth = V end})
 spawn(function()
@@ -150,7 +208,7 @@ spawn(function()
     end
 end)
 
--- 6. Auto Buy
+-- 7. Auto Buy
 for category, items in pairs(buySettings) do
     ShopTab:CreateSection(category)
     for itemName, _ in pairs(items) do
